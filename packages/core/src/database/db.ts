@@ -7,7 +7,17 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, content TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS legacy_memories (id TEXT PRIMARY KEY, content TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    category TEXT NOT NULL,
+    source TEXT,
+    confidence REAL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, tool_name TEXT NOT NULL, input_json TEXT NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS automations (id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL, trigger_type TEXT NOT NULL, schedule TEXT, watch_path TEXT, command TEXT NOT NULL, last_run_at TEXT, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY, action TEXT NOT NULL, risk TEXT NOT NULL, status TEXT NOT NULL, details_json TEXT, created_at TEXT NOT NULL);
@@ -27,6 +37,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
+CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
 `;
 
 export class NexoDatabase {
@@ -44,6 +56,16 @@ export class NexoDatabase {
     const SQL = await initSqlJs();
     const bytes = fs.existsSync(this.filePath) ? fs.readFileSync(this.filePath) : undefined;
     this.db = bytes ? new SQL.Database(bytes) : new SQL.Database();
+    
+    // Migração: se a tabela memories existir e não tiver a coluna 'key', renomear para legacy_memories
+    const hasMemories = this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")[0]?.values.length > 0;
+    if (hasMemories) {
+      const columns = this.db.exec("PRAGMA table_info(memories)")[0]?.values.map(v => v[1]);
+      if (!columns?.includes('key')) {
+        this.db.run("ALTER TABLE memories RENAME TO legacy_memories");
+      }
+    }
+    
     this.db.run(SCHEMA);
     this.persist();
   }
