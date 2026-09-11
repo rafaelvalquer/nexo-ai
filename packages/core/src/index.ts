@@ -7,7 +7,7 @@ import { ToolRegistry } from "./tools/registry.js";
 import { OllamaProvider } from "./llm/ollama.js";
 import { AgentPlanner } from "./agent/planner.js";
 import { AgentEngine } from "./agent/engine.js";
-import { MemoryService } from "./memory/memory.js";
+import { MemoryRepository, MemoryService } from "./memory/index.js";
 import { AutomationEngine } from "./automation/engine.js";
 import { defaultAllowedRoots, defaultDataDir } from "./shared/paths.js";
 import { startCoreServer } from "./server/server.js";
@@ -40,11 +40,12 @@ export class NexoCore {
     this.audit=new AuditService(this.db);
     this.approvals=new ApprovalService(this.db);
     this.permissions=new PermissionEngine(()=>this.settings);
-    this.tools=new ToolRegistry();
+    const memoryRepo = new MemoryRepository(this.db);
+    this.memory=new MemoryService(memoryRepo);
+    this.tools=new ToolRegistry(this.memory);
     this.llm=new OllamaProvider(this.settings.ollamaUrl,this.settings.model);
     this.planner=new AgentPlanner(this.llm,this.tools);
     this.agent=new AgentEngine(this.planner,this.tools,this.permissions,this.approvals,this.audit);
-    this.memory=new MemoryService(this.db);
     this.tasks=new BackgroundTaskService(this.db);
     this.tasks.recoverInterruptedTasks();
     this.chatHistory=new ChatHistoryService(this.db);
@@ -103,7 +104,7 @@ export class NexoCore {
   async listActiveTasks(){await this.ready();return this.tasks.listActive();}
   async getTask(id:string){await this.ready();return this.tasks.get(id);}
 
-  addMemory(content:string){if(this.settings.privateMode)throw new Error("Modo privado está ativo; memória não será gravada.");return this.memory.add(content);}
+  addMemory(key:string, value:string, category?:string){if(this.settings.privateMode)throw new Error("Modo privado está ativo; memória não será gravada.");return this.memory.save(key,value,category);}
   async approve(id:string,approved:boolean){await this.ready();const row=this.approvals.resolve(id,approved);if(!row||!approved)return {text:"Ação cancelada."};return this.agent.execute(row.tool_name,JSON.parse(row.input_json));}
   async status(){await this.ready();return {llm:await this.llm.health(),models:await this.llm.models(),settings:this.getSettings(),tools:this.tools.list()};}
   backup(){return this.db.backup();}
