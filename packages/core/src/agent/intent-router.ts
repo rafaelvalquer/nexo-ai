@@ -48,10 +48,15 @@ export class FastIntentRouter {
       return { tool: "search_files", input: { path: expandKnownPaths(search[2]), query: search[1].replace(/s$/i, "") }, explanation: "Pesquisando os arquivos…" };
     }
 
-    // Memória - memory_save
-    const saveMatch = text.match(/meu\s+nome\s+[eé]\s+([^,.]+).*?salv[ea]\s+isso/i);
+    // Memória - memory_save nome
+    const saveMatch = text.match(/meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]+?)(?:[,.]|pode salvar|salva|salve|isso)/i);
     if (saveMatch) {
       return { tool: "memory_save", input: { key: "user.name", value: saveMatch[1].trim(), category: "profile" }, explanation: "Salvando seu nome na memória…" };
+    }
+    // Alternativa: salvar explicitamente o nome
+    const saveMatch2 = text.match(/salv[ae]\s+(?:que\s+)?meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ\s]+?)(?:[,.]|$)/i);
+    if (saveMatch2) {
+      return { tool: "memory_save", input: { key: "user.name", value: saveMatch2[1].trim(), category: "profile" }, explanation: "Salvando seu nome na memória…" };
     }
 
     // Memória - memory_search
