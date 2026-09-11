@@ -1,0 +1,15 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

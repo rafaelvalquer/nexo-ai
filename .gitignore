@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+coverage/
+playwright-report/
+test-results/
+.nexo-data/

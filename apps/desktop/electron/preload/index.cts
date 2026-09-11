@@ -1,0 +1,30 @@
+import { contextBridge, ipcRenderer } from "electron";
+
+const api={
+  chat:(text:string)=>ipcRenderer.invoke("nexo:chat",text),
+  startChatTask:(text:string)=>ipcRenderer.invoke("nexo:chat:start",text),
+  chatHistory:()=>ipcRenderer.invoke("nexo:chat:history"),
+  listTasks:(limit=50)=>ipcRenderer.invoke("nexo:tasks:list",limit),
+  listActiveTasks:()=>ipcRenderer.invoke("nexo:tasks:active"),
+  getTask:(id:string)=>ipcRenderer.invoke("nexo:task:get",id),
+  status:()=>ipcRenderer.invoke("nexo:status"),
+  getSettings:()=>ipcRenderer.invoke("nexo:settings:get"),
+  updateSettings:(patch:any)=>ipcRenderer.invoke("nexo:settings:update",patch),
+  listApprovals:()=>ipcRenderer.invoke("nexo:approvals:list"),
+  resolveApproval:(id:string,approved:boolean)=>ipcRenderer.invoke("nexo:approvals:resolve",id,approved),
+  listAudit:()=>ipcRenderer.invoke("nexo:audit:list"),
+  listMemories:()=>ipcRenderer.invoke("nexo:memory:list"),
+  addMemory:(content:string)=>ipcRenderer.invoke("nexo:memory:add",content),
+  removeMemory:(id:string)=>ipcRenderer.invoke("nexo:memory:remove",id),
+  listAutomations:()=>ipcRenderer.invoke("nexo:automation:list"),
+  createAutomation:(data:any)=>ipcRenderer.invoke("nexo:automation:create",data),
+  toggleAutomation:(id:string,enabled:boolean)=>ipcRenderer.invoke("nexo:automation:toggle",id,enabled),
+  removeAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:remove",id),
+  chooseFolder:()=>ipcRenderer.invoke("nexo:choose-folder"),
+  openPath:(path:string)=>ipcRenderer.invoke("nexo:open-path",path),
+  openExternal:(url:string)=>ipcRenderer.invoke("nexo:open-external",url),
+  trashItem:(path:string)=>ipcRenderer.invoke("nexo:trash-item",path),
+  backup:()=>ipcRenderer.invoke("nexo:backup")
+};
+contextBridge.exposeInMainWorld("nexo",api);
+export type NexoDesktopApi=typeof api;
