@@ -22,9 +22,11 @@ export function Settings() {
   }
 
   async function addFolder() {
+    const current = settings;
+    if (!current) return;
     const folder = await window.nexo.chooseFolder();
-    if (folder && !settings.allowedRoots.includes(folder)) {
-      await save({ allowedRoots: [...settings.allowedRoots, folder] });
+    if (folder && !current.allowedRoots.includes(folder)) {
+      await save({ allowedRoots: [...current.allowedRoots, folder] });
     }
   }
 
