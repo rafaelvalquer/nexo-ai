@@ -8,17 +8,82 @@ import { createWriteStream } from "node:fs";
 import { z } from "zod";
 import type { ToolDefinition } from "../types.js";
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index++;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[index]}`;
+}
+
 export function filesystemTools(): ToolDefinition[] {
   return [
     {
       name: "list_files", description: "Lista arquivos de uma pasta", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
       inputSchema: z.object({ path: z.string() }),
-      async execute({path:p}) { const names = await fs.readdir(p, { withFileTypes:true }); return { ok:true, summary:`${names.length} itens encontrados`, data:names.map(x=>({name:x.name,type:x.isDirectory()?"directory":"file",path:path.join(p,x.name)})) }; }
+      async execute({path:p}) {
+        const names = await fs.readdir(p, { withFileTypes:true });
+        const rows = names
+          .map(x=>({name:x.name,type:x.isDirectory()?"directory":"file",path:path.join(p,x.name)}))
+          .sort((a,b)=>a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1);
+        const visible = rows.slice(0,100);
+        const lines = visible.map(row => `${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.name}`);
+        const suffix = rows.length > visible.length ? `\n… e mais ${rows.length - visible.length} item(ns).` : "";
+        return { ok:true, summary:`${rows.length} item(ns) encontrados em ${p}.\n${lines.join("\n")}${suffix}`, data:rows };
+      }
+    },
+    {
+      name: "largest_files", description: "Analisa uma pasta e retorna os maiores arquivos por tamanho", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
+      inputSchema: z.object({ path:z.string(), limit:z.number().int().min(1).max(50).default(15), maxDepth:z.number().int().min(0).max(8).default(4) }),
+      async execute({path:base,limit,maxDepth}) {
+        const files: Array<{name:string;path:string;size:number}> = [];
+        let scanned = 0;
+        const walk = async (dir:string, depth:number): Promise<void> => {
+          if (depth > maxDepth || scanned >= 20000) return;
+          const entries = await fs.readdir(dir,{withFileTypes:true}).catch(()=>[]);
+          for (const entry of entries) {
+            if (scanned >= 20000) break;
+            const full = path.join(dir,entry.name);
+            if (entry.isDirectory()) {
+              await walk(full,depth+1);
+              continue;
+            }
+            if (!entry.isFile()) continue;
+            scanned++;
+            const stat = await fs.stat(full).catch(()=>null);
+            if (stat) files.push({name:entry.name,path:full,size:stat.size});
+          }
+        };
+        await walk(base,0);
+        const top = files.sort((a,b)=>b.size-a.size).slice(0,limit);
+        const totalBytes = files.reduce((sum,file)=>sum+file.size,0);
+        const lines = top.length
+          ? top.map((file,index)=>`${index+1}. ${file.name} — ${formatBytes(file.size)}\n   ${file.path}`)
+          : ["Nenhum arquivo encontrado."];
+        return {
+          ok:true,
+          summary:`Análise concluída em ${base}. ${files.length} arquivo(s) analisado(s), ${formatBytes(totalBytes)} no total.\n\nMaiores arquivos:\n${lines.join("\n")}`,
+          data:{base,scanned:files.length,totalBytes,files:top}
+        };
+      }
     },
     {
       name: "search_files", description: "Pesquisa arquivos por nome", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
       inputSchema: z.object({ path:z.string(), query:z.string(), maxDepth:z.number().int().min(0).max(8).default(4) }),
-      async execute({path:base,query,maxDepth}) { const out:any[]=[]; const walk=async(dir:string,depth:number)=>{if(depth>maxDepth||out.length>=300)return; for(const e of await fs.readdir(dir,{withFileTypes:true}).catch(()=>[])){ const full=path.join(dir,e.name); if(e.name.toLowerCase().includes(query.toLowerCase())) out.push({name:e.name,path:full,type:e.isDirectory()?"directory":"file"}); if(e.isDirectory()) await walk(full,depth+1); }}; await walk(base,0); return {ok:true,summary:`${out.length} resultado(s)`,data:out}; }
+      async execute({path:base,query,maxDepth}) {
+        const out:any[]=[];
+        const walk=async(dir:string,depth:number)=>{if(depth>maxDepth||out.length>=300)return;for(const e of await fs.readdir(dir,{withFileTypes:true}).catch(()=>[])){const full=path.join(dir,e.name);if(e.name.toLowerCase().includes(query.toLowerCase()))out.push({name:e.name,path:full,type:e.isDirectory()?"directory":"file"});if(e.isDirectory())await walk(full,depth+1);}};
+        await walk(base,0);
+        const visible=out.slice(0,100);
+        const summary=visible.length
+          ? `${out.length} resultado(s) encontrado(s).\n${visible.map(row=>`${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.path}`).join("\n")}`
+          : "Nenhum arquivo encontrado.";
+        return {ok:true,summary,data:out};
+      }
     },
     {
       name:"read_file", description:"Lê arquivo texto", risk:"READ", permissions:["filesystem.read"], pathFields:["path"],

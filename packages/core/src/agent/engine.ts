@@ -31,7 +31,7 @@ export class AgentEngine {
   async run(userText: string, hooks: AgentRunHooks = {}): Promise<AgentReply> {
     let plan: Plan;
     try {
-      hooks.onStatus?.("Analisando seu pedido…");
+      hooks.onStatus?.("Classificando sua solicitação…");
       plan = await this.planner.plan(userText);
     } catch (error) {
       const text = this.formatOllamaError(error, "interpretar este pedido");
@@ -41,10 +41,10 @@ export class AgentEngine {
     }
 
     if (plan.directStream) {
-      hooks.onStatus?.("Preparando a resposta local…");
+      hooks.onStatus?.("Conversa identificada. Preparando a IA local…");
       hooks.onReplaceText?.("");
       try {
-        hooks.onStatus?.("Gerando resposta com a IA local…");
+        hooks.onStatus?.("A IA local está gerando a resposta…");
         const streamed = await this.planner.streamDirectAnswer(userText, token => hooks.onToken?.(token));
         hooks.onStatus?.("Resposta concluída.");
         return { text: streamed };
@@ -57,7 +57,7 @@ export class AgentEngine {
     }
 
     if (typeof plan.direct === "string") {
-      hooks.onStatus?.("Resposta interpretada pela IA local.");
+      hooks.onStatus?.(plan.origin === "fast" ? "Resposta resolvida localmente." : "Resposta interpretada pela IA local.");
       hooks.onReplaceText?.(plan.direct);
       hooks.onStatus?.("Resposta concluída.");
       return { text: plan.direct };
@@ -74,6 +74,8 @@ export class AgentEngine {
       hooks.onReplaceText?.(text);
       return { text };
     }
+
+    hooks.onStatus?.(plan.origin === "fast" ? "Comando reconhecido localmente." : "Plano de execução preparado.");
 
     const done: { step: PlanStep; result: ToolResult }[] = [];
     for (const step of steps) {
@@ -99,8 +101,15 @@ export class AgentEngine {
           if (Array.isArray(value)) value.forEach(v => typeof v === "string" && this.permissions.assertPath(v));
         }
       } catch (error) {
-        const text = error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
+        const pathValue = (tool.pathFields ?? [])
+          .map(field => (parsed.data as any)[field])
+          .find(value => typeof value === "string") as string | undefined;
+        const text = message.includes("fora do escopo permitido")
+          ? `A pasta${pathValue ? ` ${pathValue}` : ""} não está autorizada para o Nexo. Adicione-a em Configurações → Segurança → Pastas permitidas.`
+          : message;
         hooks.onReplaceText?.(text);
+        hooks.onStatus?.("A execução foi bloqueada pelas permissões locais.");
         return { text };
       }
 
@@ -125,8 +134,10 @@ export class AgentEngine {
       if (reply.result) done.push({ step, result: reply.result });
       if (reply.result && !reply.result.ok) {
         hooks.onReplaceText?.(reply.text);
+        hooks.onStatus?.("A ferramenta retornou uma falha.");
         return { text: reply.text, result: reply.result, results: done.map(x => x.result) };
       }
+      hooks.onStatus?.(`${tool.description}: concluído.`);
     }
 
     const finalReply = done.length === 1

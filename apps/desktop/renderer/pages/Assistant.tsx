@@ -1,33 +1,44 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Send, Sparkles } from "lucide-react";
 import { useAppStore } from "../stores/app";
 
 export function Assistant() {
   const [text, setText] = useState("");
+  const [clock, setClock] = useState(Date.now());
   const messages = useAppStore(state => state.assistantMessages);
   const tasks = useAppStore(state => state.assistantTasks);
   const busy = useAppStore(state => state.assistantBusy);
   const error = useAppStore(state => state.assistantError);
   const sendAssistant = useAppStore(state => state.sendAssistant);
   const syncAssistant = useAppStore(state => state.syncAssistant);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void syncAssistant();
   }, [syncAssistant]);
 
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
   const activeTask = tasks.find(task => task.type === "assistant-chat" && (task.status === "queued" || task.status === "running"));
   const streamText = activeTask?.progressText ?? "";
   const statusMessage = activeTask?.statusMessage ?? "Processando localmente…";
-  const statusHistory = activeTask?.statusHistory?.length
-    ? activeTask.statusHistory
-    : [statusMessage];
+  const statusHistory = activeTask?.statusHistory?.length ? activeTask.statusHistory : [statusMessage];
   const activeAlreadyPersisted = activeTask
     ? messages.some(message => message.role === "assistant" && message.taskId === activeTask.id)
     : false;
+  const elapsedSeconds = useMemo(() => {
+    if (!activeTask?.startedAt) return 0;
+    return Math.max(0, Math.floor((clock - new Date(activeTask.startedAt).getTime()) / 1000));
+  }, [activeTask?.startedAt, clock]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: streamText ? "auto" : "smooth", block: "end" });
+    const chat = chatRef.current;
+    if (!chat) return;
+    chat.scrollTo({ top: chat.scrollHeight, behavior: streamText ? "auto" : "smooth" });
   }, [messages.length, busy, streamText, statusMessage, statusHistory.length]);
 
   async function send() {
@@ -42,7 +53,7 @@ export function Assistant() {
     : [{
         id: "welcome",
         role: "assistant" as const,
-        content: "Sou o Nexo. Posso analisar o sistema, pesquisar arquivos e executar ações dentro das pastas permitidas.",
+        content: "Sou o Nexo. Posso conversar com a IA local, analisar o sistema, trabalhar com arquivos autorizados e executar ações controladas.",
         createdAt: ""
       }];
 
@@ -53,47 +64,52 @@ export function Assistant() {
           <h1>Assistente</h1>
           <p>Comandos locais com execução controlada</p>
         </div>
-        {busy && <div className="pill warn"><span className="dot" />Executando em background</div>}
+        {busy && <div className="pill warn"><span className="dot" />Executando em background · {elapsedSeconds}s</div>}
       </header>
 
-      <div className="chat">
-        {visibleMessages.map(message => (
-          <div key={message.id} className={`msg ${message.role}`}>
-            <div className="avatar">{message.role === "assistant" ? <Sparkles size={16} /> : "V"}</div>
-            <div className="messageBody">{message.content}</div>
-          </div>
-        ))}
-
-        {busy && !activeAlreadyPersisted && (
-          <div className="msg assistant live-message">
-            <div className="avatar"><Sparkles size={16} /></div>
-            <div className="messageBody liveBody">
-              <div className="processingLabel">Processamento local</div>
-              <div className="processingTrail" aria-live="polite">
-                {statusHistory.map((status, index) => (
-                  <div className={`processingStep ${index === statusHistory.length - 1 ? "active" : "done"}`} key={`${index}-${status}`}>
-                    <span className="processingDot" />
-                    <span>{status}</span>
-                  </div>
-                ))}
-              </div>
-
-              {streamText ? (
-                <div className="streamText">{streamText}<span className="streamCursor" aria-hidden="true" /></div>
-              ) : (
-                <div className="liveHint">A tarefa continua no Core mesmo se você navegar para outra área.</div>
-              )}
+      <div className="chat" ref={chatRef}>
+        <div className="messageStack">
+          {visibleMessages.map(message => (
+            <div key={message.id} className={`msg ${message.role}`}>
+              <div className="avatar">{message.role === "assistant" ? <Sparkles size={14} /> : "V"}</div>
+              <div className="messageBody">{message.content}</div>
             </div>
-          </div>
-        )}
+          ))}
 
-        {error && (
-          <div className="msg assistant">
-            <div className="avatar"><Sparkles size={16} /></div>
-            <div className="messageBody">Falha ao sincronizar o Assistente: {error}</div>
-          </div>
-        )}
-        <div ref={endRef} />
+          {busy && !activeAlreadyPersisted && (
+            <div className="msg assistant live-message">
+              <div className="avatar"><Sparkles size={14} /></div>
+              <div className="messageBody liveBody">
+                <div className="processingHeader">
+                  <span>Execução local</span>
+                  <span>{elapsedSeconds}s</span>
+                </div>
+                <div className="processingTrail" aria-live="polite">
+                  {statusHistory.map((status, index) => {
+                    const active = index === statusHistory.length - 1;
+                    return (
+                      <div className={`processingStep ${active ? "active" : "done"}`} key={`${index}-${status}`}>
+                        <span className="processingDot" />
+                        <span>{status}{active ? ` · ${elapsedSeconds}s` : ""}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {streamText && (
+                  <div className="streamText">{streamText}<span className="streamCursor" aria-hidden="true" /></div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="msg assistant">
+              <div className="avatar"><Sparkles size={14} /></div>
+              <div className="messageBody">Falha ao sincronizar o Assistente: {error}</div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="composer">
@@ -108,7 +124,7 @@ export function Assistant() {
           }}
           placeholder={busy ? "Uma tarefa está em execução…" : "Peça algo ao Nexo…"}
         />
-        <button onClick={() => void send()} disabled={busy || !text.trim()}><Send size={18} /></button>
+        <button onClick={() => void send()} disabled={busy || !text.trim()} aria-label="Enviar"><Send size={18} /></button>
       </div>
     </div>
   );
