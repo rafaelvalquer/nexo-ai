@@ -16,6 +16,7 @@ export type BackgroundTask = {
   finishedAt?: string;
   progressText?: string;
   statusMessage?: string;
+  statusHistory?: string[];
 };
 
 type TaskRow = {
@@ -30,7 +31,11 @@ type TaskRow = {
   finished_at: string | null;
 };
 
-type LiveProgress = { text: string; statusMessage: string };
+type LiveProgress = {
+  text: string;
+  statusMessage: string;
+  statusHistory: string[];
+};
 
 export class BackgroundTaskService {
   private liveProgress = new Map<string, LiveProgress>();
@@ -55,7 +60,7 @@ export class BackgroundTaskService {
       "INSERT INTO tasks(id,type,status,input_json,result_json,error,created_at,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)",
       [id, type, "queued", JSON.stringify(input), null, null, createdAt, null, null]
     );
-    this.liveProgress.set(id, { text: "", statusMessage: "Na fila…" });
+    this.liveProgress.set(id, { text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] });
     return this.get(id)!;
   }
 
@@ -65,17 +70,27 @@ export class BackgroundTaskService {
   }
 
   setStatus(id: string, statusMessage: string) {
-    const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "" };
-    this.liveProgress.set(id, { ...current, statusMessage });
+    const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "", statusHistory: [] };
+    const history = [...current.statusHistory];
+    if (statusMessage && history.at(-1) !== statusMessage) history.push(statusMessage);
+    this.liveProgress.set(id, {
+      ...current,
+      statusMessage,
+      statusHistory: history.slice(-8)
+    });
   }
 
   appendProgress(id: string, token: string) {
-    const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "Gerando resposta…" };
+    const current = this.liveProgress.get(id) ?? {
+      text: "",
+      statusMessage: "Gerando resposta…",
+      statusHistory: ["Gerando resposta…"]
+    };
     this.liveProgress.set(id, { ...current, text: current.text + token });
   }
 
   replaceProgress(id: string, text: string) {
-    const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "" };
+    const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "", statusHistory: [] };
     this.liveProgress.set(id, { ...current, text });
   }
 
@@ -126,7 +141,8 @@ export class BackgroundTaskService {
       startedAt: row.started_at ?? undefined,
       finishedAt: row.finished_at ?? undefined,
       progressText: progress?.text,
-      statusMessage: progress?.statusMessage
+      statusMessage: progress?.statusMessage,
+      statusHistory: progress?.statusHistory
     };
   }
 }

@@ -1,3 +1,120 @@
 import { useEffect, useState } from "react";
-export function Settings(){const [s,setS]=useState<any>(null);const [models,setModels]=useState<string[]>([]);useEffect(()=>{Promise.all([window.nexo.getSettings(),window.nexo.status()]).then(([a,b]:any)=>{setS(a);setModels(b.models??[])})},[]);if(!s)return <div>Carregando…</div>;async function save(p:any){const n=await window.nexo.updateSettings({...s,...p});setS(n)};async function addFolder(){const f=await window.nexo.chooseFolder();if(f&&!s.allowedRoots.includes(f))await save({allowedRoots:[...s.allowedRoots,f]})}return <div><header><div><h1>Configurações</h1><p>IA, privacidade, permissões e execução.</p></div></header><section className="panel settings"><h3>IA local</h3><label>URL do Ollama<input value={s.ollamaUrl} onChange={e=>setS({...s,ollamaUrl:e.target.value})} onBlur={()=>save({ollamaUrl:s.ollamaUrl})}/></label><label>Modelo<select value={s.model} onChange={e=>save({model:e.target.value})}><option value={s.model}>{s.model}</option>{models.filter(x=>x!==s.model).map(m=><option key={m}>{m}</option>)}</select></label><h3>Segurança</h3><label>Nível de autonomia<select value={s.autonomy} onChange={e=>save({autonomy:e.target.value})}><option value="cautious">Cauteloso</option><option value="balanced">Equilibrado</option><option value="autonomous">Autônomo</option></select></label><div className="settingBlock"><span>Pastas permitidas</span>{s.allowedRoots.map((p:string)=><div className="folder" key={p}><code>{p}</code><button className="ghost" onClick={()=>save({allowedRoots:s.allowedRoots.filter((x:string)=>x!==p)})}>Remover</button></div>)}<button onClick={addFolder}>Adicionar pasta</button></div><h3>Privacidade</h3><label className="check"><input type="checkbox" checked={s.privateMode} onChange={e=>save({privateMode:e.target.checked})}/>Modo privado</label><label className="check"><input type="checkbox" checked={s.runInBackground} onChange={e=>save({runInBackground:e.target.checked})}/>Continuar em segundo plano</label><h3>Memória</h3><label className="check"><input type="checkbox" checked={s.memoryEnabled??true} onChange={e=>save({memoryEnabled:e.target.checked})}/>Permitir memória</label><label className="check"><input type="checkbox" checked={s.memoryAskBeforeSave??true} onChange={e=>save({memoryAskBeforeSave:e.target.checked})}/>Perguntar antes de salvar automaticamente</label><div className="settingBlock"><button className="ghost" onClick={()=>window.location.hash="#/memory"}>Ver memória</button><button className="ghost" onClick={async()=>{if(confirm("Deseja limpar toda a memória?")){await window.nexo.addMemory("","","");alert("Memória limpa.")}}}>Limpar memória</button></div><button className="ghost" onClick={async()=>alert('Backup criado em: '+await window.nexo.backup())}>Criar backup agora</button></section></div>}
+import type { NexoSettings } from "@nexo/shared";
+import { useAppStore } from "../stores/app";
 
+export function Settings() {
+  const [settings, setSettings] = useState<NexoSettings | null>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const setPage = useAppStore(state => state.setPage);
+
+  useEffect(() => {
+    Promise.all([window.nexo.getSettings(), window.nexo.status()]).then(([current, status]: any) => {
+      setSettings(current);
+      setModels(status.models ?? []);
+    });
+  }, []);
+
+  if (!settings) return <div>Carregando…</div>;
+
+  async function save(patch: Partial<NexoSettings>) {
+    const next = await window.nexo.updateSettings(patch);
+    setSettings(next);
+  }
+
+  async function addFolder() {
+    const folder = await window.nexo.chooseFolder();
+    if (folder && !settings.allowedRoots.includes(folder)) {
+      await save({ allowedRoots: [...settings.allowedRoots, folder] });
+    }
+  }
+
+  async function clearMemory() {
+    if (!confirm("Deseja remover todas as memórias salvas no Nexo? Esta ação não pode ser desfeita pela interface.")) return;
+    await window.nexo.clearMemory();
+    alert("Memória limpa com sucesso.");
+  }
+
+  return (
+    <div>
+      <header>
+        <div>
+          <h1>Configurações</h1>
+          <p>IA, privacidade, permissões e execução.</p>
+        </div>
+      </header>
+
+      <section className="panel settings">
+        <h3>IA local</h3>
+        <label>
+          URL do Ollama
+          <input
+            value={settings.ollamaUrl}
+            onChange={event => setSettings({ ...settings, ollamaUrl: event.target.value })}
+            onBlur={() => void save({ ollamaUrl: settings.ollamaUrl })}
+          />
+        </label>
+        <label>
+          Modelo
+          <select value={settings.model} onChange={event => void save({ model: event.target.value })}>
+            <option value={settings.model}>{settings.model}</option>
+            {models.filter(model => model !== settings.model).map(model => <option key={model}>{model}</option>)}
+          </select>
+        </label>
+
+        <h3>Segurança</h3>
+        <label>
+          Nível de autonomia
+          <select value={settings.autonomy} onChange={event => void save({ autonomy: event.target.value as NexoSettings["autonomy"] })}>
+            <option value="cautious">Cauteloso</option>
+            <option value="balanced">Equilibrado</option>
+            <option value="autonomous">Autônomo</option>
+          </select>
+        </label>
+
+        <div className="settingBlock">
+          <span>Pastas permitidas</span>
+          {settings.allowedRoots.map(folder => (
+            <div className="folder" key={folder}>
+              <code>{folder}</code>
+              <button className="ghost" onClick={() => void save({ allowedRoots: settings.allowedRoots.filter(item => item !== folder) })}>Remover</button>
+            </div>
+          ))}
+          <button onClick={() => void addFolder()}>Adicionar pasta</button>
+        </div>
+
+        <h3>Privacidade</h3>
+        <label className="check">
+          <input type="checkbox" checked={settings.privateMode} onChange={event => void save({ privateMode: event.target.checked })} />
+          Modo privado
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.runInBackground} onChange={event => void save({ runInBackground: event.target.checked })} />
+          Continuar em segundo plano
+        </label>
+
+        <h3>Memória</h3>
+        <label className="check">
+          <input type="checkbox" checked={settings.memoryEnabled} onChange={event => void save({ memoryEnabled: event.target.checked })} />
+          Permitir memória
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={settings.memoryAskBeforeSave}
+            disabled={!settings.memoryEnabled}
+            onChange={event => void save({ memoryAskBeforeSave: event.target.checked })}
+          />
+          Perguntar antes de salvar informações inferidas pela IA
+        </label>
+        <small>Pedidos explícitos como “salve meu nome” continuam sendo tratados diretamente; memórias inferidas pela IA exigem aprovação quando esta opção está ativa.</small>
+
+        <div className="settingBlock inlineActions">
+          <button className="ghost" onClick={() => setPage("Memória")}>Ver memória</button>
+          <button className="ghost dangerGhost" disabled={!settings.memoryEnabled} onClick={() => void clearMemory()}>Limpar memória</button>
+        </div>
+
+        <button className="ghost" onClick={async () => alert("Backup criado em: " + await window.nexo.backup())}>Criar backup agora</button>
+      </section>
+    </div>
+  );
+}

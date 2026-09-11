@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { NexoDatabase } from "../../packages/core/src/database/db.js";
 import { MemoryRepository } from "../../packages/core/src/memory/memory.repository.js";
 import { MemoryService } from "../../packages/core/src/memory/memory.service.js";
@@ -7,12 +10,18 @@ import { SensitiveMemoryDetector } from "../../packages/core/src/memory/memory.n
 let db: NexoDatabase;
 let repo: MemoryRepository;
 let service: MemoryService;
+let dataDir: string;
 
 beforeEach(async () => {
-  db = new NexoDatabase(":memory:" as any);
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-memory-test-"));
+  db = new NexoDatabase(dataDir);
   await db.ready();
   repo = new MemoryRepository(db);
   service = new MemoryService(repo);
+});
+
+afterEach(() => {
+  fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
 describe("memory_save", () => {
@@ -21,6 +30,7 @@ describe("memory_save", () => {
     const results = service.search("user.name");
     expect(results).toHaveLength(1);
     expect(results[0].value).toBe("Rafael");
+    expect(results[0].createdAt).toBeTruthy();
   });
 
   it("atualiza memória existente com a mesma chave", () => {
@@ -35,6 +45,11 @@ describe("memory_save", () => {
     service.save("User.Name", "Rafael", "profile");
     const results = service.search("user.name");
     expect(results).toHaveLength(1);
+  });
+
+  it("não aceita chave ou valor vazio", () => {
+    expect(() => service.save("", "Rafael", "profile")).toThrow();
+    expect(() => service.save("user.name", "", "profile")).toThrow();
   });
 });
 
@@ -57,6 +72,24 @@ describe("memory_delete", () => {
     service.remove("user.name");
     const results = service.search("user.name");
     expect(results).toHaveLength(0);
+  });
+});
+
+describe("memory_clear", () => {
+  it("remove todas as memórias", () => {
+    service.save("user.name", "Rafael", "profile");
+    service.save("project.tavernquest.path", "C:\\Projetos\\TavernQuest", "project");
+    service.clear();
+    expect(service.listByCategory()).toEqual({});
+  });
+});
+
+describe("memory settings", () => {
+  it("bloqueia escrita e leitura quando a memória está desativada", () => {
+    const disabled = new MemoryService(repo, () => false);
+    expect(() => disabled.save("user.name", "Rafael", "profile")).toThrow(/desativada/i);
+    expect(disabled.search("user.name")).toEqual([]);
+    expect(disabled.listByCategory()).toEqual({});
   });
 });
 

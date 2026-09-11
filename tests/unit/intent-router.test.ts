@@ -16,19 +16,22 @@ describe("FastIntentRouter", () => {
     const result = router.route("Qual é meu nome?");
     expect(result).not.toBeNull();
     expect(result?.tool).toBe("memory_search");
+    expect(result?.input).toEqual({ query: "user.name" });
   });
 
-  it("detecta esquecimento de nome", () => {
+  it("detecta esquecimento de nome com a chave esperada", () => {
     const result = router.route("Esqueça meu nome.");
     expect(result).not.toBeNull();
     expect(result?.tool).toBe("memory_delete");
+    expect(result?.input).toEqual({ key: "user.name" });
   });
 
   it("detecta salvar projeto", () => {
     const result = router.route("Meu projeto TavernQuest fica em C:\\Projetos\\TavernQuest");
     expect(result).not.toBeNull();
     expect(result?.tool).toBe("memory_save");
-    expect((result?.input as any)?.key).toContain("tavernquest");
+    expect((result?.input as any)?.key).toBe("project.tavernquest.path");
+    expect((result?.input as any)?.value).toBe("C:\\Projetos\\TavernQuest");
   });
 
   it("detecta PC lento", () => {

@@ -48,35 +48,39 @@ export class FastIntentRouter {
       return { tool: "search_files", input: { path: expandKnownPaths(search[2]), query: search[1].replace(/s$/i, "") }, explanation: "Pesquisando os arquivos…" };
     }
 
-    // Memória - memory_save nome
-    const saveMatch = text.match(/meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]+?)(?:[,.]|pode salvar|salva|salve|isso)/i);
+    // Memória explícita - nome
+    const saveMatch = text.match(/meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s]+?)(?:[,.]|pode\s+(?:salvar|guardar|lembrar)|salva|salve|guarde|lembre|isso|$)/i);
     if (saveMatch) {
       return { tool: "memory_save", input: { key: "user.name", value: saveMatch[1].trim(), category: "profile" }, explanation: "Salvando seu nome na memória…" };
     }
-    // Alternativa: salvar explicitamente o nome
-    const saveMatch2 = text.match(/salv[ae]\s+(?:que\s+)?meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ\s]+?)(?:[,.]|$)/i);
+
+    const saveMatch2 = text.match(/(?:salv[ae]|guard[ae]|lembre)\s+(?:que\s+)?meu\s+nome\s+[eé]\s+([A-Za-zÀ-ÿ\s]+?)(?:[,.]|$)/i);
     if (saveMatch2) {
       return { tool: "memory_save", input: { key: "user.name", value: saveMatch2[1].trim(), category: "profile" }, explanation: "Salvando seu nome na memória…" };
     }
 
-    // Memória - memory_search
-    const searchName = text.match(/qual\s+[eé]\s+meu\s+nome/i);
-    if (searchName) {
+    if (/qual\s+[eé]\s+meu\s+nome/i.test(text)) {
       return { tool: "memory_search", input: { query: "user.name" }, explanation: "Buscando seu nome na memória…" };
     }
 
-    // Memória - memory_delete
-    const deleteName = text.match(/esque[cç]a\s+meu\s+nome/i);
-    if (deleteName) {
-      return { tool: "memory_delete", input: { query: "user.name" }, explanation: "Apagando seu nome da memória…" };
-    }
-    
-    // Outros casos explícitos de save
-    const saveProjectMatch = text.match(/meu\s+projeto\s+([^\s]+)\s+fica\s+em\s+([^,.]+)/i);
-    if (saveProjectMatch) {
-      return { tool: "memory_save", input: { key: `project.${saveProjectMatch[1].toLowerCase()}.path`, value: saveProjectMatch[2].trim(), category: "project" }, explanation: `Salvando caminho do projeto ${saveProjectMatch[1]}…` };
+    if (/esque[cç]a\s+(?:o\s+)?meu\s+nome|apague\s+(?:o\s+)?meu\s+nome/i.test(text)) {
+      return { tool: "memory_delete", input: { key: "user.name" }, explanation: "Preparando a remoção do seu nome da memória…" };
     }
 
-    return null; // Deixa para o Ollama
+    // Memória explícita - projeto
+    const saveProjectMatch = text.match(/meu\s+projeto\s+([^\s]+)\s+fica\s+em\s+(.+?)(?:[,.]\s|$)/i);
+    if (saveProjectMatch) {
+      return {
+        tool: "memory_save",
+        input: {
+          key: `project.${saveProjectMatch[1].toLowerCase()}.path`,
+          value: saveProjectMatch[2].trim(),
+          category: "project"
+        },
+        explanation: `Salvando caminho do projeto ${saveProjectMatch[1]}…`
+      };
+    }
+
+    return null;
   }
 }
