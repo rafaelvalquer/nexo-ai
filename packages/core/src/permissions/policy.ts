@@ -22,6 +22,16 @@ export class PermissionEngine {
     return false;
   }
 
+  requiresAutomaticMemoryApproval() {
+    const settings = this.getSettings();
+    return settings.memoryEnabled && settings.memoryAskBeforeSave;
+  }
+
+  isMemoryEnabled() {
+    const settings = this.getSettings();
+    return settings.memoryEnabled && !settings.privateMode;
+  }
+
   assertPath(target: string) {
     if (!this.isPathAllowed(target)) throw new Error(`Caminho fora do escopo permitido: ${target}`);
   }
