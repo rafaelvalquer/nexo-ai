@@ -4,12 +4,12 @@ import { useAppStore } from "../stores/app";
 
 export function Assistant() {
   const [text, setText] = useState("");
-  const messages = useAppStore(s => s.assistantMessages);
-  const tasks = useAppStore(s => s.assistantTasks);
-  const busy = useAppStore(s => s.assistantBusy);
-  const error = useAppStore(s => s.assistantError);
-  const sendAssistant = useAppStore(s => s.sendAssistant);
-  const syncAssistant = useAppStore(s => s.syncAssistant);
+  const messages = useAppStore(state => state.assistantMessages);
+  const tasks = useAppStore(state => state.assistantTasks);
+  const busy = useAppStore(state => state.assistantBusy);
+  const error = useAppStore(state => state.assistantError);
+  const sendAssistant = useAppStore(state => state.sendAssistant);
+  const syncAssistant = useAppStore(state => state.syncAssistant);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -19,13 +19,16 @@ export function Assistant() {
   const activeTask = tasks.find(task => task.type === "assistant-chat" && (task.status === "queued" || task.status === "running"));
   const streamText = activeTask?.progressText ?? "";
   const statusMessage = activeTask?.statusMessage ?? "Processando localmente…";
+  const statusHistory = activeTask?.statusHistory?.length
+    ? activeTask.statusHistory
+    : [statusMessage];
   const activeAlreadyPersisted = activeTask
     ? messages.some(message => message.role === "assistant" && message.taskId === activeTask.id)
     : false;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: streamText ? "auto" : "smooth", block: "end" });
-  }, [messages.length, busy, streamText, statusMessage]);
+  }, [messages.length, busy, streamText, statusMessage, statusHistory.length]);
 
   async function send() {
     const value = text.trim();
@@ -45,7 +48,7 @@ export function Assistant() {
 
   return (
     <div className="assistant">
-      <header>
+      <header className="assistantHeader">
         <div>
           <h1>Assistente</h1>
           <p>Comandos locais com execução controlada</p>
@@ -65,7 +68,16 @@ export function Assistant() {
           <div className="msg assistant live-message">
             <div className="avatar"><Sparkles size={16} /></div>
             <div className="messageBody liveBody">
-              <div className="liveStatus"><span className="typingDot" />{statusMessage}</div>
+              <div className="processingLabel">Processamento local</div>
+              <div className="processingTrail" aria-live="polite">
+                {statusHistory.map((status, index) => (
+                  <div className={`processingStep ${index === statusHistory.length - 1 ? "active" : "done"}`} key={`${index}-${status}`}>
+                    <span className="processingDot" />
+                    <span>{status}</span>
+                  </div>
+                ))}
+              </div>
+
               {streamText ? (
                 <div className="streamText">{streamText}<span className="streamCursor" aria-hidden="true" /></div>
               ) : (
