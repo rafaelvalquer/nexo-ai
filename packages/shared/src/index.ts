@@ -44,6 +44,7 @@ export type BackgroundTask = {
   finishedAt?: string;
   progressText?: string;
   statusMessage?: string;
+  statusHistory?: string[];
 };
 
 export type Automation = {
@@ -64,4 +65,6 @@ export type NexoSettings = {
   allowedRoots: string[];
   privateMode: boolean;
   runInBackground: boolean;
+  memoryEnabled: boolean;
+  memoryAskBeforeSave: boolean;
 };
