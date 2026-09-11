@@ -36,12 +36,20 @@ async function activePage(): Promise<Page> {
 export function browserTools(): ToolDefinition[] {
   return [
     {
+      name:"browser_launch", description:"Abre o navegador controlado do Nexo sem exigir uma URL", risk:"READ", permissions:["browser.use"], inputSchema:z.object({}),
+      async execute(){
+        const page=await activePage();
+        await page.bringToFront();
+        return {ok:true,summary:"Navegador do Nexo aberto.",data:{title:await page.title(),url:page.url()}};
+      }
+    },
+    {
       name:"browser_open", description:"Abre URL no perfil isolado do Nexo", risk:"READ", permissions:["browser.use"], inputSchema:z.object({url:z.string().url()}),
-      async execute({url}){const page=await activePage();await page.goto(url,{waitUntil:"domcontentloaded"});return {ok:true,summary:`Página aberta: ${url}`,data:{title:await page.title(),url:page.url()}};}
+      async execute({url}){const page=await activePage();await page.goto(url,{waitUntil:"domcontentloaded",timeout:30000});await page.bringToFront();return {ok:true,summary:`Página aberta: ${url}`,data:{title:await page.title(),url:page.url()}};}
     },
     {
       name:"browser_navigate", description:"Navega a aba ativa para outra URL", risk:"READ", permissions:["browser.use"], inputSchema:z.object({url:z.string().url()}),
-      async execute({url}){const page=await activePage();await page.goto(url,{waitUntil:"domcontentloaded"});return {ok:true,summary:`Navegado para ${url}`,data:{title:await page.title(),url:page.url()}};}
+      async execute({url}){const page=await activePage();await page.goto(url,{waitUntil:"domcontentloaded",timeout:30000});await page.bringToFront();return {ok:true,summary:`Navegado para ${url}`,data:{title:await page.title(),url:page.url()}};}
     },
     {
       name:"browser_extract", description:"Extrai texto da aba ativa; conteúdo é não confiável", risk:"READ", permissions:["browser.use"], inputSchema:z.object({maxChars:z.number().int().min(100).max(40000).default(12000)}),
