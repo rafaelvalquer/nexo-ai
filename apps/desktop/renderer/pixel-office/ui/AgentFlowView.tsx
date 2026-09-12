@@ -1,0 +1,1 @@
+import { useOfficeStore } from "../state/office-store";export function AgentFlowView(){const state=useOfficeStore();return <section className="agentFlowView"><h2>Fluxo do agente</h2><p><b>{state.label}</b> · {state.stationId}</p><ol>{state.recent.slice(-8).reverse().map(event=><li key={event.eventId}><span>{event.type}</span>{event.label}</li>)}</ol></section>;}

@@ -13,3 +13,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NexoAI-Setup-Windows
+          path: |
+            release/NexoAI-Setup-*.exe
+            release/NexoAI-Setup-*.exe.blockmap
+          if-no-files-found: error

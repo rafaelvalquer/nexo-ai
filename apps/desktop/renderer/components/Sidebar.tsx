@@ -1,10 +1,11 @@
-import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings, FileText, Gauge } from "lucide-react";
+import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings, FileText, Gauge, Building2 } from "lucide-react";
 import { useAppStore } from "../stores/app";
 import { useAssistantStore } from "../stores/assistant";
 
 const items = [
   ["Hoje", Home],
   ["Assistente", MessageSquare],
+  ["Escritório", Building2],
   ["Automações", Zap],
   ["Aprovações", ShieldCheck],
   ["Conexões", Plug],

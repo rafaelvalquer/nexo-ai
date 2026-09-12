@@ -1,0 +1,2 @@
+import type { Container } from "pixi.js";import { OFFICE_HEIGHT,OFFICE_WIDTH } from "../data/office-layout";
+export class OfficeCamera{fit(stage:Container,width:number,height:number,zoom:"fit"|1|1.25|1.5){const fit=Math.min(width/OFFICE_WIDTH,height/OFFICE_HEIGHT);const scale=zoom==="fit"?fit:fit*zoom;stage.scale.set(scale);stage.position.set(Math.round((width-OFFICE_WIDTH*scale)/2),Math.round((height-OFFICE_HEIGHT*scale)/2));}}

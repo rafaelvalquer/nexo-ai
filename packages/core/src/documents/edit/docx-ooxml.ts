@@ -2,9 +2,11 @@ import AdmZip from "adm-zip";
 import { docxEditPlanSchema, type DocxEditPlan } from "./plan.js";
 
 const escapeXml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escapeXmlAttribute = (value: string) => escapeXml(value).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 const paragraphPattern = /<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
 const paragraphText = (xml: string) => [...xml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(m => m[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<")).join("");
-const textRun = (text: string) => `<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+const textRun = (text: string, properties = "") => `<w:r>${properties}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+const newParagraph = (text: string, style?: string) => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${escapeXmlAttribute(style)}"/></w:pPr>` : ""}${textRun(text)}</w:p>`;
 
 export function applyDocxEdit(input: Buffer, rawPlan: unknown) {
   const plan = docxEditPlanSchema.parse(rawPlan); const zip = new AdmZip(input); const name = "word/document.xml"; let xml = zip.readAsText(name);
@@ -12,10 +14,10 @@ export function applyDocxEdit(input: Buffer, rawPlan: unknown) {
   const get = (index: number) => { if (!paragraphs[index]) throw new Error(`Parágrafo ${index + 1} não encontrado.`); return paragraphs[index]; };
   for (const op of plan.operations) {
     if (op.type === "replace_text") { let seen = 0; let changed = false; paragraphs = paragraphs.map(p => { const text = paragraphText(p); if (!text.includes(op.find) || (op.occurrence && ++seen !== op.occurrence)) return p; changed = true; return replaceTextPreservingRuns(p, op.find, op.replace); }); if (!changed) throw new Error(`Texto não encontrado: ${op.find}`); }
-    if (op.type === "replace_paragraph") paragraphs[op.locator.paragraph] = get(op.locator.paragraph).replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(op.text)}</w:p>`);
+    if (op.type === "replace_paragraph") paragraphs[op.locator.paragraph] = replaceParagraphText(get(op.locator.paragraph), op.text);
     if (op.type === "delete_paragraph") paragraphs.splice(op.locator.paragraph, 1);
-    if (op.type === "insert_after") paragraphs.splice(op.locator.paragraph + 1, 0, `<w:p>${textRun(op.text)}</w:p>`);
-    if (op.type === "insert_before") paragraphs.splice(op.locator.paragraph, 0, `<w:p>${textRun(op.text)}</w:p>`);
+    if (op.type === "insert_after") paragraphs.splice(op.locator.paragraph + 1, 0, newParagraph(op.text, op.style));
+    if (op.type === "insert_before") paragraphs.splice(op.locator.paragraph, 0, newParagraph(op.text, op.style));
   }
   // `String.replace` only invokes the callback for paragraphs that existed in
   // the original document.  When an edit inserts paragraphs, append the tail
@@ -56,8 +58,15 @@ function fillContentControl(xml: string, tag: string, text: string) {
 
 function replaceContainerText(container: string, text: string) {
   const paragraphs = container.match(paragraphPattern) ?? []; const original = paragraphs.at(0); if (!original) throw new Error("O alvo DOCX não contém um parágrafo editável.");
-  const first = original.replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text)}</w:p>`);
+  const first = replaceParagraphText(original, text);
   return container.replace(original, first);
+}
+function replaceParagraphText(paragraph: string, text: string) {
+  // New content inherits the first textual run's formatting, while paragraph
+  // properties, bookmarks and other paragraph-level Word structures remain.
+  const firstRun = paragraph.match(/<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/)?.[0] ?? "";
+  const properties = firstRun.match(/<w:rPr(?:\s[^>]*)?>[\s\S]*?<\/w:rPr>/)?.[0] ?? "";
+  return paragraph.replace(/<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text, properties)}</w:p>`);
 }
 function replaceTextPreservingRuns(paragraph: string, find: string, replacement: string) {
   const textNode = /(<w:t(?:\s[^>]*)?>)([\s\S]*?)(<\/w:t>)/g; let replaced = false;
@@ -67,6 +76,6 @@ function replaceTextPreservingRuns(paragraph: string, find: string, replacement:
   });
   if (replaced) return preserved;
   const text = paragraphText(paragraph);
-  return paragraph.replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text.replace(find, replacement))}</w:p>`);
+  return replaceParagraphText(paragraph, text.replace(find, replacement));
 }
 function escapeRegExp(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }

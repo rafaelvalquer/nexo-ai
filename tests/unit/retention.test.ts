@@ -9,6 +9,12 @@ let root:string;let db:NexoDatabase;
 beforeEach(async()=>{root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-retention-"));db=new NexoDatabase(root);await db.ready();});
 afterEach(()=>fs.rmSync(root,{recursive:true,force:true}));
 describe("local retention",()=>{
+  it("commits grouped writes once and rolls them back when a batch fails",()=>{
+    db.transaction(()=>{db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",["atomic","c","user","ok",new Date().toISOString()]);db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",["atomic-2","c","assistant","ok",new Date().toISOString()]);});
+    expect(db.all("SELECT * FROM messages WHERE id LIKE 'atomic%'")).toHaveLength(2);
+    expect(()=>db.transaction(()=>{db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",["rolled","c","user","no",new Date().toISOString()]);throw new Error("abort");})).toThrow("abort");
+    expect(db.get("SELECT * FROM messages WHERE id='rolled'")).toBeUndefined();
+  });
   it("removes expired persisted data without deleting active tasks",()=>{
     const old="2000-01-01T00:00:00.000Z";
     db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",["m","c","user","old",old]);

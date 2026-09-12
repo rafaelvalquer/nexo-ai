@@ -195,6 +195,13 @@ describe("background tasks", () => {
     expect(tasks.get(task.id)?.progressText).toBeUndefined();
     expect(tasks.cancel(task.id)).toBe(false);
   });
+  it("marks interrupted queued or running tasks as failed during startup recovery", () => {
+    const tasks = new BackgroundTaskService(db); const queued = tasks.create("assistant-chat", { text: "retomar" }); const running = tasks.create("assistant-chat", { text: "executando" }); tasks.markRunning(running.id);
+    new BackgroundTaskService(db).recoverInterruptedTasks();
+    expect(tasks.get(queued.id)).toMatchObject({ status: "failed", error: "A tarefa foi interrompida por um encerramento anterior do Nexo." });
+    expect(tasks.get(running.id)).toMatchObject({ status: "failed", error: "A tarefa foi interrompida por um encerramento anterior do Nexo." });
+    expect(tasks.listActive()).toHaveLength(0);
+  });
 });
 
 describe("agent checkpoints", () => {
@@ -248,9 +255,19 @@ describe("DOCX edits", () => {
     const result = applyDocxEdit(zip.toBuffer(), { documentId:"11111111-1111-4111-8111-111111111111", rationale:"Atualizar cliente", operations:[{type:"replace_text",find:"Antigo",replace:"Novo"}] });
     const output = new AdmZip(result.output).readAsText("word/document.xml"); expect(output).toContain("<w:b/>"); expect(output).toContain("Cliente Novo");
   });
+  it("inherits the first run style when replacing a paragraph or a table cell", () => {
+    const zip = new AdmZip(); zip.addFile("word/document.xml", Buffer.from('<w:document xmlns:w="w"><w:body><w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:rPr><w:i/></w:rPr><w:t>Antigo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Valor</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>'));
+    const result = applyDocxEdit(zip.toBuffer(), { documentId:"11111111-1111-4111-8111-111111111111", rationale:"Preservar estilo", operations:[{type:"replace_paragraph",locator:{paragraph:0},text:"Novo título"},{type:"set_table_cell",table:0,row:0,column:0,text:"R$ 12.000"}] });
+    const output = new AdmZip(result.output).readAsText("word/document.xml"); expect(output).toContain('<w:pStyle w:val="Title"/>'); expect(output).toContain("<w:i/>"); expect(output).toContain("<w:b/>"); expect(output).toContain("Novo título"); expect(output).toContain("R$ 12.000");
+  });
   it("handles paragraph insertion, replacement and deletion at document boundaries", () => {
     const zip=new AdmZip();zip.addFile("word/document.xml",Buffer.from('<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Primeiro</w:t></w:r></w:p><w:p><w:r><w:t>Último</w:t></w:r></w:p><w:sectPr w:rsidR="abc"></w:sectPr></w:body></w:document>'));
     const result=applyDocxEdit(zip.toBuffer(),{documentId:"11111111-1111-4111-8111-111111111111",rationale:"Ajustar parágrafos",operations:[{type:"insert_before",locator:{paragraph:0},text:"Antes"},{type:"insert_after",locator:{paragraph:0},text:"Depois"},{type:"replace_paragraph",locator:{paragraph:3},text:"Final"},{type:"delete_paragraph",locator:{paragraph:1}}]});
     const xml=new AdmZip(result.output).readAsText("word/document.xml");expect(xml).toContain("Antes");expect(xml).not.toContain("Depois");expect(xml).toContain("Primeiro");expect(xml).toContain("Final");expect(xml).not.toContain("Último");expect(xml).toContain('<w:sectPr w:rsidR="abc">');
+  });
+  it("applies a safely escaped paragraph style to inserted text", () => {
+    const zip=new AdmZip();zip.addFile("word/document.xml",Buffer.from('<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Base</w:t></w:r></w:p></w:body></w:document>'));
+    const result=applyDocxEdit(zip.toBuffer(),{documentId:"11111111-1111-4111-8111-111111111111",rationale:"Inserir título",operations:[{type:"insert_before",locator:{paragraph:0},text:"Título",style:'Heading "1"'}]});
+    const xml=new AdmZip(result.output).readAsText("word/document.xml");expect(xml).toContain('<w:pStyle w:val="Heading &quot;1&quot;"/>');expect(xml).toContain("Título");
   });
 });

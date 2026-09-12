@@ -1,0 +1,2 @@
+import { describe,expect,it } from "vitest";import { stateForEvent } from "../../../apps/desktop/renderer/pixel-office/agent/AgentStateMachine";import { event } from "./fixtures";
+describe("máquina de estados do polvo",()=>{it.each([["run.created","thinking"],["tool.started","walking"],["tool.progress","working"],["approval.requested","walking"],["response.streaming","responding"],["run.completed","success"],["run.failed","error"],["run.cancelled","cancelled"]] as const)("mapeia %s para %s",(type,state)=>expect(stateForEvent(event(type))).toBe(state));});

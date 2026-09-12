@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import type { NexoCore } from "@nexo/core";
 
 function requireString(value: unknown, name: string) {
@@ -98,6 +98,8 @@ export function registerIpc(
     trashItem: (p: string) => Promise<void>;
   }
 ) {
+  core.visualEvents.subscribe(event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send("nexo:visual:event", event); });
+  ipcMain.handle("nexo:visual:snapshot", () => core.visualEvents.snapshot());
   ipcMain.handle("nexo:chat", (_, text) => core.chat(requireString(text, "Mensagem")));
   ipcMain.handle("nexo:chat:start", (_, text, attachmentIds) => {
     if (attachmentIds !== undefined && (!Array.isArray(attachmentIds) || !attachmentIds.every(id => typeof id === "string"))) throw new Error("Anexos inválidos.");

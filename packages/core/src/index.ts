@@ -316,8 +316,10 @@ export class NexoCore {
     if (!row) return { text: "Aprovação não encontrada." };
     if (!approved) {
       if (row.checkpoint_id) this.agentRuntime.cancelCheckpoint(row.checkpoint_id);
+      this.visualEvents.emit({runId:row.agent_run_id??id,type:"approval.resolved",state:"cancelled",label:"Aprovação rejeitada",stationId:"approval-gate",approvalId:id,severity:"warning"});
       return { text: "Ação cancelada." };
     }
+    this.visualEvents.emit({runId:row.agent_run_id??id,type:"approval.resolved",state:"walking",label:"Aprovação concedida",stationId:visualMetadataForTool(row.tool_name).stationId,approvalId:id,severity:"success"});
     if (row.checkpoint_id) return this.agent.resumeApproval(row.checkpoint_id);
     return this.agent.execute(row.tool_name, JSON.parse(row.input_json));
   }

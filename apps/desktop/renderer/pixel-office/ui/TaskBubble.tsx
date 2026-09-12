@@ -1,0 +1,1 @@
+import { useOfficeStore } from "../state/office-store";export function TaskBubble(){const event=useOfficeStore(s=>s.event);if(!event||!["approval.requested","run.failed","run.completed"].includes(event.type))return null;return <div className={`taskBubble ${event.severity}`}>{event.label}</div>;}

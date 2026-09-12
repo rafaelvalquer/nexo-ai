@@ -1,0 +1,2 @@
+import { describe,expect,it } from "vitest";import { visualMetadataForTool } from "../../../packages/core/src/agent/visual-events/mapper";
+describe("roteamento por ferramenta",()=>{it.each([["document_read","document-station"],["email_search","mail-station"],["calendar_list","calendar-station"],["browser_open","browser-station"],["system_info","system-station"],["unknown_tool","central-desk"]] as const)("roteia %s",(tool,station)=>expect(visualMetadataForTool(tool).stationId).toBe(station));});

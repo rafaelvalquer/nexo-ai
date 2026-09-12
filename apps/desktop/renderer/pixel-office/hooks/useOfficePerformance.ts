@@ -1,0 +1,1 @@
+import { useEffect } from "react";export function useOfficePerformance(onVisible:(visible:boolean)=>void){useEffect(()=>{const update=()=>onVisible(document.visibilityState==="visible");document.addEventListener("visibilitychange",update);update();return()=>document.removeEventListener("visibilitychange",update);},[onVisible]);}

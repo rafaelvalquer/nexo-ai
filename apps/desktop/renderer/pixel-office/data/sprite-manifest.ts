@@ -1,0 +1,2 @@
+export type OctopusAnimation="idle"|"walkUp"|"walkDown"|"walkLeft"|"walkRight"|"working"|"thinking"|"approval"|"responding"|"success"|"error"|"cancelled"|"offline";
+export const OCTOPUS_SPRITE={columns:4,rows:4,imageWidth:1263,imageHeight:1245,frameColumns:[0,316,632,947,1263],frameRows:[0,311,623,934,1245],animations:{idle:[0,1,2,3],walkDown:[4,5],walkLeft:[5,6],walkRight:[6,7],walkUp:[4,7],working:[8,9],thinking:[10],approval:[11],responding:[8],success:[12,13],error:[14],cancelled:[14],offline:[15]} satisfies Record<OctopusAnimation,number[]>};

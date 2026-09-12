@@ -110,6 +110,7 @@ export class NexoDatabase {
   private db!: Database;
   private filePath: string;
   private readyPromise: Promise<void>;
+  private transactionDepth = 0;
 
   constructor(dataDir = defaultDataDir()) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -155,7 +156,24 @@ export class NexoDatabase {
 
   run(sql: string, params: unknown[] = []) {
     this.db.run(sql, params as any[]);
-    this.persist();
+    if (!this.transactionDepth) this.persist();
+  }
+
+  /** Executes synchronous database work atomically and exports sql.js only once. */
+  transaction<T>(work: () => T): T {
+    const outermost = this.transactionDepth === 0;
+    if (outermost) this.db.run("BEGIN");
+    this.transactionDepth++;
+    try {
+      const result = work();
+      this.transactionDepth--;
+      if (outermost) { this.db.run("COMMIT"); this.persist(); }
+      return result;
+    } catch (error) {
+      this.transactionDepth--;
+      if (outermost) { this.db.run("ROLLBACK"); this.persist(); }
+      throw error;
+    }
   }
 
   all<T = Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {

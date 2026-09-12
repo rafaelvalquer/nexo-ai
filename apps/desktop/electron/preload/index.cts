@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const api = {
+  onVisualEvent: (callback: (event: unknown) => void) => { const listener = (_event: unknown, payload: unknown) => callback(payload); ipcRenderer.on("nexo:visual:event", listener); return () => ipcRenderer.removeListener("nexo:visual:event", listener); },
+  getVisualSnapshot: () => ipcRenderer.invoke("nexo:visual:snapshot"),
   chat: (text: string) => ipcRenderer.invoke("nexo:chat", text),
   startChatTask: (text: string, attachmentIds: string[] = []) => ipcRenderer.invoke("nexo:chat:start", text, attachmentIds),
   listConnections: () => ipcRenderer.invoke("nexo:connections:list"),
