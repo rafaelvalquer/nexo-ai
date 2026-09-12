@@ -3,12 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NexoCore, startCoreServer } from "@nexo/core";
 import { registerIpc } from "../ipc/register.js";
+import { ElectronSecretStore } from "../oauth/secret-store.js";
+import { DesktopOAuthHost } from "../oauth/desktop-oauth-host.js";
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
 let quitting=false;
-const core=new NexoCore();
+const core=new NexoCore({ secretStore: new ElectronSecretStore(), oauthHost: new DesktopOAuthHost() });
 let httpServer:any=null;
 
 async function createWindow(){
@@ -30,7 +32,7 @@ function createTray(){
 }
 
 app.whenReady().then(async()=>{
-  registerIpc(core,{chooseFolder:async()=>{const r=await dialog.showOpenDialog({properties:["openDirectory"]});return r.canceled?null:r.filePaths[0]},openPath:(p:string)=>shell.openPath(p),openExternal:(u:string)=>shell.openExternal(u),trashItem:(p:string)=>shell.trashItem(p)});
+  registerIpc(core,{chooseFolder:async()=>{const r=await dialog.showOpenDialog({properties:["openDirectory"]});return r.canceled?null:r.filePaths[0]},chooseDocument:async()=>{const r=await dialog.showOpenDialog({properties:["openFile"],filters:[{name:"Documentos",extensions:["pdf","docx","txt","md"]}]});return r.canceled?null:r.filePaths[0]},saveDocument:async(name:string)=>{const r=await dialog.showSaveDialog({defaultPath:name});return r.canceled?null:r.filePath??null},openPath:(p:string)=>shell.openPath(p),openExternal:(u:string)=>shell.openExternal(u),trashItem:(p:string)=>shell.trashItem(p)});
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   await createWindow(); createTray();
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});

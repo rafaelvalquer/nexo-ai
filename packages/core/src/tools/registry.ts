@@ -6,15 +6,18 @@ import { shellTools } from "./system/shell.js";
 import { browserTools } from "./browser/index.js";
 import { memoryTools } from "./memory/index.js";
 import type { MemoryService } from "../memory/index.js";
+import type { EmailService } from "../email/service.js";
+import { emailTools } from "./email/index.js";
+import type { CalendarService } from "../calendar/service.js";
+import { calendarTools } from "./calendar/index.js";
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
-  constructor(memory?: MemoryService) {
+  constructor(memory?: MemoryService, email?: EmailService, calendar?: CalendarService) {
     const base = [...filesystemTools(), ...systemTools(), ...applicationTools(), ...shellTools(), ...browserTools()];
     const mem = memory ? memoryTools(memory) : [];
-    for (const tool of [...base, ...mem]) this.tools.set(tool.name, tool);
+    for (const tool of [...base, ...mem, ...(email ? emailTools(email) : []), ...(calendar ? calendarTools(calendar) : [])]) this.tools.set(tool.name, tool);
   }
   get(name: string) { return this.tools.get(name); }
   list() { return [...this.tools.values()].map(t => ({ name:t.name, description:t.description, risk:t.risk, permissions:t.permissions })); }
 }
-

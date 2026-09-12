@@ -18,6 +18,9 @@ Assistente pessoal local para Windows, com Electron + React + TypeScript, Core N
 - Backup do banco.
 - System tray e execução em background.
 - Fastify em `127.0.0.1:47321/health` para diagnóstico local.
+- Conexões Google/Microsoft via OAuth 2.0 com PKCE, callback local e cofre criptografado do Electron.
+- E-mail e calendário por ferramentas de domínio com aprovação antes de envio/criação.
+- Importação local de PDF, DOCX, TXT e MD; busca, comparação, exportação e prévia interna.
 - Testes de política e segurança.
 - Empacotamento Windows com electron-builder.
 
@@ -62,6 +65,10 @@ pnpm package:win  # gera o instalador .exe em release/
 
 As ações em arquivos só funcionam dentro das pastas autorizadas em **Configurações > Pastas permitidas**.
 
+## Conexões de escritório
+
+Para conectar Google ou Microsoft, preencha o Client ID público correspondente no arquivo `.env` a partir de `.env.example`. Registre o aplicativo como desktop/public client e mantenha o callback de loopback autorizado. O Nexo abre o navegador do sistema e armazena somente a credencial criptografada pelo Windows; tokens não são gravados no banco nem apresentados na interface.
+
 ## Segurança
 
 O Renderer não recebe Node.js. `nodeIntegration=false`, `contextIsolation=true` e `sandbox=true`. O LLM não executa comandos diretamente: ele solicita uma ferramenta ao Core, que valida schema, caminho, risco e aprovação. Conteúdo de browser é rotulado como `UNTRUSTED_CONTENT`.
@@ -76,6 +83,6 @@ No Windows:
 └── backups\
 ```
 
-## Escopo atual
+## Limites de release pública
 
-Este repositório é um MVP executável e uma fundação de produto. Integrações Gmail/Calendar/MCP, voz local, atualização automática assinada e semantic search com embeddings estão estruturadas no roadmap, mas exigem credenciais/configuração externa ou componentes adicionais antes de uma release pública comercial.
+Uma distribuição comercial ainda requer credenciais publicadas/verificadas pelos provedores OAuth, assinatura de código Windows e um canal de atualização assinado. Essas etapas dependem de contas e certificados da organização e não podem ser concluídas apenas no código-fonte.

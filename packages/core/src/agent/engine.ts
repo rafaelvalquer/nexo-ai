@@ -4,6 +4,7 @@ import { ToolRegistry } from "../tools/registry.js";
 import { PermissionEngine } from "../permissions/policy.js";
 import { ApprovalService } from "../permissions/approvals.js";
 import { AuditService } from "../audit/audit.js";
+import type { ConnectionService } from "../connections/service.js";
 import {
   OllamaConnectionError,
   OllamaInvalidResponseError,
@@ -25,7 +26,8 @@ export class AgentEngine {
     private registry: ToolRegistry,
     private permissions: PermissionEngine,
     private approvals: ApprovalService,
-    private audit: AuditService
+    private audit: AuditService,
+    private connections?: ConnectionService
   ) {}
 
   async run(userText: string, hooks: AgentRunHooks = {}): Promise<AgentReply> {
@@ -87,7 +89,12 @@ export class AgentEngine {
         return { text };
       }
 
-      const parsed = tool.inputSchema.safeParse(step.input ?? {});
+      const input = { ...(step.input ?? {}) } as Record<string, unknown>;
+      if (!input.connectionId) {
+        const capability = tool.permissions.find(permission => ["email.read", "email.send", "calendar.read", "calendar.write"].includes(permission));
+        if (capability) { const account = this.connections?.defaultFor(capability as any); if (account) input.connectionId = account.id; }
+      }
+      const parsed = tool.inputSchema.safeParse(input);
       if (!parsed.success) {
         const text = `Não consegui validar os parâmetros de ${tool.name}: ${parsed.error.issues.map(x => x.message).join(", ")}`;
         hooks.onReplaceText?.(text);

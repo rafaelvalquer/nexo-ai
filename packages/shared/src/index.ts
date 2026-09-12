@@ -67,4 +67,17 @@ export type NexoSettings = {
   runInBackground: boolean;
   memoryEnabled: boolean;
   memoryAskBeforeSave: boolean;
+  embeddingModel: string;
+  documentMaxSizeMb: number;
+  externalDataRetention: "session" | "local";
+  connectionsEnabled: boolean;
+  ocrEnabled: boolean;
 };
+
+export type ConnectionProvider = "google" | "microsoft";
+export type ConnectionCapability = "email.read" | "email.send" | "email.modify" | "calendar.read" | "calendar.write";
+export type ConnectionStatus = "not-configured" | "connecting" | "connected" | "expired" | "error" | "admin-consent-required";
+export type ConnectionAccount = { id: string; provider: ConnectionProvider; accountEmail?: string; displayName?: string; capabilities: ConnectionCapability[]; status: ConnectionStatus; lastError?: string; updatedAt: string };
+export type DocumentStatus = "importing" | "extracting" | "indexing" | "ready" | "failed";
+export type DocumentRecord = { id: string; name: string; mimeType: string; sizeBytes: number; status: DocumentStatus; metadata?: Record<string, unknown>; createdAt: string; updatedAt: string };
+export type ChatAttachment = { id: string; documentId: string; name: string; mimeType: string; sizeBytes: number; status: "importing" | "ready" | "failed" };

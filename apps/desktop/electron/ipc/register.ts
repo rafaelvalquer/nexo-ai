@@ -36,7 +36,8 @@ function validateSettingsPatch(value: unknown) {
     "privateMode",
     "runInBackground",
     "memoryEnabled",
-    "memoryAskBeforeSave"
+    "memoryAskBeforeSave",
+    "embeddingModel", "documentMaxSizeMb", "externalDataRetention", "connectionsEnabled", "ocrEnabled"
   ]);
 
   for (const key of Object.keys(patch)) {
@@ -53,6 +54,10 @@ function validateSettingsPatch(value: unknown) {
   for (const key of ["privateMode", "runInBackground", "memoryEnabled", "memoryAskBeforeSave"]) {
     if (patch[key] !== undefined) requireBoolean(patch[key], key);
   }
+  if (patch.embeddingModel !== undefined) requireString(patch.embeddingModel, "Modelo de embeddings");
+  if (patch.documentMaxSizeMb !== undefined && (!Number.isInteger(patch.documentMaxSizeMb) || Number(patch.documentMaxSizeMb) < 1 || Number(patch.documentMaxSizeMb) > 500)) throw new Error("Limite de documento inválido.");
+  if (patch.externalDataRetention !== undefined && !["session", "local"].includes(String(patch.externalDataRetention))) throw new Error("Retenção externa inválida.");
+  for (const key of ["connectionsEnabled", "ocrEnabled"]) if (patch[key] !== undefined) requireBoolean(patch[key], key);
   return patch;
 }
 
@@ -72,13 +77,34 @@ export function registerIpc(
   core: NexoCore,
   desktop: {
     chooseFolder: () => Promise<string | null>;
+    chooseDocument: () => Promise<string | null>;
+    saveDocument: (name: string) => Promise<string | null>;
     openPath: (p: string) => Promise<string>;
     openExternal: (u: string) => Promise<void>;
     trashItem: (p: string) => Promise<void>;
   }
 ) {
   ipcMain.handle("nexo:chat", (_, text) => core.chat(requireString(text, "Mensagem")));
-  ipcMain.handle("nexo:chat:start", (_, text) => core.startChatTask(requireString(text, "Mensagem")));
+  ipcMain.handle("nexo:chat:start", (_, text, attachmentIds) => {
+    if (attachmentIds !== undefined && (!Array.isArray(attachmentIds) || !attachmentIds.every(id => typeof id === "string"))) throw new Error("Anexos inválidos.");
+    return core.startChatTask(requireString(text, "Mensagem"), attachmentIds ?? []);
+  });
+  ipcMain.handle("nexo:connections:list", () => core.connections.list());
+  ipcMain.handle("nexo:connections:connect", (_, provider, capabilities) => {
+    if (provider !== "google" && provider !== "microsoft") throw new Error("Provedor inválido.");
+    if (!Array.isArray(capabilities) || !capabilities.every(x => ["email.read", "email.send", "email.modify", "calendar.read", "calendar.write"].includes(x))) throw new Error("Capacidades inválidas.");
+    return core.connections.connect(provider, capabilities);
+  });
+  ipcMain.handle("nexo:connections:disconnect", (_, id) => core.connections.disconnect(requireString(id, "ID da conexão")));
+  ipcMain.handle("nexo:connections:test", (_, id) => core.connections.test(requireString(id, "ID da conexão")));
+  ipcMain.handle("nexo:connections:add-capabilities", (_, id, capabilities) => core.connections.addCapabilities(requireString(id, "ID da conexão"), capabilities));
+  ipcMain.handle("nexo:documents:choose", async () => { const file = await desktop.chooseDocument(); return file ? core.startDocumentImport(file) : null; });
+  ipcMain.handle("nexo:documents:list-recent", () => core.documents.listRecent());
+  ipcMain.handle("nexo:documents:get", (_, id) => core.documents.get(requireString(id, "ID do documento")));
+  ipcMain.handle("nexo:documents:preview", async (_, id) => desktop.openPath(await core.previewDocument(requireString(id, "ID do documento"))));
+  ipcMain.handle("nexo:documents:preview-data", (_, id) => core.documentPreviewData(requireString(id, "ID do documento")));
+  ipcMain.handle("nexo:documents:export", async (_, id) => { const documentId=requireString(id,"ID do documento"); const document=core.documents.get(documentId); if(!document) throw new Error("Documento não encontrado."); const target=await desktop.saveDocument(document.name); return target ? core.exportDocument(documentId,target) : {ok:false}; });
+  ipcMain.handle("nexo:documents:edit", (_, id, plan) => core.editDocument(requireString(id, "ID do documento"), plan));
   ipcMain.handle("nexo:chat:history", () => core.listChatMessages());
   ipcMain.handle("nexo:tasks:list", (_, limit) => core.listTasks(Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 200) : 50));
   ipcMain.handle("nexo:tasks:active", () => core.listActiveTasks());

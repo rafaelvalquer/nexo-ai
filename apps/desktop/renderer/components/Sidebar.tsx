@@ -1,4 +1,4 @@
-import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings } from "lucide-react";
+import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings, FileText } from "lucide-react";
 import { useAppStore } from "../stores/app";
 
 const items = [
@@ -7,6 +7,7 @@ const items = [
   ["Automações", Zap],
   ["Aprovações", ShieldCheck],
   ["Conexões", Plug],
+  ["Documentos", FileText],
   ["Atividade", History],
   ["Memória", Brain],
   ["Configurações", Settings]

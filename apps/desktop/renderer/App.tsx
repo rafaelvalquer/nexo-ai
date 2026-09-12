@@ -9,6 +9,9 @@ import { Connections } from "./pages/Connections";
 import { Activity } from "./pages/Activity";
 import { Memory } from "./pages/Memory";
 import { Settings } from "./pages/Settings";
+import { Documents } from "./pages/Documents";
+import { Topbar } from "./components/shell/Topbar";
+import { CommandPalette } from "./components/shell/CommandPalette";
 
 const pages: Record<string, ComponentType> = {
   Hoje: Today,
@@ -16,6 +19,7 @@ const pages: Record<string, ComponentType> = {
   "Automações": Automations,
   Aprovações: Approvals,
   "Conexões": Connections,
+  Documentos: Documents,
   Atividade: Activity,
   "Memória": Memory,
   "Configurações": Settings
@@ -34,5 +38,5 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [syncAssistant, assistantBusy]);
 
-  return <div className="app"><Sidebar /><main><Page /></main></div>;
+  return <div className="app"><Sidebar /><main><Topbar /><Page /></main><CommandPalette /></div>;
 }

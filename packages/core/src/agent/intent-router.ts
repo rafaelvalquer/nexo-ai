@@ -92,6 +92,10 @@ export class FastIntentRouter {
       };
     }
 
+    if (/\b(e-?mails?|gmail|caixa\s+de\s+entrada)\b/i.test(text) && /\b(n[aã]o lidos?|unread|chegaram|recebidos?)\b/i.test(text)) {
+      return { tool: "email_search", input: { unread: true, maxResults: 20 }, explanation: "Consultando e-mails não lidos na conta conectada…" };
+    }
+
     if (/\b(configur|adicion|alter|gerenci).*(pastas?\s+permitidas?)|\bpastas?\s+permitidas?\b/i.test(text)) {
       return {
         direct: "Abra Configurações → Segurança → Pastas permitidas. Downloads, Documents e Desktop são autorizadas por padrão; você pode adicionar outras pastas manualmente."

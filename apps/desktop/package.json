@@ -1,6 +1,8 @@
 {
   "name": "@nexo/desktop",
   "version": "0.2.0",
+  "description": "Nexo AI local office agent",
+  "author": "Nexo AI",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -16,6 +18,7 @@
   "dependencies": {
     "@nexo/core": "workspace:*",
     "@nexo/shared": "workspace:*",
+    "docx-preview": "^0.4.0",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
@@ -26,14 +29,14 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
     "cross-env": "^7.0.3",
-    "electron": "^33.3.0",
+    "electron": "33.4.11",
     "electron-builder": "^25.1.8",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.5",
-    "tailwindcss": "^3.4.17",
     "postcss": "^8.4.49",
-    "autoprefixer": "^10.4.20"
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.5"
   },
   "build": {
     "appId": "ai.nexo.desktop",
@@ -41,15 +44,14 @@
     "directories": {
       "output": "../../release"
     },
+    "asar": false,
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
       "package.json"
     ],
-    "asarUnpack": [
-      "**/*.wasm"
-    ],
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         "nsis"
       ],

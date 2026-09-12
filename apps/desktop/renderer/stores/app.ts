@@ -11,7 +11,7 @@ type Store = {
   assistantBusy: boolean;
   assistantError: string | null;
   syncAssistant: () => Promise<void>;
-  sendAssistant: (text: string) => Promise<void>;
+  sendAssistant: (text: string, attachmentIds?: string[]) => Promise<void>;
 };
 
 export const useAppStore = create<Store>((set, get) => ({
@@ -41,12 +41,12 @@ export const useAppStore = create<Store>((set, get) => ({
     }
   },
 
-  sendAssistant: async (text: string) => {
+  sendAssistant: async (text: string, attachmentIds: string[] = []) => {
     const value = text.trim();
     if (!value) return;
     try {
       set({ assistantBusy: true, assistantError: null });
-      await window.nexo.startChatTask(value);
+      await window.nexo.startChatTask(value, attachmentIds);
       await get().syncAssistant();
     } catch (error) {
       set({

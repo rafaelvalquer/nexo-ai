@@ -41,6 +41,17 @@ CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key);
 CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
 `;
 
+const MIGRATIONS: Array<[number, string]> = [[1, `
+CREATE TABLE IF NOT EXISTS connections (id TEXT PRIMARY KEY, provider TEXT NOT NULL, account_email TEXT, display_name TEXT, capabilities_json TEXT NOT NULL, token_secret_key TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_error TEXT);
+CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, name TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, managed_path TEXT NOT NULL, source_hash TEXT NOT NULL, status TEXT NOT NULL, metadata_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS document_chunks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, ordinal INTEGER NOT NULL, locator TEXT, text TEXT NOT NULL, embedding_json TEXT, FOREIGN KEY(document_id) REFERENCES documents(id));
+CREATE TABLE IF NOT EXISTS message_attachments (id TEXT PRIMARY KEY, message_id TEXT, document_id TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS document_versions (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, version_number INTEGER NOT NULL, managed_path TEXT NOT NULL, change_summary TEXT, created_at TEXT NOT NULL);
+ALTER TABLE tasks ADD COLUMN progress_json TEXT;
+CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(source_hash);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(document_id, ordinal);
+`]];
+
 export class NexoDatabase {
   private db!: Database;
   private filePath: string;
@@ -67,6 +78,14 @@ export class NexoDatabase {
     }
     
     this.db.run(SCHEMA);
+    this.db.run("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");
+    for (const [version, sql] of MIGRATIONS) {
+      if (this.db.exec(`SELECT version FROM schema_migrations WHERE version=${version}`)[0]?.values.length) continue;
+      // SQLite does not support ADD COLUMN IF NOT EXISTS; a database created by an older
+      // development build may already contain this column.
+      try { this.db.run(sql); } catch (error) { if (!String(error).includes("duplicate column name")) throw error; }
+      this.db.run("INSERT OR REPLACE INTO schema_migrations(version, applied_at) VALUES(?, ?)", [version, new Date().toISOString()]);
+    }
     this.persist();
   }
 

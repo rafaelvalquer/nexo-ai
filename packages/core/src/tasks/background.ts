@@ -29,6 +29,7 @@ type TaskRow = {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  progress_json?: string | null;
 };
 
 type LiveProgress = {
@@ -57,8 +58,8 @@ export class BackgroundTaskService {
     const id = uuid();
     const createdAt = new Date().toISOString();
     this.db.run(
-      "INSERT INTO tasks(id,type,status,input_json,result_json,error,created_at,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?,?)",
-      [id, type, "queued", JSON.stringify(input), null, null, createdAt, null, null]
+      "INSERT INTO tasks(id,type,status,input_json,result_json,error,created_at,started_at,finished_at,progress_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      [id, type, "queued", JSON.stringify(input), null, null, createdAt, null, null, JSON.stringify({ text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] })]
     );
     this.liveProgress.set(id, { text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] });
     return this.get(id)!;
@@ -78,6 +79,7 @@ export class BackgroundTaskService {
       statusMessage,
       statusHistory: history.slice(-8)
     });
+    this.persistProgress(id);
   }
 
   appendProgress(id: string, token: string) {
@@ -87,17 +89,19 @@ export class BackgroundTaskService {
       statusHistory: ["Gerando resposta…"]
     };
     this.liveProgress.set(id, { ...current, text: current.text + token });
+    this.persistProgress(id);
   }
 
   replaceProgress(id: string, text: string) {
     const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "", statusHistory: [] };
     this.liveProgress.set(id, { ...current, text });
+    this.persistProgress(id);
   }
 
-  complete(id: string, result: AgentReply) {
+  complete(id: string, result: unknown) {
     this.db.run(
-      "UPDATE tasks SET status='completed', result_json=?, finished_at=? WHERE id=?",
-      [JSON.stringify(result), new Date().toISOString(), id]
+      "UPDATE tasks SET status='completed', result_json=?, finished_at=?, progress_json=? WHERE id=?",
+      [JSON.stringify(result), new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
   }
@@ -105,8 +109,8 @@ export class BackgroundTaskService {
   fail(id: string, error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     this.db.run(
-      "UPDATE tasks SET status='failed', error=?, finished_at=? WHERE id=?",
-      [message, new Date().toISOString(), id]
+      "UPDATE tasks SET status='failed', error=?, finished_at=?, progress_json=? WHERE id=?",
+      [message, new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
   }
@@ -129,7 +133,7 @@ export class BackgroundTaskService {
   }
 
   private toTask(row: TaskRow): BackgroundTask {
-    const progress = this.liveProgress.get(row.id);
+    const progress = this.liveProgress.get(row.id) ?? (row.progress_json ? JSON.parse(row.progress_json) as LiveProgress : undefined);
     return {
       id: row.id,
       type: row.type,
@@ -144,5 +148,10 @@ export class BackgroundTaskService {
       statusMessage: progress?.statusMessage,
       statusHistory: progress?.statusHistory
     };
+  }
+
+  private persistProgress(id: string) {
+    const progress = this.liveProgress.get(id);
+    if (progress) this.db.run("UPDATE tasks SET progress_json=? WHERE id=?", [JSON.stringify(progress), id]);
   }
 }

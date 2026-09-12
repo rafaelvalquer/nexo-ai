@@ -35,4 +35,8 @@ export class PermissionEngine {
   assertPath(target: string) {
     if (!this.isPathAllowed(target)) throw new Error(`Caminho fora do escopo permitido: ${target}`);
   }
+
+  assertCapability(permission: string, available: Iterable<string>) {
+    if (!new Set(available).has(permission)) throw new Error(`Capacidade não autorizada: ${permission}`);
+  }
 }
