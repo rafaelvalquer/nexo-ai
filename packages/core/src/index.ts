@@ -1,4 +1,4 @@
-import type { NexoSettings } from "@nexo/shared";
+import type { NexoSettings, OAuthConfiguration } from "@nexo/shared";
 import { NexoDatabase } from "./database/db.js";
 import { AuditService } from "./audit/audit.js";
 import { ApprovalService } from "./permissions/approvals.js";
@@ -19,6 +19,14 @@ import { DocumentService } from "./documents/service.js";
 import { MemorySecretStore, type OAuthHost, type SecretStore } from "./connections/types.js";
 import { EmailService } from "./email/service.js";
 import { CalendarService } from "./calendar/service.js";
+import { environment } from "./config/environment.js";
+import { ConversationContextBuilder } from "./agent/context/conversation-context.js";
+import { AgentRuntime } from "./agent/runtime/runtime.js";
+import { EmbeddingProvider } from "./rag/embeddings.js";
+import { SecurityPolicyService } from "./security/policy.js";
+import { LocalMetricsService } from "./observability/metrics.js";
+import { RetentionService } from "./privacy/retention.js";
+import { VisualEventBus, visualMetadataForTool } from "./agent/visual-events/index.js";
 
 export type NexoCoreOptions = { dataDir?: string; secretStore?: SecretStore; oauthHost?: OAuthHost };
 
@@ -31,15 +39,22 @@ export class NexoCore {
   llm!: OllamaProvider;
   planner!: AgentPlanner;
   agent!: AgentEngine;
+  agentRuntime!: AgentRuntime;
+  security!: SecurityPolicyService;
+  metrics!: LocalMetricsService;
+  retention!: RetentionService;
   memory!: MemoryService;
   automation!: AutomationEngine;
   tasks!: BackgroundTaskService;
   chatHistory!: ChatHistoryService;
+  conversationContext = new ConversationContextBuilder();
+  visualEvents = new VisualEventBus();
   connections!: ConnectionService;
   documents!: DocumentService;
   email!: EmailService;
   calendar!: CalendarService;
   private settings!: NexoSettings;
+  private chatControllers = new Map<string, AbortController>();
   readonly logger: ReturnType<typeof createLogger>;
   private readyPromise: Promise<void>;
 
@@ -59,11 +74,15 @@ export class NexoCore {
   private async init() {
     await this.db.ready();
     this.settings = this.loadSettings();
-    this.audit = new AuditService(this.db);
+    this.audit = new AuditService(this.db, () => this.settings.privateMode);
     this.approvals = new ApprovalService(this.db);
     this.permissions = new PermissionEngine(() => this.settings);
-    this.connections = new ConnectionService(this.db, this.secretStore, this.oauthHost);
-    this.documents = new DocumentService(this.db, this.dataDir, this.settings.documentMaxSizeMb);
+    this.security = new SecurityPolicyService(() => this.settings);
+    this.metrics = new LocalMetricsService(this.db);
+    this.connections = new ConnectionService(this.db, this.secretStore, this.oauthHost, () => this.settings.oauth, () => this.settings.connectionsEnabled && !this.settings.privateMode);
+    this.documents = new DocumentService(this.db, this.dataDir, this.settings.documentMaxSizeMb, new EmbeddingProvider(this.settings.ollamaUrl, this.settings.embeddingModel));
+    this.retention = new RetentionService(this.db, this.documents);
+    this.retention.purge(this.settings.dataRetentionDays);
     this.email = new EmailService(this.connections);
     this.calendar = new CalendarService(this.connections);
 
@@ -76,12 +95,13 @@ export class NexoCore {
     this.tools = new ToolRegistry(this.memory, this.email, this.calendar);
     this.llm = new OllamaProvider(this.settings.ollamaUrl, this.settings.model);
     this.planner = new AgentPlanner(this.llm, this.tools);
-    this.agent = new AgentEngine(this.planner, this.tools, this.permissions, this.approvals, this.audit, this.connections);
-    this.tasks = new BackgroundTaskService(this.db);
+    this.agentRuntime = new AgentRuntime(this.db);
+    this.agent = new AgentEngine(this.planner, this.tools, this.permissions, this.approvals, this.audit, this.connections, this.agentRuntime, this.security, this.metrics);
+    this.tasks = new BackgroundTaskService(this.db, () => this.settings.privateMode);
     this.tasks.recoverInterruptedTasks();
     this.chatHistory = new ChatHistoryService(this.db);
     this.automation = new AutomationEngine(this.db, async command => this.agent.run(command));
-    this.automation.start();
+    if (!this.settings.privateMode) this.automation.start();
     this.logger.info({ model: this.settings.model }, "Nexo Core initialized");
   }
 
@@ -90,20 +110,32 @@ export class NexoCore {
   }
 
   private defaultSettings(): NexoSettings {
+    const env = environment();
     return {
-      model: process.env.NEXO_MODEL ?? "qwen3:4b",
-      ollamaUrl: process.env.NEXO_OLLAMA_URL ?? "http://127.0.0.1:11434",
+      model: env.model,
+      ollamaUrl: env.ollamaUrl,
       autonomy: "balanced",
       allowedRoots: defaultAllowedRoots(),
       privateMode: false,
       runInBackground: true,
       memoryEnabled: true,
       memoryAskBeforeSave: true,
-      embeddingModel: process.env.NEXO_EMBEDDING_MODEL ?? "nomic-embed-text",
-      documentMaxSizeMb: Number(process.env.NEXO_DOCUMENT_MAX_SIZE_MB ?? 50),
+      embeddingModel: env.embeddingModel,
+      documentMaxSizeMb: env.documentMaxSizeMb,
       externalDataRetention: "local",
       connectionsEnabled: true,
-      ocrEnabled: false
+      browserAutomationEnabled: true,
+      fileWritesEnabled: true,
+      requireApprovalForEmail: false,
+      allowedDomains: [],
+      dataRetentionDays: 30,
+      onboardingCompleted: false,
+      ocrEnabled: false,
+      oauth: {
+        googleClientId: "",
+        microsoftClientId: "",
+        microsoftTenant: env.microsoftTenant
+      }
     };
   }
 
@@ -136,6 +168,7 @@ export class NexoCore {
     this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)", [JSON.stringify(this.settings)]);
     this.llm.setModel(this.settings.model);
     this.llm.setBaseUrl(this.settings.ollamaUrl);
+    if (patch.dataRetentionDays !== undefined) this.retention.purge(this.settings.dataRetentionDays);
 
     if (!wasPrivate && this.settings.privateMode) this.automation.stop();
     if (wasPrivate && !this.settings.privateMode) this.automation.start();
@@ -155,38 +188,82 @@ export class NexoCore {
     if (attachmentIds.length !== attachments.length) throw new Error("Um ou mais anexos não estão disponíveis.");
     if (attachments.some(document => document!.status !== "ready")) throw new Error("Aguarde a indexação dos documentos antes de perguntar sobre eles.");
     const task = this.tasks.create("assistant-chat", { text: clean, attachmentIds });
+    this.visualEvents.emit({runId:task.id,type:"run.created",state:"interpreting",label:"Entendendo pedido",stationId:"central-desk",severity:"info"});
+    const context = !this.settings.privateMode ? this.conversationContext.build(this.chatHistory.list()) : [];
     if (!this.settings.privateMode) this.chatHistory.add("user", clean, task.id);
-    void this.executeChatTask(task.id, clean, attachmentIds);
+    void this.executeChatTask(task.id, clean, attachmentIds, context);
     return task;
   }
 
-  private async executeChatTask(taskId: string, text: string, attachmentIds: string[] = []) {
+  private async executeChatTask(taskId: string, text: string, attachmentIds: string[] = [], context: import("./llm/provider.js").LLMMessage[] = []) {
+    const controller = new AbortController();
+    this.chatControllers.set(taskId, controller);
     this.tasks.markRunning(taskId);
     try {
       const reply = attachmentIds.length
-        ? { text: attachmentIds.length === 2 && /\b(compare|comparar|diferen[cç]|difere)\b/i.test(text) ? formatDocumentComparison(this.documents.compare(attachmentIds)) : this.documents.answer(attachmentIds, text).text }
+        ? { text: attachmentIds.length === 2 && /\b(compare|comparar|diferen[cç]|difere)\b/i.test(text) ? formatDocumentComparison(this.documents.compare(attachmentIds)) : (await this.documents.answer(attachmentIds, text)).text }
         : await this.agent.run(text, {
-        onStatus: message => this.tasks.setStatus(taskId, message),
-        onToken: token => this.tasks.appendProgress(taskId, token),
-        onReplaceText: output => this.tasks.replaceProgress(taskId, output)
-      });
+        onStatus: message => { this.tasks.setStatus(taskId, message); const planning=/plano|classific/i.test(message); this.visualEvents.emit({runId:taskId,type:planning?"run.planning":"tool.progress",state:planning?"planning":"executing-tool",label:message,stationId:"central-desk",severity:"info"}); },
+        onToken: token => { this.tasks.appendProgress(taskId, token); this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId:"central-desk",severity:"info",metadata:{tokenLength:token.length}}); },
+        onReplaceText: output => this.tasks.replaceProgress(taskId, output),
+        signal: controller.signal,
+        onToolStarted:(toolName,label)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},
+        onToolCompleted:(toolName,ok)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error"});},
+        onApprovalRequested:(approvalId,toolName)=>this.visualEvents.emit({runId:taskId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"})
+      }, context);
+
+      if (controller.signal.aborted) return;
 
       if (!this.settings.privateMode) {
         const suffix = reply.approvalId ? " Abra Aprovações para autorizar." : "";
         this.chatHistory.add("assistant", reply.text + suffix, taskId);
       }
       this.tasks.complete(taskId, reply);
+      this.visualEvents.emit({runId:taskId,type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success"});
     } catch (error) {
+      if (controller.signal.aborted) return;
       this.tasks.fail(taskId, error);
+      this.visualEvents.emit({runId:taskId,type:"run.failed",state:"error",label:"Precisa de atenção",stationId:"central-desk",severity:"error"});
       if (!this.settings.privateMode) {
         const message = error instanceof Error ? error.message : String(error);
         this.chatHistory.add("assistant", `Falha ao processar: ${message}`, taskId);
       }
+    } finally {
+      this.chatControllers.delete(taskId);
     }
+  }
+
+  async cancelTask(id: string) {
+    await this.ready();
+    const task = this.tasks.get(id);
+    if (!task || task.type !== "assistant-chat") return false;
+    this.chatControllers.get(id)?.abort(new DOMException("Cancelada pelo usuário.", "AbortError"));
+    const cancelled=this.tasks.cancel(id);if(cancelled)this.visualEvents.emit({runId:id,type:"run.cancelled",state:"cancelled",label:"Cancelado pelo usuário",stationId:"central-desk",severity:"warning"});return cancelled;
+  }
+
+  getOAuthConfiguration() {
+    const oauth = this.settings.oauth;
+    const env = environment();
+    return {
+      ...oauth,
+      googleConfigured: Boolean(oauth.googleClientId.trim() || env.googleClientId),
+      microsoftConfigured: Boolean(oauth.microsoftClientId.trim() || env.microsoftClientId)
+    };
+  }
+
+  updateOAuthConfiguration(configuration: OAuthConfiguration) {
+    const next: OAuthConfiguration = {
+      googleClientId: configuration.googleClientId.trim(),
+      microsoftClientId: configuration.microsoftClientId.trim(),
+      microsoftTenant: configuration.microsoftTenant.trim() || "common"
+    };
+    this.updateSettings({ oauth: next });
+    return this.getOAuthConfiguration();
   }
 
   async startDocumentImport(sourcePath: string) {
     await this.ready();
+    if (this.settings.privateMode) throw new Error("A importação de documentos fica desativada no modo privado para evitar retenção de conteúdo.");
     const task = this.tasks.create("document-import", { source: "trusted-picker" });
     void (async () => { this.tasks.markRunning(task.id); this.tasks.setStatus(task.id, "Copiando e extraindo documento…"); try { const document = await this.documents.importFromTrustedPicker(sourcePath); this.tasks.setStatus(task.id, "Documento indexado."); this.tasks.complete(task.id, document); } catch (error) { this.tasks.fail(task.id, error); } })();
     return task;
@@ -195,7 +272,7 @@ export class NexoCore {
   async editDocument(documentId: string, plan: unknown) {
     await this.ready();
     const task = this.tasks.create("document-edit", { documentId });
-    void (async () => { this.tasks.markRunning(task.id); this.tasks.setStatus(task.id, "Aplicando alterações propostas em nova versão…"); try { const result = this.documents.applyEdit(documentId, plan); this.tasks.complete(task.id, result); } catch (error) { this.tasks.fail(task.id, error); } })();
+    void (async () => { this.tasks.markRunning(task.id); this.tasks.setStatus(task.id, "Aplicando alterações propostas em nova versão…"); try { const result = await this.documents.applyEdit(documentId, plan); this.tasks.complete(task.id, result); } catch (error) { this.tasks.fail(task.id, error); } })();
     return task;
   }
 
@@ -236,7 +313,12 @@ export class NexoCore {
   async approve(id: string, approved: boolean) {
     await this.ready();
     const row = this.approvals.resolve(id, approved);
-    if (!row || !approved) return { text: "Ação cancelada." };
+    if (!row) return { text: "Aprovação não encontrada." };
+    if (!approved) {
+      if (row.checkpoint_id) this.agentRuntime.cancelCheckpoint(row.checkpoint_id);
+      return { text: "Ação cancelada." };
+    }
+    if (row.checkpoint_id) return this.agent.resumeApproval(row.checkpoint_id);
     return this.agent.execute(row.tool_name, JSON.parse(row.input_json));
   }
 
@@ -246,7 +328,8 @@ export class NexoCore {
       llm: await this.llm.health(),
       models: await this.llm.models(),
       settings: this.getSettings(),
-      tools: this.tools.list()
+      tools: this.tools.list(),
+      metrics: this.metrics.snapshot()
     };
   }
 

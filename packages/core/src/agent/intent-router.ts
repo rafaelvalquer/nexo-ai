@@ -82,18 +82,11 @@ export class FastIntentRouter {
       };
     }
 
-    if (/\b(e-?mail|gmail|caixa\s+de\s+entrada)\b/i.test(text) && /\b(configur|conect|acesso|acessar|ler|tenha|ter)\b/i.test(text)) {
-      return {
-        direct: [
-          "O acesso ao e-mail ainda precisa ser conectado ao Nexo.",
-          "A integração recomendada é Gmail via OAuth 2.0, sem armazenar sua senha.",
-          "Abra Conexões para configurar a conta. Enquanto a integração não estiver ativa, o Nexo não lê sua caixa de entrada."
-        ].join("\n")
-      };
-    }
-
     if (/\b(e-?mails?|gmail|caixa\s+de\s+entrada)\b/i.test(text) && /\b(n[aã]o lidos?|unread|chegaram|recebidos?)\b/i.test(text)) {
       return { tool: "email_search", input: { unread: true, maxResults: 20 }, explanation: "Consultando e-mails não lidos na conta conectada…" };
+    }
+    if (/\b(e-?mails?|gmail|caixa\s+de\s+entrada)\b/i.test(text)) {
+      return { tool: "email_search", input: { maxResults: 20 }, explanation: "Consultando a conta de e-mail conectada…" };
     }
 
     if (/\b(configur|adicion|alter|gerenci).*(pastas?\s+permitidas?)|\bpastas?\s+permitidas?\b/i.test(text)) {

@@ -1,0 +1,2 @@
+import { Settings2 } from "lucide-react";
+export function AssistantHeader({model,busy,elapsed,onExecution}:{model:string;busy:boolean;elapsed:number;onExecution:()=>void}){return <header className="assistantHeader"><div><h1>Assistente</h1><p>Nexo · {model}</p></div><div className="assistantMeta"><i className="dot"/> IA local {busy&&<small>· trabalhando {elapsed}s</small>}{busy&&<button className="executionTrigger" onClick={onExecution}><Settings2 size={14}/>Execução</button>}<kbd>Ctrl + K</kbd></div></header>;}

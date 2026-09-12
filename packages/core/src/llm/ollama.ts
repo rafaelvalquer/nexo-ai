@@ -36,13 +36,13 @@ export class OllamaProvider implements LLMProvider {
     throw new OllamaUnavailableError(e instanceof Error ? e.message : String(e));
   }
 
-  async chat(messages: LLMMessage[]) {
+  async chat(messages: LLMMessage[], signal?: AbortSignal) {
     try {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model: this.model, stream: false, messages }),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUTS.chat)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_TIMEOUTS.chat)]) : AbortSignal.timeout(DEFAULT_TIMEOUTS.chat)
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
       const data = await res.json() as { message?: { content?: string } };
@@ -54,7 +54,7 @@ export class OllamaProvider implements LLMProvider {
     }
   }
 
-  async plan(messages: LLMMessage[]) {
+  async plan(messages: LLMMessage[], signal?: AbortSignal) {
     try {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
@@ -66,7 +66,7 @@ export class OllamaProvider implements LLMProvider {
           think: false,
           options: { temperature: 0.1 }
         }),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUTS.planner)
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_TIMEOUTS.planner)]) : AbortSignal.timeout(DEFAULT_TIMEOUTS.planner)
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
       const data = await res.json() as { message?: { content?: string } };
@@ -113,7 +113,7 @@ export class OllamaProvider implements LLMProvider {
     }
   }
 
-  async stream(messages: LLMMessage[], onToken: (token: string) => void) {
+  async stream(messages: LLMMessage[], onToken: (token: string) => void, signal?: AbortSignal) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error("Timeout")), DEFAULT_TIMEOUTS.chat);
     try {
@@ -121,7 +121,7 @@ export class OllamaProvider implements LLMProvider {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model: this.model, stream: true, messages }),
-        signal: controller.signal
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
       if (!res.body) throw new Error("Ollama não retornou um stream de resposta.");
@@ -157,6 +157,7 @@ export class OllamaProvider implements LLMProvider {
       if (buffer.trim()) consumeLine(buffer);
       return full;
     } catch (e: any) {
+      if (signal?.aborted) throw signal.reason ?? new DOMException("Cancelado", "AbortError");
       if (controller.signal.aborted) {
         throw new OllamaTimeoutError("chat", this.model, Math.round(DEFAULT_TIMEOUTS.chat / 1000));
       }

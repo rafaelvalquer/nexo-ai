@@ -74,9 +74,9 @@ describe("FastIntentRouter", () => {
     expect((result?.input as any)?.path).toBe(path.join(os.homedir(), "Downloads"));
   });
 
-  it("resolve configuração de e-mail localmente", () => {
+  it("encaminha configuração de e-mail para o fluxo com estado de conexão", () => {
     const result = router.route("como configuro o meu e-mail para voce ter acesso?");
-    expect(result?.direct).toContain("OAuth 2.0");
+    expect(result?.tool).toBe("email_search");
   });
 
   it("resolve configuração de pastas permitidas localmente", () => {

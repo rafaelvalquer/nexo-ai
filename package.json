@@ -1,6 +1,6 @@
 {
   "name": "nexo-ai",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
@@ -10,7 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "package:win": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && pnpm --filter @nexo/desktop package:win",
-    "setup": "node scripts/setup.mjs"
+    "setup": "node scripts/setup.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

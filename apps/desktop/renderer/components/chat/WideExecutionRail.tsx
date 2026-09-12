@@ -1,0 +1,2 @@
+import type { BackgroundTask } from "@nexo/shared";import { ExecutionSummary } from "./ExecutionSummary";
+export function WideExecutionRail({task,elapsed}:{task?:BackgroundTask;elapsed:number}){if(!task)return null;return <aside className="wideExecutionRail"><small>EXECUÇÃO DO AGENTE</small><ExecutionSummary history={task.statusHistory?.length?task.statusHistory:[task.statusMessage??"Em andamento…"]} elapsed={elapsed}/></aside>;}

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, shell } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NexoCore, startCoreServer } from "@nexo/core";
@@ -7,6 +8,8 @@ import { ElectronSecretStore } from "../oauth/secret-store.js";
 import { DesktopOAuthHost } from "../oauth/desktop-oauth-host.js";
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
+const envFile = path.resolve(process.cwd(), ".env");
+if (!app.isPackaged && fs.existsSync(envFile)) process.loadEnvFile(envFile);
 let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
 let quitting=false;

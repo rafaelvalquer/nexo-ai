@@ -83,6 +83,30 @@ export function Settings() {
           ))}
           <button onClick={() => void addFolder()}>Adicionar pasta</button>
         </div>
+        <label className="check">
+          <input type="checkbox" checked={settings.browserAutomationEnabled} onChange={event => void save({ browserAutomationEnabled: event.target.checked })} />
+          Permitir automação de navegador
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.fileWritesEnabled} onChange={event => void save({ fileWritesEnabled: event.target.checked })} />
+          Permitir alterações em arquivos
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.connectionsEnabled} onChange={event => void save({ connectionsEnabled: event.target.checked })} />
+          Permitir conexões externas
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={settings.requireApprovalForEmail} onChange={event => void save({ requireApprovalForEmail: event.target.checked })} />
+          Exigir aprovação para ações de e-mail
+        </label>
+        <label>
+          Domínios permitidos para e-mail (um por linha)
+          <textarea value={settings.allowedDomains.join("\n")} onChange={event => setSettings({ ...settings, allowedDomains: event.target.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean) })} onBlur={() => void save({ allowedDomains: settings.allowedDomains })} placeholder="empresa.com" />
+        </label>
+        <label>
+          Retenção local (dias)
+          <input type="number" min="1" max="3650" value={settings.dataRetentionDays} onChange={event => setSettings({ ...settings, dataRetentionDays: Number(event.target.value) || 30 })} onBlur={() => void save({ dataRetentionDays: settings.dataRetentionDays })} />
+        </label>
 
         <h3>Privacidade</h3>
         <label className="check">

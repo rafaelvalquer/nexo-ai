@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import type { NexoDatabase } from "../database/db.js";
 import type { AgentReply } from "../agent/engine.js";
+import { ProgressPersistenceScheduler } from "./progress-persistence.js";
 
 export type BackgroundTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
@@ -40,8 +41,13 @@ type LiveProgress = {
 
 export class BackgroundTaskService {
   private liveProgress = new Map<string, LiveProgress>();
+  private liveResults = new Map<string, unknown>();
+  private liveErrors = new Map<string, string>();
+  private progressPersistence: ProgressPersistenceScheduler;
 
-  constructor(private db: NexoDatabase) {}
+  constructor(private db: NexoDatabase, private readonly isPrivate = () => false) {
+    this.progressPersistence = new ProgressPersistenceScheduler(350, id => this.persistProgress(id));
+  }
 
   recoverInterruptedTasks() {
     const now = new Date().toISOString();
@@ -59,7 +65,7 @@ export class BackgroundTaskService {
     const createdAt = new Date().toISOString();
     this.db.run(
       "INSERT INTO tasks(id,type,status,input_json,result_json,error,created_at,started_at,finished_at,progress_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
-      [id, type, "queued", JSON.stringify(input), null, null, createdAt, null, null, JSON.stringify({ text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] })]
+      [id, type, "queued", JSON.stringify(this.isPrivate() ? { privateMode: true } : input), null, null, createdAt, null, null, JSON.stringify({ text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] })]
     );
     this.liveProgress.set(id, { text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] });
     return this.get(id)!;
@@ -71,6 +77,7 @@ export class BackgroundTaskService {
   }
 
   setStatus(id: string, statusMessage: string) {
+    if (!this.isActive(id)) return;
     const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "", statusHistory: [] };
     const history = [...current.statusHistory];
     if (statusMessage && history.at(-1) !== statusMessage) history.push(statusMessage);
@@ -83,41 +90,63 @@ export class BackgroundTaskService {
   }
 
   appendProgress(id: string, token: string) {
+    if (!this.isActive(id)) return;
     const current = this.liveProgress.get(id) ?? {
       text: "",
       statusMessage: "Gerando resposta…",
       statusHistory: ["Gerando resposta…"]
     };
     this.liveProgress.set(id, { ...current, text: current.text + token });
-    this.persistProgress(id);
+    this.progressPersistence.schedule(id);
   }
 
   replaceProgress(id: string, text: string) {
+    if (!this.isActive(id)) return;
     const current = this.liveProgress.get(id) ?? { text: "", statusMessage: "", statusHistory: [] };
     this.liveProgress.set(id, { ...current, text });
-    this.persistProgress(id);
+    this.progressPersistence.schedule(id);
   }
 
   complete(id: string, result: unknown) {
+    this.progressPersistence.cancel(id);
+    const privateMode = this.isPrivate();
+    if (privateMode) this.liveResults.set(id, result);
     this.db.run(
       "UPDATE tasks SET status='completed', result_json=?, finished_at=?, progress_json=? WHERE id=?",
-      [JSON.stringify(result), new Date().toISOString(), null, id]
+      [privateMode ? null : JSON.stringify(result), new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
   }
 
   fail(id: string, error: unknown) {
+    this.progressPersistence.cancel(id);
     const message = error instanceof Error ? error.message : String(error);
+    const privateMode = this.isPrivate();
+    if (privateMode) this.liveErrors.set(id, message);
     this.db.run(
       "UPDATE tasks SET status='failed', error=?, finished_at=?, progress_json=? WHERE id=?",
-      [message, new Date().toISOString(), null, id]
+      [privateMode ? "Tarefa privada falhou." : message, new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
   }
 
+  cancel(id: string) {
+    const task = this.get(id);
+    if (!task || !["queued", "running"].includes(task.status)) return false;
+    this.progressPersistence.cancel(id);
+    this.db.run(
+      "UPDATE tasks SET status='cancelled', error=?, finished_at=?, progress_json=? WHERE id=?",
+      ["Cancelada pelo usuário.", new Date().toISOString(), null, id]
+    );
+    this.liveProgress.delete(id);
+    return true;
+  }
+
   get(id: string): BackgroundTask | undefined {
     const row = this.db.get<TaskRow>("SELECT * FROM tasks WHERE id=?", [id]);
-    return row ? this.toTask(row) : undefined;
+    if (!row) return undefined;
+    const task = this.toTask(row);
+    return { ...task, result: this.liveResults.get(id) ?? task.result, error: this.liveErrors.get(id) ?? task.error };
   }
 
   list(limit = 50): BackgroundTask[] {
@@ -153,5 +182,9 @@ export class BackgroundTaskService {
   private persistProgress(id: string) {
     const progress = this.liveProgress.get(id);
     if (progress) this.db.run("UPDATE tasks SET progress_json=? WHERE id=?", [JSON.stringify(progress), id]);
+  }
+
+  private isActive(id: string) {
+    return Boolean(this.db.get("SELECT id FROM tasks WHERE id=? AND status IN ('queued','running')", [id]));
   }
 }

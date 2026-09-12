@@ -1,0 +1,2 @@
+import type { ChatMessage } from "@nexo/shared";import { motion } from "motion/react";import { MarkdownContent } from "./MarkdownContent";
+export function UserMessage({message}:{message:ChatMessage}){return <motion.article initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:.18}} className="chatMessage user"><div className="messageIdentity">Você</div><div className="messageContent"><MarkdownContent content={message.content}/></div></motion.article>;}

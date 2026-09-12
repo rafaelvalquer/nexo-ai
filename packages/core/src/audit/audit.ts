@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { RiskLevel } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
+import { redactAuditDetails } from "../privacy/redaction.js";
 
 export class AuditService {
-  constructor(private db: NexoDatabase) {}
+  constructor(private db: NexoDatabase, private readonly isPrivate = () => false) {}
 
   record(action: string, risk: RiskLevel, status: string, details: unknown = {}) {
     const entry = {
@@ -11,12 +12,12 @@ export class AuditService {
       action,
       risk,
       status,
-      details,
+      details: this.isPrivate() ? { redacted: true } : redactAuditDetails(details),
       createdAt: new Date().toISOString()
     };
     this.db.run(
       "INSERT INTO audit_logs(id, action, risk, status, details_json, created_at) VALUES(?,?,?,?,?,?)",
-      [entry.id, action, risk, status, JSON.stringify(details), entry.createdAt]
+      [entry.id, action, risk, status, JSON.stringify(entry.details), entry.createdAt]
     );
     return entry;
   }

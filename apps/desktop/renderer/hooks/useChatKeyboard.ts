@@ -1,0 +1,2 @@
+import { useEffect,type RefObject } from "react";
+export function useChatKeyboard(composer:RefObject<HTMLTextAreaElement>,stop:()=>void){useEffect(()=>{const handler=(event:KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="l"){event.preventDefault();composer.current?.focus();}if(event.key==="Escape"){stop();composer.current?.focus();}};window.addEventListener("keydown",handler);return()=>window.removeEventListener("keydown",handler);},[composer,stop]);}

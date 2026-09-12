@@ -1,6 +1,6 @@
 {
   "name": "@nexo/desktop",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Nexo AI local office agent",
   "author": "Nexo AI",
   "private": true,
@@ -18,11 +18,19 @@
   "dependencies": {
     "@nexo/core": "workspace:*",
     "@nexo/shared": "workspace:*",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@xyflow/react": "^12.11.6",
     "docx-preview": "^0.4.0",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.468.0",
+    "motion": "^13.2.0",
+    "pixi.js": "^8.20.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "three": "^0.186.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

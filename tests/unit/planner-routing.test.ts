@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { LLMMessage, LLMProvider } from "../../packages/core/src/llm/provider.js";
 import { AgentPlanner } from "../../packages/core/src/agent/planner.js";
 import { ToolRegistry } from "../../packages/core/src/tools/registry.js";
+import { ConversationContextBuilder } from "../../packages/core/src/agent/context/conversation-context.js";
+import { AgentEngine } from "../../packages/core/src/agent/engine.js";
+import { PermissionEngine } from "../../packages/core/src/permissions/policy.js";
+import { ApprovalService } from "../../packages/core/src/permissions/approvals.js";
+import { AuditService } from "../../packages/core/src/audit/audit.js";
+import { AgentRuntime } from "../../packages/core/src/agent/runtime/runtime.js";
+import { NexoDatabase } from "../../packages/core/src/database/db.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 class FakeLLM implements LLMProvider {
   planCalls = 0;
@@ -51,5 +61,35 @@ describe("AgentPlanner routing", () => {
     const plan = await planner.plan("execute uma ação avançada no meu ambiente");
     expect(plan.direct).toBe("fallback");
     expect(llm.planCalls).toBe(1);
+  });
+});
+
+describe("ConversationContextBuilder", () => {
+  it("keeps recent user and assistant messages within a bounded context", () => {
+    const context = new ConversationContextBuilder().build([{id:"1",role:"user",content:"mensagem anterior",createdAt:"2026-01-01"},{id:"2",role:"assistant",content:"resposta anterior",createdAt:"2026-01-01"}], 12, 100);
+    expect(context).toEqual([{role:"user",content:"mensagem anterior"},{role:"assistant",content:"resposta anterior"}]);
+  });
+});
+
+describe("ToolResultInterpreter", () => {
+  it("asks the model for a bounded final synthesis of tool results", async () => {
+    const planner = new AgentPlanner(new FakeLLM(), new ToolRegistry());
+    await expect(planner.interpretToolResults("verifique", [{ok:true,summary:"2 itens",data:{items:[1,2]}}])).resolves.toBe("ok");
+  });
+});
+
+describe("AgentEngine tool loop", () => {
+  it("returns to the model after a tool result and persists the run", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-agent-loop-"));
+    const db = new NexoDatabase(dir); await db.ready();
+    class LoopLLM extends FakeLLM {
+      override async plan() { this.planCalls++; return this.planCalls === 1 ? JSON.stringify({tool:"memory_usage",input:{}}) : JSON.stringify({direct:"Diagnóstico analisado."}); }
+    }
+    try {
+      const llm = new LoopLLM(); const registry = new ToolRegistry(); const planner = new AgentPlanner(llm, registry);
+      const engine = new AgentEngine(planner, registry, new PermissionEngine(() => ({ autonomy:"balanced", allowedRoots:[], memoryEnabled:false, memoryAskBeforeSave:false, privateMode:false } as any)), new ApprovalService(db), new AuditService(db), undefined, new AgentRuntime(db));
+      await expect(engine.run("execute uma ação avançada no meu ambiente")).resolves.toMatchObject({text:"Diagnóstico analisado."});
+      expect(llm.planCalls).toBe(2); expect(db.get<{status:string}>("SELECT status FROM agent_runs LIMIT 1")?.status).toBe("COMPLETED");
+    } finally { fs.rmSync(dir, { recursive:true, force:true }); }
   });
 });

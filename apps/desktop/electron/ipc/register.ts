@@ -37,7 +37,8 @@ function validateSettingsPatch(value: unknown) {
     "runInBackground",
     "memoryEnabled",
     "memoryAskBeforeSave",
-    "embeddingModel", "documentMaxSizeMb", "externalDataRetention", "connectionsEnabled", "ocrEnabled"
+    "embeddingModel", "documentMaxSizeMb", "externalDataRetention", "connectionsEnabled", "ocrEnabled",
+    "browserAutomationEnabled", "fileWritesEnabled", "requireApprovalForEmail", "allowedDomains", "dataRetentionDays", "onboardingCompleted"
   ]);
 
   for (const key of Object.keys(patch)) {
@@ -57,7 +58,9 @@ function validateSettingsPatch(value: unknown) {
   if (patch.embeddingModel !== undefined) requireString(patch.embeddingModel, "Modelo de embeddings");
   if (patch.documentMaxSizeMb !== undefined && (!Number.isInteger(patch.documentMaxSizeMb) || Number(patch.documentMaxSizeMb) < 1 || Number(patch.documentMaxSizeMb) > 500)) throw new Error("Limite de documento inválido.");
   if (patch.externalDataRetention !== undefined && !["session", "local"].includes(String(patch.externalDataRetention))) throw new Error("Retenção externa inválida.");
-  for (const key of ["connectionsEnabled", "ocrEnabled"]) if (patch[key] !== undefined) requireBoolean(patch[key], key);
+  for (const key of ["connectionsEnabled", "ocrEnabled", "browserAutomationEnabled", "fileWritesEnabled", "requireApprovalForEmail", "onboardingCompleted"]) if (patch[key] !== undefined) requireBoolean(patch[key], key);
+  if (patch.allowedDomains !== undefined && (!Array.isArray(patch.allowedDomains) || !patch.allowedDomains.every(value => typeof value === "string" && /^[a-z0-9.-]+$/i.test(value.trim())))) throw new Error("Domínios permitidos inválidos.");
+  if (patch.dataRetentionDays !== undefined && (!Number.isInteger(patch.dataRetentionDays) || Number(patch.dataRetentionDays) < 1 || Number(patch.dataRetentionDays) > 3650)) throw new Error("Período de retenção inválido.");
   return patch;
 }
 
@@ -66,11 +69,22 @@ function validateAutomation(value: unknown) {
   const data = value as Record<string, unknown>;
   requireString(data.name, "Nome da automação");
   requireString(data.command, "Comando da automação");
-  if (data.triggerType !== "cron" && data.triggerType !== "file-created") throw new Error("Tipo de gatilho inválido.");
+  if (!["cron","file-created","file-changed","app-start","manual"].includes(String(data.triggerType))) throw new Error("Tipo de gatilho inválido.");
   requireBoolean(data.enabled, "Status da automação");
   if (data.triggerType === "cron") requireString(data.schedule, "Agendamento");
-  if (data.triggerType === "file-created") requireString(data.watchPath, "Pasta monitorada");
+  if (data.triggerType === "file-created" || data.triggerType === "file-changed") requireString(data.watchPath, "Pasta monitorada");
   return data;
+}
+
+function validateOAuthConfiguration(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Configuração OAuth inválida.");
+  const configuration = value as Record<string, unknown>;
+  const googleClientId = requireString(configuration.googleClientId, "Client ID Google");
+  const microsoftClientId = requireString(configuration.microsoftClientId, "Client ID Microsoft");
+  const microsoftTenant = requireString(configuration.microsoftTenant, "Tenant Microsoft");
+  if (googleClientId.length > 300 || microsoftClientId.length > 300 || microsoftTenant.length > 200) throw new Error("Configuração OAuth inválida.");
+  if (!/^[a-zA-Z0-9._-]+$/.test(microsoftTenant)) throw new Error("Tenant Microsoft inválido.");
+  return { googleClientId, microsoftClientId, microsoftTenant };
 }
 
 export function registerIpc(
@@ -90,6 +104,8 @@ export function registerIpc(
     return core.startChatTask(requireString(text, "Mensagem"), attachmentIds ?? []);
   });
   ipcMain.handle("nexo:connections:list", () => core.connections.list());
+  ipcMain.handle("nexo:connections:configuration", () => core.getOAuthConfiguration());
+  ipcMain.handle("nexo:connections:save-configuration", (_, configuration) => core.updateOAuthConfiguration(validateOAuthConfiguration(configuration)));
   ipcMain.handle("nexo:connections:connect", (_, provider, capabilities) => {
     if (provider !== "google" && provider !== "microsoft") throw new Error("Provedor inválido.");
     if (!Array.isArray(capabilities) || !capabilities.every(x => ["email.read", "email.send", "email.modify", "calendar.read", "calendar.write"].includes(x))) throw new Error("Capacidades inválidas.");
@@ -101,6 +117,7 @@ export function registerIpc(
   ipcMain.handle("nexo:documents:choose", async () => { const file = await desktop.chooseDocument(); return file ? core.startDocumentImport(file) : null; });
   ipcMain.handle("nexo:documents:list-recent", () => core.documents.listRecent());
   ipcMain.handle("nexo:documents:get", (_, id) => core.documents.get(requireString(id, "ID do documento")));
+  ipcMain.handle("nexo:documents:list-versions", (_, id) => core.documents.listVersions(requireString(id, "ID do documento")));
   ipcMain.handle("nexo:documents:preview", async (_, id) => desktop.openPath(await core.previewDocument(requireString(id, "ID do documento"))));
   ipcMain.handle("nexo:documents:preview-data", (_, id) => core.documentPreviewData(requireString(id, "ID do documento")));
   ipcMain.handle("nexo:documents:export", async (_, id) => { const documentId=requireString(id,"ID do documento"); const document=core.documents.get(documentId); if(!document) throw new Error("Documento não encontrado."); const target=await desktop.saveDocument(document.name); return target ? core.exportDocument(documentId,target) : {ok:false}; });
@@ -109,6 +126,7 @@ export function registerIpc(
   ipcMain.handle("nexo:tasks:list", (_, limit) => core.listTasks(Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 200) : 50));
   ipcMain.handle("nexo:tasks:active", () => core.listActiveTasks());
   ipcMain.handle("nexo:task:get", (_, id) => core.getTask(requireString(id, "ID da tarefa")));
+  ipcMain.handle("nexo:task:cancel", (_, id) => core.cancelTask(requireString(id, "ID da tarefa")));
   ipcMain.handle("nexo:status", () => core.status());
   ipcMain.handle("nexo:settings:get", () => core.getSettings());
   ipcMain.handle("nexo:settings:update", (_, patch) => core.updateSettings(validateSettingsPatch(patch)));
@@ -122,8 +140,13 @@ export function registerIpc(
   ipcMain.handle("nexo:memory:clear", () => core.clearMemory());
   ipcMain.handle("nexo:automation:list", () => core.automation.list());
   ipcMain.handle("nexo:automation:create", (_, data) => core.automation.create(validateAutomation(data) as any));
+  ipcMain.handle("nexo:automation:create-natural", (_, data) => {
+    if (!data || typeof data !== "object") throw new Error("Automação inválida.");
+    return core.automation.createFromNatural({ name:requireString((data as any).name,"Nome"), when:requireString((data as any).when,"Horário"), command:requireString((data as any).command,"Comando"), enabled:(data as any).enabled === undefined ? true : requireBoolean((data as any).enabled,"Status") });
+  });
   ipcMain.handle("nexo:automation:toggle", (_, id, enabled) => core.automation.setEnabled(requireString(id, "ID da automação"), requireBoolean(enabled, "Status")));
   ipcMain.handle("nexo:automation:remove", (_, id) => core.automation.remove(requireString(id, "ID da automação")));
+  ipcMain.handle("nexo:automation:run", (_, id) => core.automation.runManual(requireString(id, "ID da automação")));
   ipcMain.handle("nexo:choose-folder", () => desktop.chooseFolder());
   ipcMain.handle("nexo:open-path", (_, p) => {
     const target = requireString(p, "Caminho");

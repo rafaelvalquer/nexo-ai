@@ -1,0 +1,2 @@
+import { AnimatePresence,motion } from "motion/react";import { ArrowDown } from "lucide-react";
+export function ScrollToBottom({visible,unread,onClick}:{visible:boolean;unread:boolean;onClick:()=>void}){return <AnimatePresence>{visible&&<motion.button className="scrollToBottom" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:8}} onClick={onClick}><ArrowDown size={14}/>{unread?"Nova resposta":"Ir para o final"}</motion.button>}</AnimatePresence>;}

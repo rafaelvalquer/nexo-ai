@@ -50,6 +50,60 @@ CREATE TABLE IF NOT EXISTS document_versions (id TEXT PRIMARY KEY, document_id T
 ALTER TABLE tasks ADD COLUMN progress_json TEXT;
 CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(source_hash);
 CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(document_id, ordinal);
+`], [2, `
+ALTER TABLE connections ADD COLUMN last_connected_at TEXT;
+ALTER TABLE connections ADD COLUMN last_validated_at TEXT;
+ALTER TABLE connections ADD COLUMN last_refresh_at TEXT;
+ALTER TABLE connections ADD COLUMN token_expires_at TEXT;
+ALTER TABLE connections ADD COLUMN provider_account_id TEXT;
+`], [3, `
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id TEXT PRIMARY KEY,
+  user_request TEXT NOT NULL,
+  status TEXT NOT NULL,
+  state_json TEXT NOT NULL,
+  final_response TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_steps (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  tool_name TEXT,
+  input_json TEXT,
+  status TEXT NOT NULL,
+  result_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  finished_at TEXT,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+CREATE TABLE IF NOT EXISTS agent_checkpoints (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  approval_id TEXT,
+  state_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  FOREIGN KEY(run_id) REFERENCES agent_runs(id)
+);
+ALTER TABLE approvals ADD COLUMN agent_run_id TEXT;
+ALTER TABLE approvals ADD COLUMN checkpoint_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status);
+CREATE INDEX IF NOT EXISTS idx_agent_steps_run ON agent_steps(run_id, ordinal);
+CREATE INDEX IF NOT EXISTS idx_agent_checkpoints_run ON agent_checkpoints(run_id, status);
+`], [4, `
+CREATE TABLE IF NOT EXISTS local_metrics (
+  id TEXT PRIMARY KEY,
+  metric TEXT NOT NULL,
+  value REAL NOT NULL,
+  tags_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_local_metrics_metric_created ON local_metrics(metric, created_at);
 `]];
 
 export class NexoDatabase {
@@ -81,9 +135,17 @@ export class NexoDatabase {
     this.db.run("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");
     for (const [version, sql] of MIGRATIONS) {
       if (this.db.exec(`SELECT version FROM schema_migrations WHERE version=${version}`)[0]?.values.length) continue;
-      // SQLite does not support ADD COLUMN IF NOT EXISTS; a database created by an older
-      // development build may already contain this column.
-      try { this.db.run(sql); } catch (error) { if (!String(error).includes("duplicate column name")) throw error; }
+      // sql.js aborts a multi-statement script at the first duplicate ALTER.
+      // Apply statements independently so an older development build with one
+      // pre-existing column still receives every later table/index/column.
+      for (const statement of sql.split(";").map(part => part.trim()).filter(Boolean)) {
+        try { this.db.run(statement); }
+        catch (error) {
+          // SQLite has no ADD COLUMN IF NOT EXISTS. Only this expected race is
+          // recoverable; all other errors leave the migration unapplied.
+          if (!String(error).includes("duplicate column name")) throw error;
+        }
+      }
       this.db.run("INSERT OR REPLACE INTO schema_migrations(version, applied_at) VALUES(?, ?)", [version, new Date().toISOString()]);
     }
     this.persist();

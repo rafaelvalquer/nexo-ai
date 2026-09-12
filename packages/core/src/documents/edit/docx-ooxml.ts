@@ -11,13 +11,62 @@ export function applyDocxEdit(input: Buffer, rawPlan: unknown) {
   const before = xml; let paragraphs: string[] = xml.match(paragraphPattern) ?? [];
   const get = (index: number) => { if (!paragraphs[index]) throw new Error(`Parágrafo ${index + 1} não encontrado.`); return paragraphs[index]; };
   for (const op of plan.operations) {
-    if (op.type === "replace_text") { let seen = 0; let changed = false; paragraphs = paragraphs.map(p => { const text = paragraphText(p); if (!text.includes(op.find) || (op.occurrence && ++seen !== op.occurrence)) return p; changed = true; return p.replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text.replace(op.find, op.replace))}</w:p>`); }); if (!changed) throw new Error(`Texto não encontrado: ${op.find}`); }
+    if (op.type === "replace_text") { let seen = 0; let changed = false; paragraphs = paragraphs.map(p => { const text = paragraphText(p); if (!text.includes(op.find) || (op.occurrence && ++seen !== op.occurrence)) return p; changed = true; return replaceTextPreservingRuns(p, op.find, op.replace); }); if (!changed) throw new Error(`Texto não encontrado: ${op.find}`); }
     if (op.type === "replace_paragraph") paragraphs[op.locator.paragraph] = get(op.locator.paragraph).replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(op.text)}</w:p>`);
     if (op.type === "delete_paragraph") paragraphs.splice(op.locator.paragraph, 1);
     if (op.type === "insert_after") paragraphs.splice(op.locator.paragraph + 1, 0, `<w:p>${textRun(op.text)}</w:p>`);
     if (op.type === "insert_before") paragraphs.splice(op.locator.paragraph, 0, `<w:p>${textRun(op.text)}</w:p>`);
-    if (op.type === "set_table_cell" || op.type === "fill_content_control") throw new Error(`A operação ${op.type} ainda não é suportada para este DOCX.`);
   }
-  let cursor = 0; xml = xml.replace(paragraphPattern, () => paragraphs[cursor++] ?? ""); zip.updateFile(name, Buffer.from(xml));
+  // `String.replace` only invokes the callback for paragraphs that existed in
+  // the original document.  When an edit inserts paragraphs, append the tail
+  // that no longer has an original slot immediately before the section
+  // properties (which must remain the last child of w:body).
+  let cursor = 0;
+  xml = xml.replace(paragraphPattern, () => paragraphs[cursor++] ?? "");
+  const remainingParagraphs = paragraphs.slice(cursor).join("");
+  if (remainingParagraphs) {
+    xml = /<w:sectPr(?:\s[^>]*)?>/.test(xml)
+      ? xml.replace(/<w:sectPr(?:\s[^>]*)?>/, match => `${remainingParagraphs}${match}`)
+      : xml.replace(/<\/w:body>/, `${remainingParagraphs}</w:body>`);
+  }
+  zip.updateFile(name, Buffer.from(xml));
+  for (const op of plan.operations) {
+    if (op.type === "set_table_cell") xml = setTableCell(xml, op.table, op.row, op.column, op.text);
+    if (op.type === "fill_content_control") xml = fillContentControl(xml, op.tag, op.text);
+  }
+  zip.updateFile(name, Buffer.from(xml));
   return { output: zip.toBuffer(), changed: before !== xml, plan: plan as DocxEditPlan };
 }
+
+function setTableCell(xml: string, tableIndex: number, rowIndex: number, columnIndex: number, text: string) {
+  const tables = xml.match(/<w:tbl(?:\s[^>]*)?>[\s\S]*?<\/w:tbl>/g) ?? []; const table = tables[tableIndex];
+  if (!table) throw new Error(`Tabela ${tableIndex + 1} não encontrada.`);
+  const rows = table.match(/<w:tr(?:\s[^>]*)?>[\s\S]*?<\/w:tr>/g) ?? []; const row = rows[rowIndex]; if (!row) throw new Error(`Linha ${rowIndex + 1} não encontrada na tabela.`);
+  const cells = row.match(/<w:tc(?:\s[^>]*)?>[\s\S]*?<\/w:tc>/g) ?? []; const cell = cells[columnIndex]; if (!cell) throw new Error(`Coluna ${columnIndex + 1} não encontrada na tabela.`);
+  const replacement = replaceContainerText(cell, text); const nextRow = row.replace(cell, replacement); const nextTable = table.replace(row, nextRow);
+  return xml.replace(table, nextTable);
+}
+
+function fillContentControl(xml: string, tag: string, text: string) {
+  const controls = xml.match(/<w:sdt(?:\s[^>]*)?>[\s\S]*?<\/w:sdt>/g) ?? [];
+  const control = controls.find(item => new RegExp(`<w:tag\\s+[^>]*w:val="${escapeRegExp(tag)}"`).test(item));
+  if (!control) throw new Error(`Controle de conteúdo não encontrado: ${tag}`);
+  return xml.replace(control, replaceContainerText(control, text));
+}
+
+function replaceContainerText(container: string, text: string) {
+  const paragraphs = container.match(paragraphPattern) ?? []; const original = paragraphs.at(0); if (!original) throw new Error("O alvo DOCX não contém um parágrafo editável.");
+  const first = original.replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text)}</w:p>`);
+  return container.replace(original, first);
+}
+function replaceTextPreservingRuns(paragraph: string, find: string, replacement: string) {
+  const textNode = /(<w:t(?:\s[^>]*)?>)([\s\S]*?)(<\/w:t>)/g; let replaced = false;
+  const preserved = paragraph.replace(textNode, (_all, open: string, text: string, close: string) => {
+    if (replaced || !text.includes(find)) return `${open}${text}${close}`;
+    replaced = true; return `${open}${text.replace(find, escapeXml(replacement))}${close}`;
+  });
+  if (replaced) return preserved;
+  const text = paragraphText(paragraph);
+  return paragraph.replace(/<w:r[\s\S]*?<\/w:r>/g, "").replace(/<\/w:p>$/, `${textRun(text.replace(find, replacement))}</w:p>`);
+}
+function escapeRegExp(value: string) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }

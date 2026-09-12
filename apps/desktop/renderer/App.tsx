@@ -12,6 +12,9 @@ import { Settings } from "./pages/Settings";
 import { Documents } from "./pages/Documents";
 import { Topbar } from "./components/shell/Topbar";
 import { CommandPalette } from "./components/shell/CommandPalette";
+import { useAssistantStore } from "./stores/assistant";
+import { Onboarding } from "./components/shell/Onboarding";
+import { Diagnostics } from "./pages/Diagnostics";
 
 const pages: Record<string, ComponentType> = {
   Hoje: Today,
@@ -23,12 +26,13 @@ const pages: Record<string, ComponentType> = {
   Atividade: Activity,
   "Memória": Memory,
   "Configurações": Settings
+  ,"Diagnóstico": Diagnostics
 };
 
 export function App() {
   const page = useAppStore(s => s.page);
-  const syncAssistant = useAppStore(s => s.syncAssistant);
-  const assistantBusy = useAppStore(s => s.assistantBusy);
+  const syncAssistant = useAssistantStore(s => s.sync);
+  const assistantBusy = useAssistantStore(s => s.isStreaming);
   const Page = pages[page] ?? Today;
 
   useEffect(() => {
@@ -38,5 +42,5 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [syncAssistant, assistantBusy]);
 
-  return <div className="app"><Sidebar /><main><Topbar /><Page /></main><CommandPalette /></div>;
+  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Page /></main><CommandPalette /><Onboarding /></div>;
 }

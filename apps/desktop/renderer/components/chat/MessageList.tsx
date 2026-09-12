@@ -1,0 +1,4 @@
+import type { BackgroundTask, ChatMessage as ChatMessageModel } from "@nexo/shared";
+import { ChatMessage } from "./ChatMessage";
+import { StreamingMessage } from "./StreamingMessage";
+export function MessageList({messages,activeTask,elapsed,error}:{messages:ChatMessageModel[];activeTask?:BackgroundTask;elapsed:number;error:string|null}){const persisted=activeTask?messages.some(message=>message.role==="assistant"&&message.taskId===activeTask.id):false;return <div className="messageList" aria-live="polite">{messages.map(message=><ChatMessage key={message.id} message={message}/>)}{activeTask&&!persisted&&<StreamingMessage task={activeTask} elapsed={elapsed}/>} {error&&<p className="chatError" role="alert">Falha ao sincronizar: {error}</p>}</div>;}

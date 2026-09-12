@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { PermissionEngine } from "../../packages/core/src/permissions/policy.js";
+import { SecurityPolicyService } from "../../packages/core/src/security/policy.js";
 
 const settings = (overrides: Partial<ReturnType<typeof baseSettings>> = {}) => ({ ...baseSettings(), ...overrides });
 const baseSettings = () => ({
@@ -36,5 +37,17 @@ describe("PermissionEngine", () => {
   it("desativa memória durante modo privado", () => {
     const p = new PermissionEngine(() => settings({ privateMode: true }));
     expect(p.isMemoryEnabled()).toBe(false);
+  });
+});
+
+describe("SecurityPolicyService", () => {
+  const policy = new SecurityPolicyService(() => ({ ...baseSettings(), connectionsEnabled:true, browserAutomationEnabled:false, fileWritesEnabled:false, requireApprovalForEmail:true, allowedDomains:["empresa.com"] } as any));
+  it("blocks disabled browser and file-writing tools", () => {
+    expect(() => policy.assertToolEnabled("browser_navigate")).toThrow(/navegador/);
+    expect(() => policy.assertToolEnabled("write_file")).toThrow(/arquivos/);
+  });
+  it("enforces approved recipient domains and e-mail approval", () => {
+    expect(() => policy.assertRecipientDomains([{email:"person@external.com"}])).toThrow(/domínio/);
+    expect(policy.requiresApproval("email_send", "SENSITIVE")).toBe(true);
   });
 });

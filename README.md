@@ -67,7 +67,12 @@ As ações em arquivos só funcionam dentro das pastas autorizadas em **Configur
 
 ## Conexões de escritório
 
-Para conectar Google ou Microsoft, preencha o Client ID público correspondente no arquivo `.env` a partir de `.env.example`. Registre o aplicativo como desktop/public client e mantenha o callback de loopback autorizado. O Nexo abre o navegador do sistema e armazena somente a credencial criptografada pelo Windows; tokens não são gravados no banco nem apresentados na interface.
+Na versão instalada, abra **Conexões** e informe os Client IDs públicos da organização. Eles identificam o aplicativo e não são segredos; nunca informe um Client Secret. A configuração fica somente neste computador e os tokens permanecem no cofre criptografado do Windows, sem serem gravados no banco ou enviados ao Renderer.
+
+- Google: crie um cliente OAuth de **aplicativo de desktop**, habilite Gmail API e Google Calendar API e configure a tela de consentimento. Em modo de teste, inclua os usuários autorizados.
+- Microsoft: registre um aplicativo multitenant com contas pessoais, habilite **Allow public client flows** e, em **Mobile and desktop applications**, registre `http://localhost` como redirect URI. O tenant padrão `common` aceita contas corporativas/escolares e pessoais.
+
+Durante o desenvolvimento, os mesmos valores também podem ser definidos em `.env` a partir de `.env.example`; a interface configurada tem precedência.
 
 ## Segurança
 

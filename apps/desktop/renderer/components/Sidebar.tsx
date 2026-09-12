@@ -1,5 +1,6 @@
-import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings, FileText } from "lucide-react";
+import { Home, MessageSquare, Zap, ShieldCheck, Plug, History, Brain, Settings, FileText, Gauge } from "lucide-react";
 import { useAppStore } from "../stores/app";
+import { useAssistantStore } from "../stores/assistant";
 
 const items = [
   ["Hoje", Home],
@@ -10,13 +11,14 @@ const items = [
   ["Documentos", FileText],
   ["Atividade", History],
   ["Memória", Brain],
-  ["Configurações", Settings]
+  ["Configurações", Settings],
+  ["Diagnóstico", Gauge]
 ] as const;
 
 export function Sidebar() {
   const page = useAppStore(s => s.page);
   const setPage = useAppStore(s => s.setPage);
-  const assistantBusy = useAppStore(s => s.assistantBusy);
+  const assistantBusy = useAssistantStore(s => s.isStreaming);
 
   return (
     <aside className="sidebar">
