@@ -1,4 +1,4 @@
-import type { NexoSettings, OAuthConfiguration } from "@nexo/shared";
+import type { NexoSettings, OAuthConfiguration, OfficeStationId } from "@nexo/shared";
 import { NexoDatabase } from "./database/db.js";
 import { AuditService } from "./audit/audit.js";
 import { ApprovalService } from "./permissions/approvals.js";
@@ -222,7 +222,7 @@ export class NexoCore {
     this.chatControllers.set(taskId, controller);
     this.tasks.markRunning(taskId);
 
-    const onToken = (token: string, stationId = "central-desk") => {
+    const onToken = (token: string, stationId: OfficeStationId = "central-desk") => {
       tokensReceived+=1;
       this.tasks.appendProgress(taskId, token);
       if(responseStreaming.start())this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId,severity:"info",taskId});
