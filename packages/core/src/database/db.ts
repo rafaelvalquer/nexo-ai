@@ -113,6 +113,9 @@ CREATE INDEX IF NOT EXISTS idx_visual_runs_updated ON visual_runs(updated_at);
 ALTER TABLE visual_runs ADD COLUMN event_type TEXT;
 ALTER TABLE visual_runs ADD COLUMN event_id TEXT;
 ALTER TABLE visual_runs ADD COLUMN approval_id TEXT;
+`], [7, `
+CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_attachments_document ON message_attachments(document_id);
 `]];
 
 export class NexoDatabase {
@@ -131,8 +134,7 @@ export class NexoDatabase {
     const SQL = await initSqlJs();
     const bytes = fs.existsSync(this.filePath) ? fs.readFileSync(this.filePath) : undefined;
     this.db = bytes ? new SQL.Database(bytes) : new SQL.Database();
-    
-    // Migração: se a tabela memories existir e não tiver a coluna 'key', renomear para legacy_memories
+
     const hasMemories = this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")[0]?.values.length > 0;
     if (hasMemories) {
       const columns = this.db.exec("PRAGMA table_info(memories)")[0]?.values.map(v => v[1]);
@@ -140,19 +142,14 @@ export class NexoDatabase {
         this.db.run("ALTER TABLE memories RENAME TO legacy_memories");
       }
     }
-    
+
     this.db.run(SCHEMA);
     this.db.run("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");
     for (const [version, sql] of MIGRATIONS) {
       if (this.db.exec(`SELECT version FROM schema_migrations WHERE version=${version}`)[0]?.values.length) continue;
-      // sql.js aborts a multi-statement script at the first duplicate ALTER.
-      // Apply statements independently so an older development build with one
-      // pre-existing column still receives every later table/index/column.
       for (const statement of sql.split(";").map(part => part.trim()).filter(Boolean)) {
         try { this.db.run(statement); }
         catch (error) {
-          // SQLite has no ADD COLUMN IF NOT EXISTS. Only this expected race is
-          // recoverable; all other errors leave the migration unapplied.
           if (!String(error).includes("duplicate column name")) throw error;
         }
       }
@@ -168,7 +165,6 @@ export class NexoDatabase {
     if (!this.transactionDepth) this.persist();
   }
 
-  /** Executes synchronous database work atomically and exports sql.js only once. */
   transaction<T>(work: () => T): T {
     const outermost = this.transactionDepth === 0;
     if (outermost) this.db.run("BEGIN");

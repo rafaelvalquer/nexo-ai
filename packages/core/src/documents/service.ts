@@ -10,7 +10,24 @@ import type { EmbeddingProvider } from "../rag/embeddings.js";
 
 const MIME: Record<string, string> = { ".txt": "text/plain", ".md": "text/markdown", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".pdf": "application/pdf" };
 const supported = new Set(Object.keys(MIME));
+const QUERY_STOP_WORDS = new Set(["a","o","as","os","de","da","do","das","dos","e","em","no","na","nos","nas","um","uma","uns","umas","por","para","com","sem","qual","quais","quando","quanto","onde","quem","como","que","sobre","existe","alguma","algum"]);
 type Row = { id:string; name:string; mime_type:string; size_bytes:number; status:DocumentRecord["status"]; metadata_json?:string; created_at:string; updated_at:string; managed_path:string; source_hash:string };
+type ChunkRow = { ordinal:number; locator?:string; text:string; embedding_json?:string };
+
+export type RetrievedChunk = {
+  documentId: string;
+  documentName: string;
+  ordinal: number;
+  locator?: string;
+  text: string;
+  score: number;
+};
+
+export type RetrievalOptions = {
+  limit?: number;
+  maxChunkChars?: number;
+};
+
 export class DocumentService {
   constructor(private db: NexoDatabase, private dataDir: string, private maxSizeMb = 50, private embeddings?: EmbeddingProvider) {}
   listRecent() { return this.db.all<Row>("SELECT * FROM documents ORDER BY updated_at DESC LIMIT 30").map(r => this.public(r)); }
@@ -37,14 +54,56 @@ export class DocumentService {
     const hash = createHash("sha256").update(fs.readFileSync(source)).digest("hex"); const known = this.db.get<Row>("SELECT * FROM documents WHERE source_hash=? AND status='ready'", [hash]); if (known) return this.public(known);
     const id = randomUUID(), now = new Date().toISOString(), dir = path.join(this.dataDir, "documents", id); fs.mkdirSync(dir, { recursive:true }); const managed = path.join(dir, `source${ext}`); fs.copyFileSync(source, managed);
     this.db.run("INSERT INTO documents(id,name,mime_type,size_bytes,managed_path,source_hash,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)", [id, path.basename(source), MIME[ext], stat.size, managed, hash, "extracting", now, now]);
-    try { const chunks = await this.extract(managed, ext); this.db.run("UPDATE documents SET status='indexing',updated_at=? WHERE id=?", [new Date().toISOString(), id]); await this.indexChunks(id, chunks); this.db.run("UPDATE documents SET status='ready',metadata_json=?,updated_at=? WHERE id=?", [JSON.stringify({ chunkCount:chunks.length }), new Date().toISOString(), id]); } catch (error) { this.db.run("UPDATE documents SET status='failed',metadata_json=?,updated_at=? WHERE id=?", [JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), new Date().toISOString(), id]); }
+    try {
+      const chunks = await this.extract(managed, ext);
+      if (ext === ".pdf" && chunks.reduce((sum, chunk) => sum + chunk.text.trim().length, 0) < 24) {
+        throw new Error("Não consegui extrair texto suficiente deste PDF. Ele pode ser composto por imagens.");
+      }
+      this.db.run("UPDATE documents SET status='indexing',updated_at=? WHERE id=?", [new Date().toISOString(), id]);
+      await this.indexChunks(id, chunks);
+      this.db.run("UPDATE documents SET status='ready',metadata_json=?,updated_at=? WHERE id=?", [JSON.stringify({ chunkCount:chunks.length }), new Date().toISOString(), id]);
+    } catch (error) {
+      this.db.run("UPDATE documents SET status='failed',metadata_json=?,updated_at=? WHERE id=?", [JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), new Date().toISOString(), id]);
+    }
     return this.get(id)!;
   }
-  search(id: string, query: string) { const terms = query.toLowerCase().split(/\s+/).filter(Boolean); return this.db.all<{locator?:string;text:string}>("SELECT locator,text FROM document_chunks WHERE document_id=?", [id]).map(x => ({...x, score:terms.reduce((n,t)=>n+(x.text.toLowerCase().includes(t)?1:0),0)})).filter(x=>x.score).sort((a,b)=>b.score-a.score).slice(0,8); }
+  search(id: string, query: string) { const terms = queryTerms(query); return this.db.all<{ordinal:number;locator?:string;text:string}>("SELECT ordinal,locator,text FROM document_chunks WHERE document_id=?", [id]).map(x => ({...x, score:terms.reduce((n,t)=>n+(normalizeSearchText(x.text).includes(t)?1:0),0)})).filter(x=>x.score).sort((a,b)=>b.score-a.score).slice(0,8); }
+
+  getChunks(documentId: string): RetrievedChunk[] {
+    const document = this.get(documentId);
+    if (!document) throw new Error("Documento não encontrado.");
+    return this.db.all<ChunkRow>("SELECT ordinal,locator,text,embedding_json FROM document_chunks WHERE document_id=? ORDER BY ordinal", [documentId]).map(row => ({
+      documentId,
+      documentName: document.name,
+      ordinal: Number(row.ordinal),
+      locator: row.locator,
+      text: row.text,
+      score: 1
+    }));
+  }
+
+  getChunksForDocuments(documentIds: string[]) {
+    return [...new Set(documentIds)].flatMap(id => this.getChunks(id));
+  }
+
+  async retrieve(documentIds: string[], query: string, options: RetrievalOptions = {}): Promise<RetrievedChunk[]> {
+    const limit = Math.max(1, options.limit ?? 8);
+    const maxChunkChars = Math.max(100, options.maxChunkChars ?? 1_500);
+    const results = (await Promise.all([...new Set(documentIds)].map(id => this.retrieveOne(id, query)))).flat();
+    return results
+      .sort((a,b) => b.score - a.score)
+      .slice(0, limit)
+      .map(result => ({ ...result, text: result.text.length > maxChunkChars ? `${result.text.slice(0, maxChunkChars - 1).trimEnd()}…` : result.text }));
+  }
+
+  retrieveMany(documentIds: string[], query: string, options: RetrievalOptions = {}) {
+    return this.retrieve(documentIds, query, options);
+  }
+
   async answer(ids: string[], query: string) {
-    const matches = (await Promise.all(ids.map(async id => (await this.retrieve(id, query)).map(result => ({ document: this.get(id)?.name ?? id, ...result }))))).flat().sort((a,b) => b.score - a.score).slice(0, 5);
+    const matches = await this.retrieve(ids, query, { limit: 5 });
     if (!matches.length) return { text: "Não encontrei trechos correspondentes nos documentos anexados.", sources: [] };
-    return { text: matches.map(match => `[${match.document} — ${match.locator ?? "trecho"}]\n${match.text.trim()}`).join("\n\n"), sources: matches.map(({document, locator}) => ({ document, locator })) };
+    return { text: matches.map(match => `[${match.documentName} — ${match.locator ?? "trecho"}]\n${match.text.trim()}`).join("\n\n"), sources: matches.map(match => ({document:match.documentName, locator:match.locator})) };
   }
   compare(ids: string[]) {
     if (ids.length !== 2) throw new Error("Selecione exatamente dois documentos para comparar.");
@@ -78,16 +137,21 @@ export class DocumentService {
       this.db.run("INSERT INTO document_chunks(id,document_id,ordinal,locator,text,embedding_json) VALUES(?,?,?,?,?,?)", [randomUUID(), documentId, ordinal, chunk.locator, chunk.text, embedding?.length ? JSON.stringify(embedding) : null]);
     }
   }
-  private async retrieve(id: string, query: string) {
-    const lexical = this.search(id, query); if (!this.embeddings) return lexical;
+  private async retrieveOne(id: string, query: string): Promise<RetrievedChunk[]> {
+    const document = this.get(id);
+    if (!document) throw new Error("Documento não encontrado.");
+    const lexical = this.search(id, query).map(row => ({ documentId:id, documentName:document.name, ordinal:Number(row.ordinal), locator:row.locator, text:row.text, score:row.score }));
+    if (!this.embeddings) return lexical;
     let queryEmbedding: number[] = []; try { queryEmbedding = await this.embeddings.embed(query); } catch { return lexical; }
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const rows = this.db.all<{locator?:string;text:string;embedding_json?:string}>("SELECT locator,text,embedding_json FROM document_chunks WHERE document_id=?", [id]);
+    const terms = queryTerms(query);
+    const rows = this.db.all<ChunkRow>("SELECT ordinal,locator,text,embedding_json FROM document_chunks WHERE document_id=?", [id]);
     return rows.map(row => {
-      const keyword = terms.reduce((score, term) => score + (row.text.toLowerCase().includes(term) ? 1 : 0), 0) / Math.max(1, terms.length);
-      const vector = row.embedding_json ? JSON.parse(row.embedding_json) as number[] : [];
+      const searchable = normalizeSearchText(row.text);
+      const keyword = terms.reduce((score, term) => score + (searchable.includes(term) ? 1 : 0), 0) / Math.max(1, terms.length);
+      let vector: number[] = [];
+      try { vector = row.embedding_json ? JSON.parse(row.embedding_json) as number[] : []; } catch { vector = []; }
       const semantic = cosine(queryEmbedding, vector);
-      return { locator: row.locator, text: row.text, score: semantic * 0.72 + keyword * 0.28 };
+      return { documentId:id, documentName:document.name, ordinal:Number(row.ordinal), locator:row.locator, text:row.text, score: semantic * 0.72 + keyword * 0.28 };
     }).filter(row => row.score > 0).sort((a,b) => b.score - a.score).slice(0, 8);
   }
   private async extractPdf(file: string) {
@@ -97,5 +161,7 @@ export class DocumentService {
   private chunk(text: string, locator: string) { const pieces:string[]=[]; for(let i=0;i<text.length;i+=1500) pieces.push(text.slice(Math.max(0,i-(i?200:0)),i+1500)); return pieces.filter(Boolean).map((piece,i)=>({text:piece,locator: locator.startsWith("Parágrafo") ? `${locator} ${i+1}` : (pieces.length === 1 ? locator : `${locator}, trecho ${i+1}`)})); }
   private public(r: Row): DocumentRecord { return { id:r.id,name:r.name,mimeType:r.mime_type,sizeBytes:r.size_bytes,status:r.status,metadata:r.metadata_json?JSON.parse(r.metadata_json):undefined,createdAt:r.created_at,updatedAt:r.updated_at }; }
 }
+function normalizeSearchText(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function queryTerms(query: string) { return normalizeSearchText(query).replace(/[^a-z0-9\s]/g, " ").split(/\s+/).map(term=>term.trim()).filter(term=>term.length > 1 && !QUERY_STOP_WORDS.has(term)); }
 function cosine(left: number[], right: number[]) { if (!left.length || left.length !== right.length) return 0; let dot=0, a=0, b=0; for (let i=0;i<left.length;i++) { dot+=left[i]*right[i]; a+=left[i]*left[i]; b+=right[i]*right[i]; } return a && b ? dot / Math.sqrt(a*b) : 0; }
 function extractDocxXmlText(file: string) { const xml = new AdmZip(fs.readFileSync(file)).readAsText("word/document.xml"); return [...xml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(match => match[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")) .join("\n"); }
