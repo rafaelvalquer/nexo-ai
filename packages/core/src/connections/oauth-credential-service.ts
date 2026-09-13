@@ -6,7 +6,8 @@ export class OAuthCredentialService {
   constructor(private readonly secrets: SecretStore) {}
 
   async getGoogleClientSecret() {
-    return this.secrets.get(GOOGLE_CLIENT_SECRET_KEY);
+    const stored = (await this.secrets.get(GOOGLE_CLIENT_SECRET_KEY))?.trim();
+    return stored || process.env.NEXO_GOOGLE_CLIENT_SECRET?.trim() || null;
   }
 
   async hasGoogleClientSecret() {
