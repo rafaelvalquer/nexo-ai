@@ -3,7 +3,7 @@ import type { NexoDatabase } from "../database/db.js";
 import type { AgentReply } from "../agent/engine.js";
 import { ProgressPersistenceScheduler } from "./progress-persistence.js";
 
-export type BackgroundTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type BackgroundTaskStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
 
 export type BackgroundTask = {
   id: string;
@@ -129,10 +129,17 @@ export class BackgroundTaskService {
     );
     this.liveProgress.delete(id);
   }
+  markWaitingApproval(id: string, approvalId: string) {
+    const current=this.liveProgress.get(id) ?? {text:"",statusMessage:"",statusHistory:[]};
+    const statusMessage="Aguardando sua aprovação…";
+    this.liveProgress.set(id,{...current,statusMessage,statusHistory:[...current.statusHistory,statusMessage].slice(-8)});
+    this.db.run("UPDATE tasks SET status='waiting_approval', progress_json=? WHERE id=?",[JSON.stringify(this.liveProgress.get(id)),id]);
+    return approvalId;
+  }
 
   cancel(id: string) {
     const task = this.get(id);
-    if (!task || !["queued", "running"].includes(task.status)) return false;
+    if (!task || !["queued", "running", "waiting_approval"].includes(task.status)) return false;
     this.progressPersistence.cancel(id);
     this.db.run(
       "UPDATE tasks SET status='cancelled', error=?, finished_at=?, progress_json=? WHERE id=?",
@@ -157,7 +164,7 @@ export class BackgroundTaskService {
 
   listActive(): BackgroundTask[] {
     return this.db
-      .all<TaskRow>("SELECT * FROM tasks WHERE status IN ('queued','running') ORDER BY created_at ASC")
+      .all<TaskRow>("SELECT * FROM tasks WHERE status IN ('queued','running','waiting_approval') ORDER BY created_at ASC")
       .map(row => this.toTask(row));
   }
 
@@ -185,6 +192,6 @@ export class BackgroundTaskService {
   }
 
   private isActive(id: string) {
-    return Boolean(this.db.get("SELECT id FROM tasks WHERE id=? AND status IN ('queued','running')", [id]));
+    return Boolean(this.db.get("SELECT id FROM tasks WHERE id=? AND status IN ('queued','running','waiting_approval')", [id]));
   }
 }

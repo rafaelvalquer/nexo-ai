@@ -12,6 +12,7 @@ export type ToolResult = {
   error?: string;
 };
 
+export type VisualExecutionContext = { visualRunId:string; taskId?:string; agentRunId?:string };
 export type Approval = {
   id: string;
   createdAt: string;
@@ -22,6 +23,8 @@ export type Approval = {
   status: "pending" | "approved" | "rejected";
   agentRunId?: string;
   checkpointId?: string;
+  visualRunId?: string;
+  taskId?: string;
 };
 
 export type ChatMessage = {
@@ -32,12 +35,12 @@ export type ChatMessage = {
   taskId?: string;
 };
 
-export type BackgroundTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type BackgroundTaskStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
 
-export type AgentVisualEventType = "run.created"|"run.classifying"|"run.planning"|"tool.started"|"tool.progress"|"tool.completed"|"approval.requested"|"approval.resolved"|"response.streaming"|"run.completed"|"run.failed"|"run.cancelled";
+export type AgentVisualEventType = "agent.online"|"agent.offline"|"run.created"|"run.classifying"|"run.planning"|"tool.started"|"tool.progress"|"tool.completed"|"approval.requested"|"approval.resolved"|"response.streaming"|"run.completed"|"run.failed"|"run.cancelled";
 export type AgentOperationalState = "idle"|"interpreting"|"planning"|"walking"|"executing-tool"|"awaiting-approval"|"responding"|"success"|"error"|"offline"|"cancelled";
 export type OfficeStationId = "central-desk"|"document-station"|"mail-station"|"calendar-station"|"browser-station"|"system-station"|"approval-gate"|"rest-area";
-export type AgentVisualEvent = { eventId:string;runId:string;agentId:string;timestamp:string;type:AgentVisualEventType;state:AgentOperationalState;label:string;toolName?:string;stationId?:OfficeStationId;progress?:number;severity?:"info"|"success"|"warning"|"error";approvalId?:string;metadata?:Record<string,unknown> };
+export type AgentVisualEvent = { eventId:string;runId:string;agentId:string;timestamp:string;type:AgentVisualEventType;state:AgentOperationalState;label:string;toolName?:string;stationId?:OfficeStationId;progress?:number;severity?:"info"|"success"|"warning"|"error";approvalId?:string;taskId?:string;agentRunId?:string;metadata?:Record<string,unknown> };
 export type AgentVisualSnapshot = { current?:AgentVisualEvent; recent:AgentVisualEvent[] };
 
 export type BackgroundTask = {

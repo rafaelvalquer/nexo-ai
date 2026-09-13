@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS local_metrics (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_local_metrics_metric_created ON local_metrics(metric, created_at);
+`], [5, `
+ALTER TABLE approvals ADD COLUMN visual_run_id TEXT;
+ALTER TABLE approvals ADD COLUMN task_id TEXT;
+CREATE TABLE IF NOT EXISTS visual_runs (run_id TEXT PRIMARY KEY, task_id TEXT, agent_run_id TEXT, state TEXT NOT NULL, station_id TEXT, label TEXT NOT NULL, severity TEXT, updated_at TEXT NOT NULL, completed_at TEXT);
+CREATE INDEX IF NOT EXISTS idx_visual_runs_updated ON visual_runs(updated_at);
 `]];
 
 export class NexoDatabase {

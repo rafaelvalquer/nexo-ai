@@ -203,13 +203,14 @@ export class NexoCore {
       const reply = attachmentIds.length
         ? { text: attachmentIds.length === 2 && /\b(compare|comparar|diferen[cç]|difere)\b/i.test(text) ? formatDocumentComparison(this.documents.compare(attachmentIds)) : (await this.documents.answer(attachmentIds, text)).text }
         : await this.agent.run(text, {
+        visualContext:{visualRunId:taskId,taskId},
         onStatus: message => { this.tasks.setStatus(taskId, message); const planning=/plano|classific/i.test(message); this.visualEvents.emit({runId:taskId,type:planning?"run.planning":"tool.progress",state:planning?"planning":"executing-tool",label:message,stationId:"central-desk",severity:"info"}); },
         onToken: token => { this.tasks.appendProgress(taskId, token); this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId:"central-desk",severity:"info",metadata:{tokenLength:token.length}}); },
         onReplaceText: output => this.tasks.replaceProgress(taskId, output),
         signal: controller.signal,
         onToolStarted:(toolName,label)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},
         onToolCompleted:(toolName,ok)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error"});},
-        onApprovalRequested:(approvalId,toolName)=>this.visualEvents.emit({runId:taskId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"})
+        onApprovalRequested:(approvalId,toolName)=>this.visualEvents.emit({runId:taskId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning",taskId})
       }, context);
 
       if (controller.signal.aborted) return;
@@ -218,6 +219,7 @@ export class NexoCore {
         const suffix = reply.approvalId ? " Abra Aprovações para autorizar." : "";
         this.chatHistory.add("assistant", reply.text + suffix, taskId);
       }
+      if (reply.approvalId) { this.approvals.linkVisualContext(reply.approvalId,{visualRunId:taskId,taskId}); this.tasks.markWaitingApproval(taskId,reply.approvalId); return; }
       this.tasks.complete(taskId, reply);
       this.visualEvents.emit({runId:taskId,type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success"});
     } catch (error) {
@@ -314,13 +316,21 @@ export class NexoCore {
     await this.ready();
     const row = this.approvals.resolve(id, approved);
     if (!row) return { text: "Aprovação não encontrada." };
+    const taskId=row.task_id as string|undefined;
+    const runId=row.visual_run_id??taskId??row.agent_run_id??id;
     if (!approved) {
       if (row.checkpoint_id) this.agentRuntime.cancelCheckpoint(row.checkpoint_id);
-      this.visualEvents.emit({runId:row.agent_run_id??id,type:"approval.resolved",state:"cancelled",label:"Aprovação rejeitada",stationId:"approval-gate",approvalId:id,severity:"warning"});
+      if(taskId)this.tasks.cancel(taskId);
+      this.visualEvents.emit({runId,type:"approval.resolved",state:"cancelled",label:"Aprovação rejeitada",stationId:"approval-gate",approvalId:id,severity:"warning",taskId});
       return { text: "Ação cancelada." };
     }
-    this.visualEvents.emit({runId:row.agent_run_id??id,type:"approval.resolved",state:"walking",label:"Aprovação concedida",stationId:visualMetadataForTool(row.tool_name).stationId,approvalId:id,severity:"success"});
-    if (row.checkpoint_id) return this.agent.resumeApproval(row.checkpoint_id);
+    this.visualEvents.emit({runId,type:"approval.resolved",state:"walking",label:"Aprovação concedida",stationId:visualMetadataForTool(row.tool_name).stationId,approvalId:id,severity:"success",taskId});
+    if (row.checkpoint_id) {
+      const hooks=taskId?{visualContext:{visualRunId:runId,taskId},onStatus:(message:string)=>this.tasks.setStatus(taskId,message),onReplaceText:(text:string)=>this.tasks.replaceProgress(taskId,text),onToolStarted:(toolName:string,label:string)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info",taskId});},onToolCompleted:(toolName:string,ok:boolean)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId,type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error",taskId});},onApprovalRequested:(approvalId:string,toolName:string)=>this.visualEvents.emit({runId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning",taskId})}:{};
+      const reply=await this.agent.resumeApproval(row.checkpoint_id,hooks);
+      if(taskId){if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:runId,taskId});this.tasks.markWaitingApproval(taskId,reply.approvalId);}else{this.tasks.complete(taskId,reply);this.visualEvents.emit({runId,type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success",taskId});}}
+      return reply;
+    }
     return this.agent.execute(row.tool_name, JSON.parse(row.input_json));
   }
 

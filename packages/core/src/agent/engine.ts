@@ -27,6 +27,7 @@ export type AgentRunHooks = {
   onToolStarted?: (toolName:string, label:string) => void;
   onToolCompleted?: (toolName:string, ok:boolean) => void;
   onApprovalRequested?: (approvalId:string, toolName:string) => void;
+  visualContext?: { visualRunId:string; taskId?:string };
 };
 
 export class AgentEngine {
@@ -170,7 +171,7 @@ export class AgentEngine {
         const checkpointId = persistedRun && this.runtime
           ? this.runtime.checkpoint(persistedRun.id, { userRequest: userText, steps, nextStep: stepIndex, results: done.map(item => item.result), iteration: stepIndex })
           : undefined;
-        const approval = this.approvals.create(tool.name, parsed.data, tool.risk, approvalReason, checkpointId && persistedRun ? { agentRunId: persistedRun.id, checkpointId } : undefined);
+        const approval = this.approvals.create(tool.name, parsed.data, tool.risk, approvalReason, checkpointId && persistedRun ? { agentRunId: persistedRun.id, checkpointId, ...hooks.visualContext } : undefined);
         if (checkpointId) this.runtime?.attachApproval(checkpointId, approval.id);
         this.audit.record(tool.name, tool.risk, "awaiting_approval", parsed.data);
         const text = `Preciso da sua aprovação para executar: ${tool.description}.`;
@@ -225,7 +226,7 @@ export class AgentEngine {
   }
 
   /** Runs the exact operation captured at approval time; it never re-plans or silently repeats earlier tools. */
-  async resumeApproval(checkpointId: string): Promise<AgentReply> {
+  async resumeApproval(checkpointId: string, hooks: AgentRunHooks = {}): Promise<AgentReply> {
     if (!this.runtime) throw new Error("Runtime de agente indisponível.");
     const resumed = this.runtime.resume(checkpointId);
     if (!resumed) throw new Error("Checkpoint de aprovação não está disponível.");
@@ -241,7 +242,10 @@ export class AgentEngine {
       for (const field of tool.pathFields ?? []) { const value=(parsed.data as Record<string,unknown>)[field]; if(typeof value==="string")this.permissions.assertPath(value); if(Array.isArray(value))value.forEach(item=>{if(typeof item==="string")this.permissions.assertPath(item);}); }
     } catch (error) { const text=error instanceof Error?error.message:String(error); this.runtime.finish(resumed.run.id,"FAILED",text); return {text}; }
     step.input=parsed.data as Record<string,unknown>;
+    hooks.onStatus?.(step.explanation ?? `Retomando ${step.tool}…`);
+    hooks.onToolStarted?.(step.tool,step.explanation ?? `Retomando ${step.tool}`);
     const reply = await this.execute(step.tool, parsed.data);
+    hooks.onToolCompleted?.(step.tool,Boolean(reply.result?.ok));
     this.runtime.recordStep(resumed.run.id, resumed.state.nextStep, step, reply.result?.ok ? "COMPLETED" : "FAILED", reply.result, reply.result?.error);
     if (!reply.result?.ok) { this.runtime.finish(resumed.run.id, "FAILED", reply.text); return reply; }
     const results = [...resumed.state.results, reply.result];
@@ -275,12 +279,17 @@ export class AgentEngine {
       } catch (error) { const text = error instanceof Error ? error.message : String(error); this.runtime.finish(resumed.run.id, "FAILED", text); return { text, results: nextState.results }; }
       if (this.permissions.requiresApproval(tool.risk) || this.security?.requiresApproval(tool.name, tool.risk)) {
         const checkpointId = this.runtime.checkpoint(resumed.run.id, nextState);
-        const approval = this.approvals.create(tool.name, parsed.data, tool.risk, pending.explanation ?? "Ação requer aprovação", { agentRunId: resumed.run.id, checkpointId });
+        const approval = this.approvals.create(tool.name, parsed.data, tool.risk, pending.explanation ?? "Ação requer aprovação", { agentRunId: resumed.run.id, checkpointId, ...hooks.visualContext });
         this.runtime.attachApproval(checkpointId, approval.id);
+        hooks.onStatus?.("Aguardando sua aprovação.");
+        hooks.onApprovalRequested?.(approval.id,tool.name);
         return { text: `Preciso da sua aprovação para executar: ${tool.description}.`, approvalId: approval.id, results: nextState.results };
       }
       this.runtime.recordStep(resumed.run.id, nextState.nextStep, pending, "RUNNING");
+      hooks.onStatus?.(pending.explanation ?? `Executando ${pending.tool}…`);
+      hooks.onToolStarted?.(pending.tool,pending.explanation ?? `Executando ${pending.tool}`);
       const continued = await this.execute(tool.name, parsed.data);
+      hooks.onToolCompleted?.(pending.tool,Boolean(continued.result?.ok));
       this.runtime.recordStep(resumed.run.id, nextState.nextStep, pending, continued.result?.ok ? "COMPLETED" : "FAILED", continued.result, continued.result?.error);
       if (!continued.result?.ok) { this.runtime.finish(resumed.run.id, "FAILED", continued.text); return { ...continued, results: nextState.results }; }
       nextState = { ...nextState, nextStep: nextState.nextStep + 1, results: [...nextState.results, continued.result], iteration: nextState.iteration + 1 };
