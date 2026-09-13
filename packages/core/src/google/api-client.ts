@@ -2,6 +2,7 @@ import type { ConnectionCapability } from "@nexo/shared";
 import type { ConnectionService } from "../connections/service.js";
 
 const GOOGLE_API_TIMEOUT_MS = 30_000;
+export type GoogleApiErrorKind = "unauthorized"|"insufficient_permission"|"api_disabled"|"rate_limited"|"transient"|"provider_error";
 
 export class GoogleApiError extends Error {
   constructor(
@@ -9,7 +10,8 @@ export class GoogleApiError extends Error {
     readonly httpStatus:number,
     readonly providerCode?:string,
     readonly reason?:string,
-    readonly retryable=false
+    readonly retryable=false,
+    readonly kind:GoogleApiErrorKind="provider_error"
   ) { super(message); this.name="GoogleApiError"; }
 
   static async fromResponse(response:Response) {
@@ -20,12 +22,12 @@ export class GoogleApiError extends Error {
     const errors=Array.isArray(error.errors)?error.errors as Array<Record<string,unknown>>:[];
     const reason=errors.find(item=>typeof item.reason === "string")?.reason as string|undefined;
     const lower=`${message} ${providerCode??""} ${reason??""}`.toLowerCase();
-    if(response.status===401) return new GoogleApiError("A sessão do Google expirou ou foi revogada. O Nexo tentou renovar a credencial automaticamente.",401,providerCode,reason,false);
-    if(response.status===403 && /(insufficient|scope|permission)/.test(lower)) return new GoogleApiError("A conta Google está conectada, mas não concedeu a permissão necessária para esta operação. Gerencie as permissões e autorize novamente.",403,providerCode,reason,false);
-    if(response.status===403 && /(accessnotconfigured|api.*disabled|has not been used|serviceusage)/.test(lower)) return new GoogleApiError("A Gmail API não está habilitada para o projeto OAuth configurado. Habilite a Gmail API no Google Cloud e teste novamente.",403,providerCode,reason,false);
-    if(response.status===429) return new GoogleApiError("O Google limitou temporariamente as consultas. Tente novamente em alguns instantes.",429,providerCode,reason,true);
-    if(response.status>=500) return new GoogleApiError("O Gmail está temporariamente indisponível. A conexão foi mantida e pode ser usada novamente quando o serviço normalizar.",response.status,providerCode,reason,true);
-    return new GoogleApiError(`O Google recusou a operação: ${message}`,response.status,providerCode,reason,response.status>=500);
+    if(response.status===401) return new GoogleApiError("A sessão do Google expirou ou foi revogada. O Nexo tentou renovar a credencial automaticamente.",401,providerCode,reason,false,"unauthorized");
+    if(response.status===403 && /(accessnotconfigured|api.*disabled|has not been used|serviceusage)/.test(lower)) return new GoogleApiError("A API Google necessária não está habilitada para o projeto OAuth configurado.",403,providerCode,reason,false,"api_disabled");
+    if(response.status===403 && /(insufficient|scope|permission)/.test(lower)) return new GoogleApiError("O Google recusou esta operação por permissão insuficiente. A capability afetada foi marcada para nova validação.",403,providerCode,reason,false,"insufficient_permission");
+    if(response.status===429) return new GoogleApiError("O Google limitou temporariamente as consultas. Tente novamente em alguns instantes.",429,providerCode,reason,true,"rate_limited");
+    if(response.status>=500) return new GoogleApiError("O serviço Google está temporariamente indisponível. A conexão foi mantida.",response.status,providerCode,reason,true,"transient");
+    return new GoogleApiError(`O Google recusou a operação: ${message}`,response.status,providerCode,reason,response.status>=500,"provider_error");
   }
 }
 
@@ -59,7 +61,8 @@ export class GoogleApiClient {
       if(response.status===401 && !forcedRefresh) { forcedRefresh=true; continue; }
       if(retryTransient&&(response.status===429||response.status>=500)&&transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
       const error=await GoogleApiError.fromResponse(response);
-      if(error.httpStatus===401||(error.httpStatus===403&&/permissão necessária/i.test(error.message))) this.connections.markReauthorizationRequired(connectionId,error.message);
+      if(error.kind==="unauthorized") this.connections.markReauthorizationRequired(connectionId,error.message);
+      else if(error.kind==="insufficient_permission"||error.kind==="api_disabled") this.connections.markCapabilityUnavailable(connectionId,capability,error.message,error.httpStatus,error.reason??error.kind);
       throw error;
     }
   }
