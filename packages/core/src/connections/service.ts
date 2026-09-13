@@ -142,6 +142,7 @@ export class ConnectionService {
   async restoreConnections() {
     for(const row of this.db.all<ConnectionRow>("SELECT * FROM connections ORDER BY updated_at DESC")) {
       if(!row.token_secret_key)continue;
+      if(row.status==="reauthorization-required"||row.reauthorization_reason)continue;
       try{
         const state=await this.tokenManager.state(row.token_secret_key);
         if(!state.exists||!state.hasAccessToken){this.markReauthorizationRequired(row.id,"A credencial segura da conta não está disponível neste computador.");continue;}
