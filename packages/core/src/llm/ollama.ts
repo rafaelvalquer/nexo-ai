@@ -1,6 +1,9 @@
 import type { LLMMessage, LLMProvider } from "./provider.js";
 import { DEFAULT_TIMEOUTS } from "../config/defaults.js";
 import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, OllamaInvalidResponseError } from "./errors.js";
+import { LLM_STREAM_CONTENT_STARTED, LLM_STREAM_THINKING_STARTED } from "./stream-events.js";
+
+const DEFAULT_KEEP_ALIVE = "10m";
 
 export class OllamaProvider implements LLMProvider {
   constructor(private baseUrl: string, private model: string) {}
@@ -41,7 +44,7 @@ export class OllamaProvider implements LLMProvider {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, stream: false, messages }),
+        body: JSON.stringify({ model: this.model, stream: false, messages, keep_alive: DEFAULT_KEEP_ALIVE }),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_TIMEOUTS.chat)]) : AbortSignal.timeout(DEFAULT_TIMEOUTS.chat)
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
@@ -59,11 +62,12 @@ export class OllamaProvider implements LLMProvider {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ 
-          model: this.model, 
-          stream: false, 
+        body: JSON.stringify({
+          model: this.model,
+          stream: false,
           messages,
           think: false,
+          keep_alive: DEFAULT_KEEP_ALIVE,
           options: { temperature: 0.1 }
         }),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_TIMEOUTS.planner)]) : AbortSignal.timeout(DEFAULT_TIMEOUTS.planner)
@@ -84,7 +88,7 @@ export class OllamaProvider implements LLMProvider {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, stream: false, messages }),
+        body: JSON.stringify({ model: this.model, stream: false, messages, keep_alive: DEFAULT_KEEP_ALIVE }),
         signal: AbortSignal.timeout(DEFAULT_TIMEOUTS.summarize)
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
@@ -120,7 +124,7 @@ export class OllamaProvider implements LLMProvider {
       const res = await fetch(`${this.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, stream: true, messages }),
+        body: JSON.stringify({ model: this.model, stream: true, messages, keep_alive: DEFAULT_KEEP_ALIVE }),
         signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       });
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
@@ -130,16 +134,29 @@ export class OllamaProvider implements LLMProvider {
       const decoder = new TextDecoder();
       let buffer = "";
       let full = "";
+      let thinkingStarted = false;
+      let contentStarted = false;
 
       const consumeLine = (line: string) => {
         const clean = line.trim();
         if (!clean) return;
-        let payload: { message?: { content?: string }; error?: string };
+        let payload: { message?: { content?: string; thinking?: string }; error?: string };
         try { payload = JSON.parse(clean); }
         catch { return; }
         if (payload.error) throw new Error(payload.error);
+
+        const thinking = payload.message?.thinking ?? "";
+        if (thinking && !thinkingStarted) {
+          thinkingStarted = true;
+          onToken(LLM_STREAM_THINKING_STARTED);
+        }
+
         const token = payload.message?.content ?? "";
         if (token) {
+          if (!contentStarted) {
+            contentStarted = true;
+            onToken(LLM_STREAM_CONTENT_STARTED);
+          }
           full += token;
           onToken(token);
         }
