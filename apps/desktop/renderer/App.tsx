@@ -14,6 +14,7 @@ import { Topbar } from "./components/shell/Topbar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { useAssistantStore } from "./stores/assistant";
 import { Onboarding } from "./components/shell/Onboarding";
+import { OllamaModelInstaller } from "./components/shell/OllamaModelInstaller";
 import { Diagnostics } from "./pages/Diagnostics";
 const Office=lazy(()=>import("./pages/Office").then(module=>({default:module.Office})));
 
@@ -44,5 +45,5 @@ export function App() {
     return () => {unsubscribe();window.clearInterval(timer);};
   }, [syncAssistant, handleTaskEvent]);
 
-  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Suspense fallback={<div className="page">Carregando Pixel Office…</div>}><Page /></Suspense></main><CommandPalette /><Onboarding /></div>;
+  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Suspense fallback={<div className="page">Carregando Pixel Office…</div>}><Page /></Suspense></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;
 }
