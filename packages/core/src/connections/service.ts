@@ -243,10 +243,15 @@ const microsoftScopes = (items: ConnectionCapability[]) => [...new Set(["openid"
 
 async function exchangeAuthorizationCode({ provider, configuration, clientId, code, verifier, redirectUri }: { provider: ConnectionProvider; configuration: OAuthConfiguration; clientId: string; code: string; verifier: string; redirectUri: string }): Promise<OAuthTokens> {
   const tokenUrl = provider === "google" ? "https://oauth2.googleapis.com/token" : `https://login.microsoftonline.com/${configuration.microsoftTenant}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({ client_id: clientId, code, redirect_uri: redirectUri, grant_type: "authorization_code", code_verifier: verifier });
+  if (provider === "google") {
+    const clientSecret = environment().googleClientSecret;
+    if (clientSecret) body.set("client_secret", clientSecret);
+  }
   const tokenResponse = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: clientId, code, redirect_uri: redirectUri, grant_type: "authorization_code", code_verifier: verifier }),
+    body,
     signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)
   });
   const tokens = await safeJson(tokenResponse);
@@ -294,8 +299,9 @@ function oauthErrorMessage(provider: ConnectionProvider, code?: string | null, d
   const value = `${code ?? ""} ${description ?? ""}`.toLowerCase();
   const providerName = providerLabel(provider);
   if (normalizedCode === "admin_consent_required" || value.includes("admin consent")) return "Sua organização exige aprovação do administrador para estas permissões.";
+  if (value.includes("client_secret is missing") || value.includes("client secret is missing")) return "O Google exige o Client Secret desta credencial de aplicativo para computador. Configure NEXO_GOOGLE_CLIENT_SECRET no arquivo .env local e reinicie o Nexo.";
   if (value.includes("redirect_uri_mismatch") || value.includes("aadsts50011")) return "O callback OAuth não foi aceito. Use uma credencial de aplicativo desktop e permita o redirect de loopback http://127.0.0.1 no provedor.";
-  if (normalizedCode === "invalid_client") return `${providerName} recusou o Client ID OAuth. Confirme que o ID salvo no Nexo pertence a uma credencial do tipo aplicativo para computador.`;
+  if (normalizedCode === "invalid_client") return `${providerName} recusou as credenciais OAuth. Confirme o Client ID e, para Google, o NEXO_GOOGLE_CLIENT_SECRET da mesma credencial de aplicativo para computador.`;
   if (normalizedCode === "invalid_grant") return `${providerName} recusou o código de autorização. Tente conectar novamente; se persistir, recrie a credencial OAuth de aplicativo para computador.`;
   if (value.includes("invalid_scope") || value.includes("scope")) return "Uma ou mais permissões solicitadas não estão configuradas ou aprovadas no provedor.";
   if (value.includes("access_denied") || value.includes("consent")) return provider === "google" ? "O acesso foi recusado. Verifique a tela de consentimento, os usuários de teste e as permissões Google." : "O acesso foi recusado. Verifique o consentimento e as permissões delegadas no Microsoft Entra.";
