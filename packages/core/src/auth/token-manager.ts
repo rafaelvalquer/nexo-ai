@@ -74,8 +74,7 @@ export class TokenManager {
     const params = new URLSearchParams({ client_id: clientId, refresh_token: refreshToken, grant_type: "refresh_token" });
     if (provider === "google") {
       const clientSecret = await this.oauthCredentials?.getGoogleClientSecret();
-      if (!clientSecret) throw new Error("O Client Secret do Google não está salvo neste computador. Configure-o em Conexões e reconecte a conta.");
-      params.set("client_secret", clientSecret);
+      if (clientSecret) params.set("client_secret", clientSecret);
     }
     const response = await fetch(endpoint, {
       method: "POST",
