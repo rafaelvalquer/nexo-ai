@@ -46,11 +46,45 @@ export type NexoSettings = {
 export type OAuthConfiguration = { googleClientId:string;microsoftClientId:string;microsoftTenant:string };
 export type ConnectionProvider = "google" | "microsoft";
 export type ConnectionCapability = "email.read" | "email.send" | "email.modify" | "calendar.read" | "calendar.write";
-export type ConnectionStatus = "not-configured" | "connecting" | "validating" | "connected" | "refreshing" | "expired" | "reauthorization-required" | "error" | "admin-consent-required";
+export type ConnectionStatus = "not-configured" | "authorizing" | "connecting" | "validating" | "connected" | "degraded" | "refreshing" | "expired" | "reauthorization-required" | "error" | "admin-consent-required";
+export type CapabilityGrantState = "not-requested" | "requested" | "granted" | "validated" | "denied" | "unavailable" | "reauthorization-required";
+export type CapabilityValidationSource = "token-response" | "token-info" | "persisted" | "api-probe";
+export type CapabilityGrant = {
+  capability:ConnectionCapability;
+  requested:boolean;
+  expectedScopes:string[];
+  granted:boolean;
+  grantedByScope?:string;
+  validated:boolean;
+  status:CapabilityGrantState;
+  validationSource?:CapabilityValidationSource;
+  providerReason?:string;
+  providerMessage?:string;
+  httpStatus?:number;
+  lastValidatedAt?:string;
+};
 export type ConnectionAccount = {
   id:string;provider:ConnectionProvider;accountEmail?:string;displayName?:string;capabilities:ConnectionCapability[];requestedCapabilities?:ConnectionCapability[];grantedScopes?:string[];
+  capabilityGrants?:CapabilityGrant[];oauthClientId?:string;scopeSource?:"token-response"|"token-info"|"persisted"|"unknown";
   status:ConnectionStatus;lastError?:string;updatedAt:string;lastConnectedAt?:string;lastValidatedAt?:string;lastRefreshAt?:string;tokenExpiresAt?:string;providerAccountId?:string;
   lastHealthCheckAt?:string;reauthorizationReason?:string;
+};
+export type ConnectionDiagnosticSnapshot = {
+  provider:ConnectionProvider;
+  status:ConnectionStatus;
+  accountEmail?:string;
+  oauthClientId?:string;
+  configuredClientId?:string;
+  clientMatches?:boolean;
+  tokenPresent:boolean;
+  refreshTokenPresent:boolean;
+  requestedCapabilities:ConnectionCapability[];
+  grantedScopes:string[];
+  scopeSource?:"token-response"|"token-info"|"persisted"|"unknown";
+  capabilities:CapabilityGrant[];
+  lastValidatedAt?:string;
+  lastRefreshAt?:string;
+  lastHealthCheckAt?:string;
 };
 export type ConnectionResolution =
   | { status:"ready"; account:ConnectionAccount }
