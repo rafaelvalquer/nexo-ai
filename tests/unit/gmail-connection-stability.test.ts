@@ -12,6 +12,8 @@ let root:string;
 let db:NexoDatabase;
 let secrets:MemorySecretStore;
 let originalFetch:typeof fetch;
+const CLIENT_ID="desktop-client.apps.googleusercontent.com";
+const GMAIL_READ="https://www.googleapis.com/auth/gmail.readonly";
 
 beforeEach(async()=>{
   root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-gmail-stability-"));
@@ -26,12 +28,13 @@ function host():OAuthHost{return{
   waitForLoopbackCallback:async({state})=>new URL(`http://127.0.0.1:4567/oauth/callback?code=code&state=${state}`),
   startLoopbackCallback:async({state})=>({redirectUri:"http://127.0.0.1:4567/oauth/callback",callback:Promise.resolve(new URL(`http://127.0.0.1:4567/oauth/callback?code=code&state=${state}`))})
 };}
-function service(){return new ConnectionService(db,secrets,host(),()=>({googleClientId:"desktop-client.apps.googleusercontent.com",microsoftClientId:"",microsoftTenant:"common"}),()=>true);}
+function service(){return new ConnectionService(db,secrets,host(),()=>({googleClientId:CLIENT_ID,microsoftClientId:"",microsoftTenant:"common"}),()=>true);}
 async function configuredService(){const value=service();await value.saveGoogleClientSecret("GOCSPX-test-secret");return value;}
 function installSuccessfulOAuthMock(){
   globalThis.fetch=vi.fn(async(input:string|URL,init?:RequestInit)=>{
     const url=String(input);
-    if(url.includes("oauth2.googleapis.com/token"))return new Response(JSON.stringify({access_token:"access-1",refresh_token:"refresh-1",expires_in:3600,scope:"openid email profile https://www.googleapis.com/auth/gmail.readonly"}),{status:200});
+    if(url.includes("oauth2.googleapis.com/token")&&!url.includes("tokeninfo"))return new Response(JSON.stringify({access_token:"access-1",refresh_token:"refresh-1",expires_in:3600,scope:`openid email profile ${GMAIL_READ}`}),{status:200});
+    if(url.includes("oauth2.googleapis.com/tokeninfo"))return new Response(JSON.stringify({issued_to:CLIENT_ID,scope:`openid email profile ${GMAIL_READ}`,email:"person@example.com",expires_in:3600}),{status:200});
     if(url.includes("openidconnect.googleapis.com/v1/userinfo"))return new Response(JSON.stringify({sub:"google-user",email:"person@example.com",name:"Person"}),{status:200});
     if(url.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com",messagesTotal:40,threadsTotal:30}),{status:200});
     throw new Error(`Unexpected request ${url} ${String(init?.method??"GET")}`);
@@ -44,7 +47,7 @@ describe("persistent Gmail connection lifecycle",()=>{
   it("stores requested/granted scopes and restores the account without a new OAuth browser flow",async()=>{
     const{account}=await connectReadAccount();
     expect(account).toMatchObject({status:"connected",accountEmail:"person@example.com",capabilities:["email.read"],requestedCapabilities:["email.read"]});
-    expect(account.grantedScopes).toContain("https://www.googleapis.com/auth/gmail.readonly");
+    expect(account.grantedScopes).toContain(GMAIL_READ);
     const row=db.get<any>("SELECT * FROM connections WHERE id=?",[account.id])!;
     expect(row.requested_capabilities_json).toContain("email.read");
     expect(row.granted_scopes_json).toContain("gmail.readonly");
@@ -60,12 +63,14 @@ describe("persistent Gmail connection lifecycle",()=>{
     await secrets.set(row.token_secret_key,JSON.stringify({access_token:"expired",refresh_token:"refresh-stable",expires_at:"2000-01-01T00:00:00.000Z"}));
     globalThis.fetch=vi.fn(async(input:string|URL,init?:RequestInit)=>{
       const url=String(input);
-      if(url.includes("oauth2.googleapis.com/token")){
+      if(url.includes("oauth2.googleapis.com/token")&&!url.includes("tokeninfo")){
         const body=String(init?.body??"");
         expect(body).toContain("refresh_token=refresh-stable");
         expect(body).toContain("client_secret=GOCSPX-test-secret");
         return new Response(JSON.stringify({access_token:"fresh",expires_in:3600}),{status:200});
       }
+      if(url.includes("oauth2.googleapis.com/tokeninfo"))return new Response(JSON.stringify({issued_to:CLIENT_ID,scope:`openid email profile ${GMAIL_READ}`,expires_in:3600}),{status:200});
+      if(url.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com"}),{status:200});
       throw new Error(`Unexpected request ${url}`);
     }) as typeof fetch;
     const restarted=service();
@@ -90,16 +95,18 @@ describe("resilient Gmail requests",()=>{
   it("refreshes once after a Gmail 401 and retries the read operation",async()=>{
     const{value,account}=await connectReadAccount();
     let listAttempts=0,refreshes=0;
-    globalThis.fetch=vi.fn(async(input:string|URL,init?:RequestInit)=>{
+    globalThis.fetch=vi.fn(async(input:string|URL)=>{
       const url=String(input);
-      if(url.includes("oauth2.googleapis.com/token")){refreshes++;return new Response(JSON.stringify({access_token:"fresh-access",expires_in:3600}),{status:200});}
+      if(url.includes("oauth2.googleapis.com/token")&&!url.includes("tokeninfo")){refreshes++;return new Response(JSON.stringify({access_token:"fresh-access",expires_in:3600}),{status:200});}
+      if(url.includes("oauth2.googleapis.com/tokeninfo"))return new Response(JSON.stringify({issued_to:CLIENT_ID,scope:`openid email profile ${GMAIL_READ}`}),{status:200});
+      if(url.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com"}),{status:200});
       if(url.includes("/messages?")&&!url.includes("/messages/m1")){
         listAttempts++;
         if(listAttempts===1)return new Response(JSON.stringify({error:{message:"Invalid Credentials"}}),{status:401});
         return new Response(JSON.stringify({messages:[{id:"m1"}],resultSizeEstimate:1}),{status:200});
       }
       if(url.includes("/messages/m1?"))return new Response(JSON.stringify({id:"m1",threadId:"t1",internalDate:String(Date.now()),payload:{headers:[{name:"From",value:"sender@example.com"},{name:"To",value:"person@example.com"},{name:"Subject",value:"Teste"}]},snippet:"Olá",labelIds:["INBOX"]}),{status:200});
-      throw new Error(`Unexpected request ${url} ${String(init?.method??"GET")}`);
+      throw new Error(`Unexpected request ${url}`);
     }) as typeof fetch;
     const email=new EmailService(value);
     await expect(email.latest(account.id)).resolves.toMatchObject({subject:"Teste"});
@@ -109,15 +116,17 @@ describe("resilient Gmail requests",()=>{
 
   it("marks the account for reauthorization if Gmail still returns 401 after one forced refresh",async()=>{
     const{value,account}=await connectReadAccount();
-    let refreshes=0;
+    let refreshes=0,listAttempts=0;
     globalThis.fetch=vi.fn(async(input:string|URL)=>{
       const url=String(input);
-      if(url.includes("oauth2.googleapis.com/token")){refreshes++;return new Response(JSON.stringify({access_token:"fresh-but-rejected",expires_in:3600}),{status:200});}
-      if(url.includes("gmail.googleapis.com"))return new Response(JSON.stringify({error:{message:"Invalid Credentials"}}),{status:401});
+      if(url.includes("oauth2.googleapis.com/token")&&!url.includes("tokeninfo")){refreshes++;return new Response(JSON.stringify({access_token:"fresh-but-rejected",expires_in:3600}),{status:200});}
+      if(url.includes("oauth2.googleapis.com/tokeninfo"))return new Response(JSON.stringify({issued_to:CLIENT_ID,scope:`openid email profile ${GMAIL_READ}`}),{status:200});
+      if(url.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com"}),{status:200});
+      if(url.includes("gmail.googleapis.com/gmail/v1/users/me/messages")){listAttempts++;return new Response(JSON.stringify({error:{message:"Invalid Credentials"}}),{status:401});}
       throw new Error(`Unexpected request ${url}`);
     }) as typeof fetch;
     await expect(new EmailService(value).latest(account.id)).rejects.toThrow(/expirou ou foi revogada/i);
-    expect(refreshes).toBe(1);
+    expect(refreshes).toBe(1);expect(listAttempts).toBe(2);
     expect(value.get(account.id)?.status).toBe("reauthorization-required");
   });
 
@@ -133,11 +142,12 @@ describe("resilient Gmail requests",()=>{
     await expect(new EmailService(value).stats(account.id)).resolves.toEqual({totalMessages:1250,totalThreads:800,inboxMessages:300,unreadMessages:27});
   });
 
-  it("keeps the account but marks reauthorization when Gmail reports insufficient scopes",async()=>{
+  it("marks only the affected capability unavailable when Gmail reports insufficient scopes",async()=>{
     const{value,account}=await connectReadAccount();
     globalThis.fetch=vi.fn(async()=>new Response(JSON.stringify({error:{message:"Request had insufficient authentication scopes.",errors:[{reason:"insufficientPermissions"}]}}),{status:403})) as typeof fetch;
-    await expect(new EmailService(value).latest(account.id)).rejects.toThrow(/não concedeu a permissão/i);
+    await expect(new EmailService(value).latest(account.id)).rejects.toThrow(/permissão insuficiente/i);
     expect(value.get(account.id)?.status).toBe("reauthorization-required");
+    expect(value.get(account.id)?.capabilityGrants?.find(grant=>grant.capability==="email.read")?.status).toBe("unavailable");
   });
 });
 
