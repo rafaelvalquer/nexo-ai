@@ -46,8 +46,18 @@ export type NexoSettings = {
 export type OAuthConfiguration = { googleClientId:string;microsoftClientId:string;microsoftTenant:string };
 export type ConnectionProvider = "google" | "microsoft";
 export type ConnectionCapability = "email.read" | "email.send" | "email.modify" | "calendar.read" | "calendar.write";
-export type ConnectionStatus = "not-configured" | "connecting" | "connected" | "refreshing" | "expired" | "error" | "admin-consent-required";
-export type ConnectionAccount = { id:string;provider:ConnectionProvider;accountEmail?:string;displayName?:string;capabilities:ConnectionCapability[];status:ConnectionStatus;lastError?:string;updatedAt:string;lastConnectedAt?:string;lastValidatedAt?:string;lastRefreshAt?:string;tokenExpiresAt?:string;providerAccountId?:string };
+export type ConnectionStatus = "not-configured" | "connecting" | "validating" | "connected" | "refreshing" | "expired" | "reauthorization-required" | "error" | "admin-consent-required";
+export type ConnectionAccount = {
+  id:string;provider:ConnectionProvider;accountEmail?:string;displayName?:string;capabilities:ConnectionCapability[];requestedCapabilities?:ConnectionCapability[];grantedScopes?:string[];
+  status:ConnectionStatus;lastError?:string;updatedAt:string;lastConnectedAt?:string;lastValidatedAt?:string;lastRefreshAt?:string;tokenExpiresAt?:string;providerAccountId?:string;
+  lastHealthCheckAt?:string;reauthorizationReason?:string;
+};
+export type ConnectionResolution =
+  | { status:"ready"; account:ConnectionAccount }
+  | { status:"not_connected" }
+  | { status:"missing_capability"; account:ConnectionAccount }
+  | { status:"expired"; account:ConnectionAccount }
+  | { status:"needs_reauthorization"; account:ConnectionAccount };
 export type DocumentStatus = "importing" | "extracting" | "indexing" | "ready" | "failed";
 export type DocumentRecord = { id:string;name:string;mimeType:string;sizeBytes:number;status:DocumentStatus;metadata?:Record<string,unknown>;createdAt:string;updatedAt:string };
 export type ChatAttachment = { id:string;documentId:string;name:string;mimeType:string;sizeBytes:number;status:"importing"|"ready"|"failed" };
