@@ -5,23 +5,10 @@ import { EmptyState } from "../components/chat/EmptyState";
 import { ExecutionDrawer } from "../components/chat/ExecutionDrawer";
 import { MessageList } from "../components/chat/MessageList";
 import { ScrollToBottom } from "../components/chat/ScrollToBottom";
-import { useAssistant } from "../hooks/useAssistant";
-import { useChatAutoScroll } from "../hooks/useChatAutoScroll";
-import { AssistantShell } from "../components/chat/AssistantShell";
 import { ChatViewport } from "../components/chat/ChatViewport";
 import { ChatColumn } from "../components/chat/ChatColumn";
 import { WideExecutionRail } from "../components/chat/WideExecutionRail";
-
-export function Assistant(){
-  const assistant=useAssistant();const viewportRef=useRef<HTMLDivElement>(null);const[drawerOpen,setDrawerOpen]=useState(false);
-  const scroll=useChatAutoScroll(viewportRef,`${assistant.messages.length}:${assistant.activeTask?.progressText?.length??0}:${assistant.activeTask?.statusMessage??""}`,assistant.isStreaming);
-  const send=async(value:string)=>{const sent=await assistant.send(value);if(sent)requestAnimationFrame(()=>scroll.anchorLatestUser("smooth"));return sent;};
-  return <AssistantShell>
-    <AssistantHeader model={assistant.model} busy={assistant.isStreaming} elapsed={assistant.elapsed} onExecution={()=>setDrawerOpen(true)}/>
-    <ChatViewport ref={viewportRef} onScroll={scroll.onScroll}><ChatColumn>{assistant.messages.length===0&&!assistant.activeTask?<EmptyState onPrompt={value=>void send(value)}/>:<MessageList messages={assistant.messages} activeTask={assistant.activeTask} elapsed={assistant.elapsed} error={assistant.error}/>}</ChatColumn></ChatViewport>
-    <ScrollToBottom visible={!scroll.isNearBottom||scroll.hasUnreadBelow} unread={scroll.hasUnreadBelow} onClick={()=>scroll.scrollToBottom("smooth")}/>
-    <Composer attachments={assistant.attachments} busy={assistant.isStreaming} onAttach={()=>void assistant.attach()} onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop}/>
-    <WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed}/>
-    <ExecutionDrawer task={assistant.activeTask} elapsed={assistant.elapsed} open={drawerOpen} onClose={()=>setDrawerOpen(false)}/>
-  </AssistantShell>;
-}
+import { ChatTabs } from "../components/chat/ChatTabs";
+import { useAssistant } from "../hooks/useAssistant";
+import { useChatAutoScroll } from "../hooks/useChatAutoScroll";
+export function Assistant(){const assistant=useAssistant(),viewportRef=useRef<HTMLDivElement>(null),[drawerOpen,setDrawerOpen]=useState(false);const scroll=useChatAutoScroll(viewportRef,`${assistant.activeSessionId}:${assistant.messages.length}:${assistant.activeTask?.progressText?.length??0}:${assistant.activeTask?.statusMessage??""}`,assistant.isStreaming);const send=async(value:string)=>{const sent=await assistant.send(value);if(sent)requestAnimationFrame(()=>scroll.anchorLatestUser("smooth"));return sent;};return <section className="assistantPage assistantMultiPage"><div className="assistantMultiLayout"><ChatTabs sessions={assistant.sessions} activeId={assistant.activeSessionId} onCreate={()=>void assistant.createSession()} onSelect={assistant.selectSession} onClose={id=>void assistant.closeSession(id)}/><div className="assistantSessionPanel"><AssistantHeader model={assistant.model} busy={assistant.isStreaming} elapsed={assistant.elapsed} onExecution={()=>setDrawerOpen(true)}/>{assistant.activeSession&&<div className="activeChatIdentity"><span>{assistant.activeSession.agentId?assistant.activeSession.agentId.replace("agent-","Polvo "):"Agente livre"}</span><b>{assistant.activeSession.title}</b>{assistant.activeSession.status==="waiting_approval"&&<em>Aguardando aprovação</em>}</div>}<ChatViewport ref={viewportRef} onScroll={scroll.onScroll}><ChatColumn>{assistant.messages.length===0&&!assistant.activeTask?<EmptyState onPrompt={value=>void send(value)}/>:<MessageList messages={assistant.messages} activeTask={assistant.activeTask} elapsed={assistant.elapsed} error={assistant.error}/>}</ChatColumn></ChatViewport><ScrollToBottom visible={!scroll.isNearBottom||scroll.hasUnreadBelow} unread={scroll.hasUnreadBelow} onClick={()=>scroll.scrollToBottom("smooth")}/><Composer attachments={assistant.attachments} busy={assistant.isStreaming} onAttach={assistant.attach} onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop}/><WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed}/><ExecutionDrawer task={assistant.activeTask} elapsed={assistant.elapsed} open={drawerOpen} onClose={()=>setDrawerOpen(false)}/></div></div></section>;}

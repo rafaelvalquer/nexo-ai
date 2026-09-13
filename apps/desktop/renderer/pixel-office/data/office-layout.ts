@@ -1,13 +1,9 @@
 import type { OfficeStationId } from "@nexo/shared";
-export type Facing="up"|"down"|"left"|"right";export type OfficeStation={id:OfficeStationId;name:string;x:number;y:number;facing:Facing;targetPage?:string};
+export type Facing="up"|"down"|"left"|"right";export type WorldPoint={x:number;y:number};export type OfficeStation={id:OfficeStationId;name:string;x:number;y:number;facing:Facing;targetPage?:string};
 export const OFFICE_WIDTH=1536,OFFICE_HEIGHT=1024,GRID_SIZE=64;
-export const OFFICE_STATIONS:Record<OfficeStationId,OfficeStation>={
-  "central-desk":{id:"central-desk",name:"Mesa central",x:760,y:650,facing:"up",targetPage:"Assistente"},
-  "document-station":{id:"document-station",name:"Documentos",x:300,y:350,facing:"up",targetPage:"Documentos"},
-  "mail-station":{id:"mail-station",name:"E-mail",x:1080,y:300,facing:"up",targetPage:"Conexões"},
-  "calendar-station":{id:"calendar-station",name:"Calendário",x:1010,y:350,facing:"up",targetPage:"Conexões"},
-  "browser-station":{id:"browser-station",name:"Browser Agent",x:1270,y:540,facing:"right"},
-  "system-station":{id:"system-station",name:"Sistema local",x:340,y:670,facing:"left",targetPage:"Atividade"},
-  "approval-gate":{id:"approval-gate",name:"Portão de aprovação",x:1110,y:790,facing:"down",targetPage:"Aprovações"},
-  "rest-area":{id:"rest-area",name:"Descanso",x:760,y:245,facing:"down"}
-};
+export const OFFICE_STATIONS:Record<OfficeStationId,OfficeStation>={"central-desk":{id:"central-desk",name:"Mesa central",x:768,y:640,facing:"up",targetPage:"Assistente"},"document-station":{id:"document-station",name:"Documentos",x:320,y:320,facing:"up",targetPage:"Documentos"},"mail-station":{id:"mail-station",name:"E-mail",x:1088,y:320,facing:"up",targetPage:"Conexões"},"calendar-station":{id:"calendar-station",name:"Calendário",x:1088,y:384,facing:"up",targetPage:"Conexões"},"browser-station":{id:"browser-station",name:"Browser Agent",x:1280,y:512,facing:"right"},"system-station":{id:"system-station",name:"Sistema local",x:384,y:640,facing:"left",targetPage:"Atividade"},"approval-gate":{id:"approval-gate",name:"Portão de aprovação",x:1088,y:768,facing:"down",targetPage:"Aprovações"},"rest-area":{id:"rest-area",name:"Descanso",x:768,y:256,facing:"down"}};
+export const AGENT_SPAWNS:Record<string,WorldPoint>={"agent-1":{x:704,y:640},"agent-2":{x:768,y:640},"agent-3":{x:832,y:640},"agent-4":{x:896,y:640}};
+const slots=(points:Array<[number,number]>):WorldPoint[]=>points.map(([x,y])=>({x,y}));
+export const STATION_SLOTS:Record<OfficeStationId,WorldPoint[]>={"central-desk":slots([[704,640],[768,640],[832,640],[896,640]]),"document-station":slots([[256,320],[320,320],[384,320],[448,320]]),"mail-station":slots([[1024,320],[1088,320],[1152,320],[1216,320]]),"calendar-station":slots([[1024,384],[1088,384],[1152,384],[1216,384]]),"browser-station":slots([[1088,512],[1152,512],[1216,512],[1280,512]]),"system-station":slots([[320,640],[384,640],[448,640],[512,640]]),"approval-gate":slots([[1024,768],[1088,768],[1152,768],[1216,768]]),"rest-area":slots([[640,256],[704,256],[768,256],[832,256]])};
+export const IDLE_WANDER_POINTS:WorldPoint[]=[{x:640,y:256},{x:896,y:256},{x:576,y:448},{x:960,y:448},{x:448,y:704},{x:896,y:704},{x:704,y:640},{x:832,y:640}];
+export function slotFor(station:OfficeStationId,agentId:string){const index=Math.max(0,Math.min(3,(Number(agentId.match(/(\d+)$/)?.[1])||1)-1));return STATION_SLOTS[station][index]??OFFICE_STATIONS[station];}
