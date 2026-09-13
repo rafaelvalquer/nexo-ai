@@ -1,7 +1,9 @@
 $ErrorActionPreference = "Stop"
-$installer = (Resolve-Path "release/NexoAI-Setup-0.5.2.exe").Path
+$manifest = Get-Content -Raw "apps/desktop/package.json" | ConvertFrom-Json
+$version = [string]$manifest.version
+$installer = (Resolve-Path "release/NexoAI-Setup-$version.exe").Path
 $smokeRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
-$installDir = Join-Path $smokeRoot "NexoAI-Smoke-0.5.2"
+$installDir = Join-Path $smokeRoot "NexoAI-Smoke-$version"
 if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
 $install = Start-Process -FilePath $installer -ArgumentList "/S", "/D=$installDir" -Wait -PassThru -WindowStyle Hidden
 if ($install.ExitCode -ne 0) { throw "Instalador terminou com código $($install.ExitCode)." }
@@ -14,4 +16,4 @@ Start-Sleep -Seconds 12
 $running = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
 if (-not $running) { throw "O Nexo AI não permaneceu em execução após a instalação." }
 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-Write-Host "Smoke do instalador concluído: processo iniciado com sucesso."
+Write-Host "Smoke do instalador Nexo AI $version concluído: processo iniciado com sucesso."
