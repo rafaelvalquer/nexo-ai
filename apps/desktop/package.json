@@ -14,7 +14,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "pnpm build:renderer && pnpm build:electron",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "package:win": "pnpm build && electron-builder --win nsis"
+    "package:win": "pnpm build && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "@nexo/core": "workspace:*",
