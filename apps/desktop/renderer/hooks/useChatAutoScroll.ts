@@ -47,7 +47,7 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,dependency:unkno
     if(!streaming)return;
     if(followRef.current&&near){
       scrollToBottom("auto");
-    }else{
+    }else if(!near){
       setUnread(true);
     }
   },[dependency,ref,scrollToBottom,streaming]);
