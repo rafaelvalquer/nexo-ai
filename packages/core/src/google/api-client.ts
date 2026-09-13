@@ -41,6 +41,7 @@ export class GoogleApiClient {
   ):Promise<Response> {
     let forcedRefresh=false;
     let transientAttempt=0;
+    const retryTransient=isIdempotent(init.method);
     while(true) {
       const token=forcedRefresh
         ? (await this.connections.forceRefreshToken(connectionId)).accessToken
@@ -51,12 +52,12 @@ export class GoogleApiClient {
         response=await fetch(url,{...init,headers:{...(init.headers??{}),Authorization:`Bearer ${token}`},signal:requestSignal});
       } catch(error) {
         if(signal?.aborted) throw signal.reason??new DOMException("Cancelada pelo usuário.","AbortError");
-        if(transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
+        if(retryTransient&&transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
         throw error;
       }
       if(response.ok) return response;
       if(response.status===401 && !forcedRefresh) { forcedRefresh=true; continue; }
-      if((response.status===429||response.status>=500) && transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
+      if(retryTransient&&(response.status===429||response.status>=500)&&transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
       const error=await GoogleApiError.fromResponse(response);
       if(error.httpStatus===403 && /permissão necessária/i.test(error.message)) this.connections.markReauthorizationRequired(connectionId,error.message);
       throw error;
@@ -69,6 +70,7 @@ export class GoogleApiClient {
   }
 }
 
+function isIdempotent(method?:string){const normalized=(method??"GET").toUpperCase();return normalized==="GET"||normalized==="HEAD"||normalized==="OPTIONS";}
 function combineSignals(a?:AbortSignal,b?:AbortSignal) {
   const values=[a,b].filter(Boolean) as AbortSignal[];
   if(values.length===0) return undefined;

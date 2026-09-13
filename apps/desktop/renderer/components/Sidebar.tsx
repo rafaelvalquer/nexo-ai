@@ -19,7 +19,7 @@ const items = [
 export function Sidebar() {
   const page = useAppStore(s => s.page);
   const setPage = useAppStore(s => s.setPage);
-  const assistantBusy = useAssistantStore(s => s.isStreaming);
+  const assistantBusy = useAssistantStore(s => s.sessions.some(session => session.status === "running" || session.status === "waiting_approval"));
 
   return (
     <aside className="sidebar">
