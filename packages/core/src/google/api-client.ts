@@ -59,7 +59,7 @@ export class GoogleApiClient {
       if(response.status===401 && !forcedRefresh) { forcedRefresh=true; continue; }
       if(retryTransient&&(response.status===429||response.status>=500)&&transientAttempt<2) { await delay(500*(2**transientAttempt),signal); transientAttempt++; continue; }
       const error=await GoogleApiError.fromResponse(response);
-      if(error.httpStatus===403 && /permissão necessária/i.test(error.message)) this.connections.markReauthorizationRequired(connectionId,error.message);
+      if(error.httpStatus===401||(error.httpStatus===403&&/permissão necessária/i.test(error.message))) this.connections.markReauthorizationRequired(connectionId,error.message);
       throw error;
     }
   }
