@@ -1,0 +1,28 @@
+name: Typecheck diagnostics
+on:
+  push:
+    branches:
+      - feature/v0.6.0-multi-agent-multi-chat
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile=false
+      - name: Capture typecheck output
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pnpm typecheck *>&1 | Tee-Object -FilePath typecheck.log
+          $exitCode = $LASTEXITCODE
+          gh pr comment 7 --body-file typecheck.log
+          exit $exitCode
