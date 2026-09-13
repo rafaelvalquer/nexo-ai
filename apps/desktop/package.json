@@ -14,7 +14,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "pnpm build:renderer && pnpm build:electron",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "package:win": "pnpm build && electron-builder --win nsis"
+    "package:win": "pnpm build && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "@nexo/core": "workspace:*",
@@ -51,29 +51,12 @@
     "appId": "ai.nexo.desktop",
     "productName": "Nexo AI",
     "executableName": "NexoAI",
-    "directories": {
-      "output": "../../release"
-    },
+    "directories": {"output": "../../release"},
     "asar": true,
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "resources/icons/**/*",
-      "package.json"
-    ],
+    "files": ["dist/**/*","dist-electron/**/*","resources/icons/**/*","package.json"],
     "publish": [{"provider":"github","owner":"rafaelvalquer","repo":"nexo-ai"}],
-    "win": {
-      "icon": "resources/icons/icon.ico",
-      "publisherName": "Nexo AI",
-      "target": [
-        "nsis"
-      ],
-      "artifactName": "NexoAI-Setup-${version}.${ext}"
-    },
+    "win": {"icon":"resources/icons/icon.ico","publisherName":"Nexo AI","target":["nsis"],"artifactName":"NexoAI-Setup-${version}.${ext}"},
     "mac": {"icon":"resources/icons/icon.icns"},
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "nsis": {"oneClick":false,"allowToChangeInstallationDirectory":true}
   }
 }

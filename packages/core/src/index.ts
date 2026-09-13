@@ -1,4 +1,5 @@
-import type { NexoSettings, OAuthConfiguration, OfficeStationId } from "@nexo/shared";
+import { randomUUID } from "node:crypto";
+import type { NexoSettings,OAuthConfiguration,OfficeStationId } from "@nexo/shared";
 import { NexoDatabase } from "./database/db.js";
 import { AuditService } from "./audit/audit.js";
 import { ApprovalService } from "./permissions/approvals.js";
@@ -7,18 +8,19 @@ import { ToolRegistry } from "./tools/registry.js";
 import { OllamaProvider } from "./llm/ollama.js";
 import { AgentPlanner } from "./agent/planner.js";
 import { AgentEngine } from "./agent/engine.js";
-import { MemoryRepository, MemoryService } from "./memory/index.js";
+import { MemoryRepository,MemoryService } from "./memory/index.js";
 import { AutomationEngine } from "./automation/engine.js";
-import { defaultAllowedRoots, defaultDataDir } from "./shared/paths.js";
+import { defaultAllowedRoots,defaultDataDir } from "./shared/paths.js";
 import { startCoreServer } from "./server/server.js";
 import { createLogger } from "./shared/logger.js";
 import { BackgroundTaskService } from "./tasks/background.js";
 import { ChatHistoryService } from "./chat/history.js";
+import { ConversationService } from "./conversations/service.js";
 import { ConnectionService } from "./connections/service.js";
 import { DocumentService } from "./documents/service.js";
 import { DocumentAssistantService } from "./documents/assistant.js";
 import { DocumentConversationContext } from "./documents/conversation-context.js";
-import { MemorySecretStore, type OAuthHost, type SecretStore } from "./connections/types.js";
+import { MemorySecretStore,type OAuthHost,type SecretStore } from "./connections/types.js";
 import { EmailService } from "./email/service.js";
 import { CalendarService } from "./calendar/service.js";
 import { environment } from "./config/environment.js";
@@ -28,394 +30,57 @@ import { EmbeddingProvider } from "./rag/embeddings.js";
 import { SecurityPolicyService } from "./security/policy.js";
 import { LocalMetricsService } from "./observability/metrics.js";
 import { RetentionService } from "./privacy/retention.js";
-import { VisualEventBus, VisualRunRepository, VisualStreamingGate, VisualTaskReporter, visualMetadataForTool } from "./agent/visual-events/index.js";
+import { VisualEventBus,VisualRunRepository,VisualStreamingGate,VisualTaskReporter,visualMetadataForTool } from "./agent/visual-events/index.js";
+import { AgentPool } from "./agents/agent-pool.js";
+import { AgentScheduler,type ScheduledAgentRun } from "./runtime/agent-scheduler.js";
+import { ResourceManager } from "./runtime/resource-manager.js";
+import { createExecutionSignal } from "./runtime/execution-timeout.js";
+import { BrowserSessionManager } from "./browser/browser-session-manager.js";
 
-export type NexoCoreOptions = { dataDir?: string; secretStore?: SecretStore; oauthHost?: OAuthHost };
+export type NexoCoreOptions={dataDir?:string;secretStore?:SecretStore;oauthHost?:OAuthHost};
+export class NexoCore{
+  db:NexoDatabase;audit!:AuditService;approvals!:ApprovalService;permissions!:PermissionEngine;tools!:ToolRegistry;llm!:OllamaProvider;planner!:AgentPlanner;agent!:AgentEngine;agentRuntime!:AgentRuntime;security!:SecurityPolicyService;metrics!:LocalMetricsService;retention!:RetentionService;memory!:MemoryService;automation!:AutomationEngine;tasks!:BackgroundTaskService;chatHistory!:ChatHistoryService;conversations!:ConversationService;conversationContext=new ConversationContextBuilder();visualEvents!:VisualEventBus;connections!:ConnectionService;documents!:DocumentService;documentAssistant!:DocumentAssistantService;email!:EmailService;calendar!:CalendarService;agentPool!:AgentPool;scheduler!:AgentScheduler;resources!:ResourceManager;browserSessions!:BrowserSessionManager;
+  private settings!:NexoSettings;private chatControllers=new Map<string,AbortController>();private ollamaOnline?:boolean;private ollamaHealthTimer?:ReturnType<typeof setInterval>;readonly logger:ReturnType<typeof createLogger>;private readyPromise:Promise<void>;private readonly dataDir:string;private readonly secretStore:SecretStore;private readonly oauthHost?:OAuthHost;
+  constructor(options:string|NexoCoreOptions={}){const dataDir=typeof options==="string"?options:options.dataDir??defaultDataDir();this.dataDir=dataDir;this.secretStore=typeof options==="string"?new MemorySecretStore():options.secretStore??new MemorySecretStore();this.oauthHost=typeof options==="string"?undefined:options.oauthHost;this.logger=createLogger(dataDir);this.db=new NexoDatabase(dataDir);this.readyPromise=this.init();}
+  private async init(){await this.db.ready();this.metrics=new LocalMetricsService(this.db);this.settings=this.loadSettings();this.visualEvents=new VisualEventBus(new VisualRunRepository(this.db));this.visualEvents.subscribe(()=>this.metrics.record("pixel_office.events_total",1));this.audit=new AuditService(this.db,()=>this.settings.privateMode);this.approvals=new ApprovalService(this.db);this.permissions=new PermissionEngine(()=>this.settings);this.security=new SecurityPolicyService(()=>this.settings);this.connections=new ConnectionService(this.db,this.secretStore,this.oauthHost,()=>this.settings.oauth,()=>this.settings.connectionsEnabled&&!this.settings.privateMode);this.documents=new DocumentService(this.db,this.dataDir,this.settings.documentMaxSizeMb,new EmbeddingProvider(this.settings.ollamaUrl,this.settings.embeddingModel));this.retention=new RetentionService(this.db,this.documents);this.retention.purge(this.settings.dataRetentionDays);this.email=new EmailService(this.connections);this.calendar=new CalendarService(this.connections);const memoryRepo=new MemoryRepository(this.db);this.memory=new MemoryService(memoryRepo,()=>this.settings.memoryEnabled&&!this.settings.privateMode);
+    this.resources=new ResourceManager(this.settings.maxConcurrentLLMRequests,this.metrics);this.browserSessions=new BrowserSessionManager();this.tools=new ToolRegistry(this.memory,this.email,this.calendar,this.browserSessions);this.llm=new OllamaProvider(this.settings.ollamaUrl,this.settings.model,this.resources);this.documentAssistant=new DocumentAssistantService(this.documents,this.llm,this.metrics);this.planner=new AgentPlanner(this.llm,this.tools);this.agentRuntime=new AgentRuntime(this.db);this.agent=new AgentEngine(this.planner,this.tools,this.permissions,this.approvals,this.audit,this.connections,this.agentRuntime,this.security,this.metrics,this.resources);
+    this.tasks=new BackgroundTaskService(this.db,()=>this.settings.privateMode);this.tasks.subscribe(event=>this.metrics.record("assistant.ipc_events",1,{kind:event.kind}));this.tasks.recoverInterruptedTasks();this.conversations=new ConversationService(this.db);this.chatHistory=new ChatHistoryService(this.db);this.agentPool=new AgentPool();this.scheduler=new AgentScheduler(this.agentPool,this.metrics);for(const task of this.tasks.listActive())if(task.type==="assistant-chat")this.scheduler.restore(task);
+    this.automation=new AutomationEngine(this.db,command=>this.runAutomationCommand(command));if(!this.settings.privateMode)this.automation.start();void this.checkOllamaHealth();this.ollamaHealthTimer=setInterval(()=>void this.checkOllamaHealth(),45000);this.ollamaHealthTimer.unref?.();this.logger.info({model:this.settings.model},"Nexo Core initialized");}
+  async ready(){await this.readyPromise;}
+  private defaultSettings():NexoSettings{const env=environment();return{model:env.model,ollamaUrl:env.ollamaUrl,autonomy:"balanced",allowedRoots:defaultAllowedRoots(),privateMode:false,runInBackground:true,memoryEnabled:true,memoryAskBeforeSave:true,embeddingModel:env.embeddingModel,documentMaxSizeMb:env.documentMaxSizeMb,externalDataRetention:"local",connectionsEnabled:true,browserAutomationEnabled:true,fileWritesEnabled:true,requireApprovalForEmail:false,allowedDomains:[],dataRetentionDays:30,onboardingCompleted:false,ocrEnabled:false,executionTimeoutMinutes:null,maxConcurrentChatSessions:4,maxConcurrentLLMRequests:2,oauth:{googleClientId:"",microsoftClientId:"",microsoftTenant:env.microsoftTenant}};}
+  private loadSettings(){const defaults=this.defaultSettings(),saved=this.db.get<any>("SELECT value FROM settings WHERE key='app'");if(saved){try{const parsed=JSON.parse(saved.value) as Partial<NexoSettings>;const migrated={...defaults,...parsed,oauth:{...defaults.oauth,...(parsed.oauth??{})}};this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)",[JSON.stringify(migrated)]);return migrated;}catch{}}this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)",[JSON.stringify(defaults)]);return defaults;}
+  getSettings(){return structuredClone(this.settings);}
+  updateSettings(patch:Partial<NexoSettings>){const wasPrivate=this.settings.privateMode;this.settings={...this.settings,...patch,oauth:patch.oauth?{...this.settings.oauth,...patch.oauth}:this.settings.oauth};this.settings.maxConcurrentChatSessions=Math.max(1,Math.min(4,this.settings.maxConcurrentChatSessions));this.settings.maxConcurrentLLMRequests=Math.max(1,Math.min(4,this.settings.maxConcurrentLLMRequests));this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)",[JSON.stringify(this.settings)]);this.llm.setModel(this.settings.model);this.llm.setBaseUrl(this.settings.ollamaUrl);this.resources.setLlmLimit(this.settings.maxConcurrentLLMRequests);if(patch.dataRetentionDays!==undefined)this.retention.purge(this.settings.dataRetentionDays);if(!wasPrivate&&this.settings.privateMode)this.automation.stop();if(wasPrivate&&!this.settings.privateMode)this.automation.start();return this.getSettings();}
+  async chat(text:string){await this.ready();return this.agent.run(text);}
 
-export class NexoCore {
-  db: NexoDatabase;
-  audit!: AuditService;
-  approvals!: ApprovalService;
-  permissions!: PermissionEngine;
-  tools!: ToolRegistry;
-  llm!: OllamaProvider;
-  planner!: AgentPlanner;
-  agent!: AgentEngine;
-  agentRuntime!: AgentRuntime;
-  security!: SecurityPolicyService;
-  metrics!: LocalMetricsService;
-  retention!: RetentionService;
-  memory!: MemoryService;
-  automation!: AutomationEngine;
-  tasks!: BackgroundTaskService;
-  chatHistory!: ChatHistoryService;
-  conversationContext = new ConversationContextBuilder();
-  visualEvents!: VisualEventBus;
-  connections!: ConnectionService;
-  documents!: DocumentService;
-  documentAssistant!: DocumentAssistantService;
-  documentConversation!: DocumentConversationContext;
-  email!: EmailService;
-  calendar!: CalendarService;
-  private settings!: NexoSettings;
-  private chatControllers = new Map<string, AbortController>();
-  private ollamaOnline?: boolean;
-  private ollamaHealthTimer?: ReturnType<typeof setInterval>;
-  readonly logger: ReturnType<typeof createLogger>;
-  private readyPromise: Promise<void>;
+  async createConversation(title?:string){await this.ready();return this.conversations.createConversation(title);}
+  async listConversations(){await this.ready();return this.conversations.listConversations();}
+  async renameConversation(id:string,title:string){await this.ready();return this.conversations.renameConversation(id,title);}
+  async deleteConversation(id:string){await this.ready();this.scheduler.releaseConversation(id);return this.conversations.deleteConversation(id);}
+  async listChatMessages(conversationId?:string){await this.ready();return conversationId?this.conversations.getMessages(conversationId):this.chatHistory.list();}
 
-  private readonly dataDir: string;
-  private readonly secretStore: SecretStore;
-  private readonly oauthHost?: OAuthHost;
-  constructor(options: string | NexoCoreOptions = {}) {
-    const dataDir = typeof options === "string" ? options : options.dataDir ?? defaultDataDir();
-    this.dataDir = dataDir;
-    this.secretStore = typeof options === "string" ? new MemorySecretStore() : options.secretStore ?? new MemorySecretStore();
-    this.oauthHost = typeof options === "string" ? undefined : options.oauthHost;
-    this.logger = createLogger(dataDir);
-    this.db = new NexoDatabase(dataDir);
-    this.readyPromise = this.init();
-  }
+  async startChatTask(conversationOrText:string,textOrAttachments:string|string[]=[],attachmentIds:string[]=[]){await this.ready();const legacy=Array.isArray(textOrAttachments);const conversationId=legacy?this.conversations.defaultConversation().id:conversationOrText;const text=legacy?conversationOrText:textOrAttachments;const attachmentsInput=legacy?textOrAttachments:attachmentIds;this.conversations.ensureConversation(conversationId);const clean=text.trim();if(!clean)throw new Error("A mensagem não pode estar vazia.");const attachments=attachmentsInput.map(id=>this.documents.get(id)).filter(Boolean);if(attachmentsInput.length!==attachments.length)throw new Error("Um ou mais anexos não estão disponíveis.");if(attachments.some(document=>document!.status!=="ready"))throw new Error("Aguarde a indexação dos documentos antes de perguntar sobre eles.");const documentContext=new DocumentConversationContext(this.db,conversationId);const resolvedDocumentIds=this.settings.privateMode?attachmentsInput:documentContext.resolve(attachmentsInput,clean);const taskId=randomUUID();const assignment=this.scheduler.assignAgent(conversationId,taskId,this.settings.maxConcurrentChatSessions);let task;try{task=this.tasks.create("assistant-chat",{text:clean,attachmentIds:attachmentsInput,resolvedDocumentIds},{conversationId,agentId:assignment.agentId,runId:assignment.runId},taskId);}catch(error){this.scheduler.cancelRun(taskId);throw error;}this.emitVisual(assignment,{type:"run.created",state:"interpreting",label:"Entendendo pedido",stationId:"central-desk",severity:"info"});const context=!this.settings.privateMode?this.conversationContext.build(this.conversations.getMessages(conversationId)):[];if(!this.settings.privateMode)this.conversations.addMessage(conversationId,"user",clean,task.id,attachmentsInput);void this.executeChatTask(task.id,assignment,clean,resolvedDocumentIds,context);return task;}
 
-  private async init() {
-    await this.db.ready();
-    this.metrics = new LocalMetricsService(this.db);
-    this.visualEvents = new VisualEventBus(new VisualRunRepository(this.db));
-    this.visualEvents.subscribe(()=>this.metrics.record("pixel_office.events_total",1));
-    this.settings = this.loadSettings();
-    this.audit = new AuditService(this.db, () => this.settings.privateMode);
-    this.approvals = new ApprovalService(this.db);
-    this.permissions = new PermissionEngine(() => this.settings);
-    this.security = new SecurityPolicyService(() => this.settings);
-    this.connections = new ConnectionService(this.db, this.secretStore, this.oauthHost, () => this.settings.oauth, () => this.settings.connectionsEnabled && !this.settings.privateMode);
-    this.documents = new DocumentService(this.db, this.dataDir, this.settings.documentMaxSizeMb, new EmbeddingProvider(this.settings.ollamaUrl, this.settings.embeddingModel));
-    this.documentConversation = new DocumentConversationContext(this.db);
-    this.retention = new RetentionService(this.db, this.documents);
-    this.retention.purge(this.settings.dataRetentionDays);
-    this.email = new EmailService(this.connections);
-    this.calendar = new CalendarService(this.connections);
+  private async executeChatTask(taskId:string,assignment:ScheduledAgentRun,text:string,documentIds:string[]=[],context:import("./llm/provider.js").LLMMessage[]=[]){const controller=new AbortController(),execution=createExecutionSignal(controller.signal,this.settings.executionTimeoutMinutes),responseStreaming=new VisualStreamingGate();let tokensReceived=0;this.chatControllers.set(taskId,controller);this.tasks.markRunning(taskId);const onToken=(token:string,stationId:OfficeStationId="central-desk")=>{tokensReceived++;this.tasks.appendProgress(taskId,token);if(responseStreaming.start())this.emitVisual(assignment,{type:"response.streaming",state:"responding",label:"Gerando resposta",stationId,severity:"info"});};try{const reply=documentIds.length?await this.documentAssistant.process(documentIds,text,{signal:execution.signal,onStatus:message=>{this.tasks.setStatus(taskId,message);this.emitVisual(assignment,{type:"tool.progress",state:"executing-tool",label:message,stationId:"document-station",severity:"info"});},onToken:token=>onToken(token,"document-station")}):await this.agent.run(text,{visualContext:{visualRunId:assignment.runId,taskId,conversationId:assignment.conversationId,agentId:assignment.agentId},onStatus:message=>{this.tasks.setStatus(taskId,message);const planning=/plano|classific/i.test(message);this.emitVisual(assignment,{type:planning?"run.planning":"tool.progress",state:planning?"planning":"executing-tool",label:message,stationId:"central-desk",severity:"info"});},onToken:token=>onToken(token),onReplaceText:output=>this.tasks.replaceProgress(taskId,output),signal:execution.signal,onToolStarted:(toolName,label)=>{const visual=visualMetadataForTool(toolName);this.emitVisual(assignment,{type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},onToolCompleted:(toolName,ok)=>{const visual=visualMetadataForTool(toolName);this.emitVisual(assignment,{type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error"});},onApprovalRequested:(approvalId,toolName)=>this.emitVisual(assignment,{type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"})},context);if(execution.signal.aborted)throw execution.signal.reason??new DOMException("Execução interrompida","AbortError");if(!this.settings.privateMode){const suffix=reply.approvalId?" Abra Aprovações para autorizar.":"";this.conversations.addMessage(assignment.conversationId,"assistant",reply.text+suffix,taskId);}if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:assignment.runId,taskId});this.tasks.markWaitingApproval(taskId,reply.approvalId);this.scheduler.waitingApproval(taskId);return;}this.tasks.complete(taskId,reply);this.emitVisual(assignment,{type:"run.completed",state:"success",label:"Concluído",stationId:documentIds.length?"document-station":"central-desk",severity:"success"});this.scheduler.completeRun(taskId,true);}catch(error){if(this.tasks.get(taskId)?.status==="cancelled")return;const reason=execution.timedOut()?new Error(`Tempo máximo de execução atingido (${this.settings.executionTimeoutMinutes} minuto(s)).`):error;this.tasks.fail(taskId,reason);this.emitVisual(assignment,{type:"run.failed",state:"error",label:execution.timedOut()?"Tempo limite atingido":"Precisa de atenção",stationId:documentIds.length?"document-station":"central-desk",severity:"error"});this.scheduler.completeRun(taskId,false);if(!this.settings.privateMode)this.conversations.addMessage(assignment.conversationId,"assistant",`Falha ao processar: ${reason instanceof Error?reason.message:String(reason)}`,taskId);}finally{this.metrics.record("assistant.tokens_received",tokensReceived,{taskType:"assistant-chat",agent:assignment.agentId});execution.dispose();this.chatControllers.delete(taskId);}}
 
-    const memoryRepo = new MemoryRepository(this.db);
-    this.memory = new MemoryService(
-      memoryRepo,
-      () => this.settings.memoryEnabled && !this.settings.privateMode
-    );
+  async cancelTask(id:string){await this.ready();const task=this.tasks.get(id);if(!task||task.type!=="assistant-chat")return false;this.chatControllers.get(id)?.abort(new DOMException("Cancelada pelo usuário.","AbortError"));const pending=this.db.get<{id:string;checkpoint_id:string|null}>("SELECT id,checkpoint_id FROM approvals WHERE task_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1",[id]);if(pending){this.approvals.resolve(pending.id,false);if(pending.checkpoint_id)this.agentRuntime.cancelCheckpoint(pending.checkpoint_id,"Cancelada pelo usuário.");}const cancelled=this.tasks.cancel(id);if(cancelled){const assignment=this.assignmentForTask(task);if(assignment)this.emitVisual(assignment,{type:"run.cancelled",state:"cancelled",label:"Cancelado pelo usuário",stationId:"central-desk",severity:"warning"});this.scheduler.cancelRun(id);}return cancelled;}
 
-    this.tools = new ToolRegistry(this.memory, this.email, this.calendar);
-    this.llm = new OllamaProvider(this.settings.ollamaUrl, this.settings.model);
-    this.documentAssistant = new DocumentAssistantService(this.documents, this.llm, this.metrics);
-    this.planner = new AgentPlanner(this.llm, this.tools);
-    this.agentRuntime = new AgentRuntime(this.db);
-    this.agent = new AgentEngine(this.planner, this.tools, this.permissions, this.approvals, this.audit, this.connections, this.agentRuntime, this.security, this.metrics);
-    this.tasks = new BackgroundTaskService(this.db, () => this.settings.privateMode);
-    this.tasks.subscribe(event=>this.metrics.record("assistant.ipc_events",1,{kind:event.kind}));
-    this.tasks.recoverInterruptedTasks();
-    this.chatHistory = new ChatHistoryService(this.db);
-    this.automation = new AutomationEngine(this.db, command => this.runAutomationCommand(command));
-    if (!this.settings.privateMode) this.automation.start();
-    void this.checkOllamaHealth();
-    this.ollamaHealthTimer=setInterval(()=>void this.checkOllamaHealth(),45000);this.ollamaHealthTimer.unref?.();
-    this.logger.info({ model: this.settings.model }, "Nexo Core initialized");
-  }
+  getOAuthConfiguration(){const oauth=this.settings.oauth,env=environment();return{...oauth,googleConfigured:Boolean(oauth.googleClientId.trim()||env.googleClientId),microsoftConfigured:Boolean(oauth.microsoftClientId.trim()||env.microsoftClientId)};}
+  updateOAuthConfiguration(configuration:OAuthConfiguration){const next={googleClientId:configuration.googleClientId.trim(),microsoftClientId:configuration.microsoftClientId.trim(),microsoftTenant:configuration.microsoftTenant.trim()||"common"};this.updateSettings({oauth:next});return this.getOAuthConfiguration();}
+  async startDocumentImport(sourcePath:string){await this.ready();if(this.settings.privateMode)throw new Error("A importação de documentos fica desativada no modo privado para evitar retenção de conteúdo.");const task=this.tasks.create("document-import",{source:"trusted-picker"});const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,agentId:"agent-1",stationId:"document-station"});visual.start("Importando documento","document-station");void(async()=>{this.tasks.markRunning(task.id);this.tasks.setStatus(task.id,"Copiando e extraindo documento…");visual.progress("Copiando e extraindo documento…","document-station");try{const document=await this.documents.importFromTrustedPicker(sourcePath);this.tasks.setStatus(task.id,"Documento indexado.");this.tasks.complete(task.id,document);visual.complete("Documento indexado");}catch(error){this.tasks.fail(task.id,error);visual.fail("Falha ao importar documento");}})();return task;}
+  async editDocument(documentId:string,plan:unknown){await this.ready();const task=this.tasks.create("document-edit",{documentId});const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,agentId:"agent-1",stationId:"document-station"});visual.start("Editando documento","document-station");void(async()=>{this.tasks.markRunning(task.id);this.tasks.setStatus(task.id,"Aplicando alterações propostas em nova versão…");visual.progress("Aplicando alterações…","document-station");try{const result=await this.documents.applyEdit(documentId,plan);this.tasks.complete(task.id,result);visual.complete("Documento atualizado");}catch(error){this.tasks.fail(task.id,error);visual.fail("Falha ao editar documento");}})();return task;}
+  async previewDocument(documentId:string){await this.ready();return this.documents.trustedPath(documentId);}async documentPreviewData(documentId:string){await this.ready();return this.documents.previewData(documentId);}async exportDocument(documentId:string,destination:string){await this.ready();return this.documents.export(documentId,destination);}async listTasks(limit=50){await this.ready();return this.tasks.list(limit);}async listActiveTasks(){await this.ready();return this.tasks.listActive();}async getTask(id:string){await this.ready();return this.tasks.get(id);}
+  addMemory(key:string,value:string,category?:string){return this.memory.save(key,value,category);}clearMemory(){this.memory.clear();this.audit.record("memory_clear","SENSITIVE","success",{});return{ok:true};}
 
-  async ready() {
-    await this.readyPromise;
-  }
+  async approve(id:string,approved:boolean){await this.ready();const row=this.approvals.resolve(id,approved);if(!row)return{text:"Aprovação não encontrada."};const taskId=row.task_id as string|undefined,task=taskId?this.tasks.get(taskId):undefined,assignment=task?this.assignmentForTask(task):undefined,runId=assignment?.runId??row.visual_run_id??taskId??row.agent_run_id??id,agentId=assignment?.agentId??task?.agentId??"agent-1",conversationId=assignment?.conversationId??task?.conversationId;const emit=(draft:any)=>this.visualEvents.emit({...draft,runId,agentId,conversationId,taskId});if(!approved){if(row.checkpoint_id)this.agentRuntime.cancelCheckpoint(row.checkpoint_id);if(taskId){this.tasks.cancel(taskId);this.scheduler.cancelRun(taskId);}emit({type:"approval.resolved",state:"cancelled",label:"Aprovação rejeitada",stationId:"approval-gate",approvalId:id,severity:"warning"});emit({type:"run.cancelled",state:"cancelled",label:"Cancelado após rejeição",stationId:"approval-gate",approvalId:id,severity:"warning"});return{text:"Ação cancelada."};}
+    emit({type:"approval.resolved",state:"walking",label:"Aprovação concedida",stationId:visualMetadataForTool(row.tool_name).stationId,approvalId:id,severity:"success"});if(row.checkpoint_id){if(!taskId)return this.agent.resumeApproval(row.checkpoint_id);const scheduled=this.scheduler.resume(taskId)??(assignment as ScheduledAgentRun|undefined);if(!scheduled)throw new Error("Execução associada à aprovação não está disponível.");const controller=new AbortController(),execution=createExecutionSignal(controller.signal,this.settings.executionTimeoutMinutes);this.chatControllers.set(taskId,controller);this.tasks.markRunning(taskId);const hooks={visualContext:{visualRunId:scheduled.runId,taskId,conversationId:scheduled.conversationId,agentId:scheduled.agentId},signal:execution.signal,onStatus:(message:string)=>this.tasks.setStatus(taskId,message),onReplaceText:(text:string)=>this.tasks.replaceProgress(taskId,text),onToolStarted:(toolName:string,label:string)=>{const visual=visualMetadataForTool(toolName);this.emitVisual(scheduled,{type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},onToolCompleted:(toolName:string,ok:boolean)=>{const visual=visualMetadataForTool(toolName);this.emitVisual(scheduled,{type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error"});},onApprovalRequested:(approvalId:string,toolName:string)=>this.emitVisual(scheduled,{type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"})};try{const reply=await this.agent.resumeApproval(row.checkpoint_id,hooks);if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:scheduled.runId,taskId});this.tasks.markWaitingApproval(taskId,reply.approvalId);this.scheduler.waitingApproval(taskId);}else if(!execution.signal.aborted){this.tasks.complete(taskId,reply);if(!this.settings.privateMode&&conversationId)this.conversations.addMessage(conversationId,"assistant",reply.text,taskId);this.emitVisual(scheduled,{type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success"});this.scheduler.completeRun(taskId,true);}return reply;}catch(error){this.tasks.fail(taskId,error);this.emitVisual(scheduled,{type:"run.failed",state:"error",label:"Precisa de atenção",stationId:"central-desk",severity:"error"});this.scheduler.completeRun(taskId,false);throw error;}finally{execution.dispose();this.chatControllers.delete(taskId);}}
+    return this.agent.execute(row.tool_name,JSON.parse(row.input_json),{runId,taskId,conversationId,agentId});}
 
-  private defaultSettings(): NexoSettings {
-    const env = environment();
-    return {
-      model: env.model,
-      ollamaUrl: env.ollamaUrl,
-      autonomy: "balanced",
-      allowedRoots: defaultAllowedRoots(),
-      privateMode: false,
-      runInBackground: true,
-      memoryEnabled: true,
-      memoryAskBeforeSave: true,
-      embeddingModel: env.embeddingModel,
-      documentMaxSizeMb: env.documentMaxSizeMb,
-      externalDataRetention: "local",
-      connectionsEnabled: true,
-      browserAutomationEnabled: true,
-      fileWritesEnabled: true,
-      requireApprovalForEmail: false,
-      allowedDomains: [],
-      dataRetentionDays: 30,
-      onboardingCompleted: false,
-      ocrEnabled: false,
-      oauth: {
-        googleClientId: "",
-        microsoftClientId: "",
-        microsoftTenant: env.microsoftTenant
-      }
-    };
-  }
-
-  private loadSettings(): NexoSettings {
-    const defaults = this.defaultSettings();
-    const saved = this.db.get<any>("SELECT value FROM settings WHERE key='app'");
-
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved.value) as Partial<NexoSettings>;
-        const migrated = { ...defaults, ...parsed };
-        this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)", [JSON.stringify(migrated)]);
-        return migrated;
-      } catch {
-        // Recria as configurações abaixo.
-      }
-    }
-
-    this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)", [JSON.stringify(defaults)]);
-    return defaults;
-  }
-
-  getSettings() {
-    return structuredClone(this.settings);
-  }
-
-  updateSettings(patch: Partial<NexoSettings>) {
-    const wasPrivate = this.settings.privateMode;
-    this.settings = { ...this.settings, ...patch };
-    this.db.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)", [JSON.stringify(this.settings)]);
-    this.llm.setModel(this.settings.model);
-    this.llm.setBaseUrl(this.settings.ollamaUrl);
-    if (patch.dataRetentionDays !== undefined) this.retention.purge(this.settings.dataRetentionDays);
-
-    if (!wasPrivate && this.settings.privateMode) this.automation.stop();
-    if (wasPrivate && !this.settings.privateMode) this.automation.start();
-    return this.getSettings();
-  }
-
-  async chat(text: string) {
-    await this.ready();
-    return this.agent.run(text);
-  }
-
-  async startChatTask(text: string, attachmentIds: string[] = []) {
-    await this.ready();
-    const clean = text.trim();
-    if (!clean) throw new Error("A mensagem não pode estar vazia.");
-    const attachments = attachmentIds.map(id => this.documents.get(id)).filter(Boolean);
-    if (attachmentIds.length !== attachments.length) throw new Error("Um ou mais anexos não estão disponíveis.");
-    if (attachments.some(document => document!.status !== "ready")) throw new Error("Aguarde a indexação dos documentos antes de perguntar sobre eles.");
-
-    const resolvedDocumentIds = this.settings.privateMode
-      ? attachmentIds
-      : this.documentConversation.resolve(attachmentIds, clean);
-    const task = this.tasks.create("assistant-chat", { text: clean, attachmentIds, resolvedDocumentIds });
-    this.visualEvents.emit({runId:task.id,type:"run.created",state:"interpreting",label:"Entendendo pedido",stationId:"central-desk",severity:"info"});
-    const context = !this.settings.privateMode ? this.conversationContext.build(this.chatHistory.list()) : [];
-    if (!this.settings.privateMode) {
-      const message = this.chatHistory.add("user", clean, task.id);
-      if (attachmentIds.length) this.chatHistory.attachDocuments(message.id, attachmentIds);
-    }
-    void this.executeChatTask(task.id, clean, resolvedDocumentIds, context);
-    return task;
-  }
-
-  private async executeChatTask(taskId: string, text: string, documentIds: string[] = [], context: import("./llm/provider.js").LLMMessage[] = []) {
-    const controller = new AbortController();
-    const responseStreaming=new VisualStreamingGate();
-    let tokensReceived=0;
-    this.chatControllers.set(taskId, controller);
-    this.tasks.markRunning(taskId);
-
-    const onToken = (token: string, stationId: OfficeStationId = "central-desk") => {
-      tokensReceived+=1;
-      this.tasks.appendProgress(taskId, token);
-      if(responseStreaming.start())this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId,severity:"info",taskId});
-    };
-
-    try {
-      const reply = documentIds.length
-        ? await this.documentAssistant.process(documentIds, text, {
-            signal: controller.signal,
-            onStatus: message => {
-              this.tasks.setStatus(taskId, message);
-              this.visualEvents.emit({runId:taskId,type:"tool.progress",state:"executing-tool",label:message,stationId:"document-station",severity:"info",taskId});
-            },
-            onToken: token => onToken(token, "document-station")
-          })
-        : await this.agent.run(text, {
-        visualContext:{visualRunId:taskId,taskId},
-        onStatus: message => { this.tasks.setStatus(taskId, message); const planning=/plano|classific/i.test(message); this.visualEvents.emit({runId:taskId,type:planning?"run.planning":"tool.progress",state:planning?"planning":"executing-tool",label:message,stationId:"central-desk",severity:"info"}); },
-        onToken: token => onToken(token),
-        onReplaceText: output => this.tasks.replaceProgress(taskId, output),
-        signal: controller.signal,
-        onToolStarted:(toolName,label)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},
-        onToolCompleted:(toolName,ok)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error"});},
-        onApprovalRequested:(approvalId,toolName)=>this.visualEvents.emit({runId:taskId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning",taskId})
-      }, context);
-
-      if (controller.signal.aborted) return;
-
-      if (!this.settings.privateMode) {
-        const suffix = reply.approvalId ? " Abra Aprovações para autorizar." : "";
-        this.chatHistory.add("assistant", reply.text + suffix, taskId);
-      }
-      if (reply.approvalId) { this.approvals.linkVisualContext(reply.approvalId,{visualRunId:taskId,taskId}); this.tasks.markWaitingApproval(taskId,reply.approvalId); return; }
-      this.tasks.complete(taskId, reply);
-      this.visualEvents.emit({runId:taskId,type:"run.completed",state:"success",label:"Concluído",stationId:documentIds.length?"document-station":"central-desk",severity:"success"});
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      this.tasks.fail(taskId, error);
-      this.visualEvents.emit({runId:taskId,type:"run.failed",state:"error",label:"Precisa de atenção",stationId:documentIds.length?"document-station":"central-desk",severity:"error"});
-      if (!this.settings.privateMode) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.chatHistory.add("assistant", `Falha ao processar: ${message}`, taskId);
-      }
-    } finally {
-      this.metrics.record("assistant.tokens_received",tokensReceived,{taskType:"assistant-chat"});
-      this.chatControllers.delete(taskId);
-    }
-  }
-
-  async cancelTask(id: string) {
-    await this.ready();
-    const task = this.tasks.get(id);
-    if (!task || task.type !== "assistant-chat") return false;
-    this.chatControllers.get(id)?.abort(new DOMException("Cancelada pelo usuário.", "AbortError"));
-    const cancelled=this.tasks.cancel(id);if(cancelled)this.visualEvents.emit({runId:id,type:"run.cancelled",state:"cancelled",label:"Cancelado pelo usuário",stationId:"central-desk",severity:"warning"});return cancelled;
-  }
-
-  getOAuthConfiguration() {
-    const oauth = this.settings.oauth;
-    const env = environment();
-    return {
-      ...oauth,
-      googleConfigured: Boolean(oauth.googleClientId.trim() || env.googleClientId),
-      microsoftConfigured: Boolean(oauth.microsoftClientId.trim() || env.microsoftClientId)
-    };
-  }
-
-  updateOAuthConfiguration(configuration: OAuthConfiguration) {
-    const next: OAuthConfiguration = {
-      googleClientId: configuration.googleClientId.trim(),
-      microsoftClientId: configuration.microsoftClientId.trim(),
-      microsoftTenant: configuration.microsoftTenant.trim() || "common"
-    };
-    this.updateSettings({ oauth: next });
-    return this.getOAuthConfiguration();
-  }
-
-  async startDocumentImport(sourcePath: string) {
-    await this.ready();
-    if (this.settings.privateMode) throw new Error("A importação de documentos fica desativada no modo privado para evitar retenção de conteúdo.");
-    const task = this.tasks.create("document-import", { source: "trusted-picker" });
-    const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,stationId:"document-station"});visual.start("Importando documento","document-station");
-    void (async () => { this.tasks.markRunning(task.id); this.tasks.setStatus(task.id, "Copiando e extraindo documento…");visual.progress("Copiando e extraindo documento…","document-station");try { const document = await this.documents.importFromTrustedPicker(sourcePath); this.tasks.setStatus(task.id, "Documento indexado.");this.tasks.complete(task.id, document);visual.complete("Documento indexado"); } catch (error) { this.tasks.fail(task.id, error);visual.fail("Falha ao importar documento"); } })();
-    return task;
-  }
-
-  async editDocument(documentId: string, plan: unknown) {
-    await this.ready();
-    const task = this.tasks.create("document-edit", { documentId });
-    const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,stationId:"document-station"});visual.start("Editando documento","document-station");
-    void (async () => { this.tasks.markRunning(task.id); this.tasks.setStatus(task.id, "Aplicando alterações propostas em nova versão…");visual.progress("Aplicando alterações…","document-station");try { const result = await this.documents.applyEdit(documentId, plan);this.tasks.complete(task.id, result);visual.complete("Documento atualizado"); } catch (error) { this.tasks.fail(task.id, error);visual.fail("Falha ao editar documento"); } })();
-    return task;
-  }
-
-  async previewDocument(documentId: string) { await this.ready(); return this.documents.trustedPath(documentId); }
-  async documentPreviewData(documentId: string) { await this.ready(); return this.documents.previewData(documentId); }
-  async exportDocument(documentId: string, destination: string) { await this.ready(); return this.documents.export(documentId, destination); }
-
-  async listChatMessages() {
-    await this.ready();
-    return this.chatHistory.list();
-  }
-
-  async listTasks(limit = 50) {
-    await this.ready();
-    return this.tasks.list(limit);
-  }
-
-  async listActiveTasks() {
-    await this.ready();
-    return this.tasks.listActive();
-  }
-
-  async getTask(id: string) {
-    await this.ready();
-    return this.tasks.get(id);
-  }
-
-  addMemory(key: string, value: string, category?: string) {
-    return this.memory.save(key, value, category);
-  }
-
-  clearMemory() {
-    this.memory.clear();
-    this.audit.record("memory_clear", "SENSITIVE", "success", {});
-    return { ok: true };
-  }
-
-  async approve(id: string, approved: boolean) {
-    await this.ready();
-    const row = this.approvals.resolve(id, approved);
-    if (!row) return { text: "Aprovação não encontrada." };
-    const taskId=row.task_id as string|undefined;
-    const runId=row.visual_run_id??taskId??row.agent_run_id??id;
-    if (!approved) {
-      if (row.checkpoint_id) this.agentRuntime.cancelCheckpoint(row.checkpoint_id);
-      if(taskId)this.tasks.cancel(taskId);
-      this.visualEvents.emit({runId,type:"approval.resolved",state:"cancelled",label:"Aprovação rejeitada",stationId:"approval-gate",approvalId:id,severity:"warning",taskId});
-      this.visualEvents.emit({runId,type:"run.cancelled",state:"cancelled",label:"Cancelado após rejeição",stationId:"approval-gate",approvalId:id,severity:"warning",taskId});
-      return { text: "Ação cancelada." };
-    }
-    this.visualEvents.emit({runId,type:"approval.resolved",state:"walking",label:"Aprovação concedida",stationId:visualMetadataForTool(row.tool_name).stationId,approvalId:id,severity:"success",taskId});
-    if (row.checkpoint_id) {
-      const controller=new AbortController(); if(taskId){this.chatControllers.set(taskId,controller);this.tasks.markRunning(taskId);}
-      const hooks=taskId?{visualContext:{visualRunId:runId,taskId},signal:controller.signal,onStatus:(message:string)=>this.tasks.setStatus(taskId,message),onReplaceText:(text:string)=>this.tasks.replaceProgress(taskId,text),onToolStarted:(toolName:string,label:string)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info",taskId});},onToolCompleted:(toolName:string,ok:boolean)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId,type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId:visual.stationId,severity:ok?"success":"error",taskId});},onApprovalRequested:(approvalId:string,toolName:string)=>this.visualEvents.emit({runId,type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning",taskId})}:{};
-      try{const reply=await this.agent.resumeApproval(row.checkpoint_id,hooks);if(taskId){if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:runId,taskId});this.tasks.markWaitingApproval(taskId,reply.approvalId);}else if(!controller.signal.aborted){this.tasks.complete(taskId,reply);this.visualEvents.emit({runId,type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success",taskId});}}return reply;}finally{if(taskId)this.chatControllers.delete(taskId);}
-    }
-    return this.agent.execute(row.tool_name, JSON.parse(row.input_json));
-  }
-
-  async status() {
-    await this.ready();
-    return {
-      llm: await this.llm.health(),
-      models: await this.llm.models(),
-      settings: this.getSettings(),
-      tools: this.tools.list(),
-      metrics: this.metrics.snapshot()
-    };
-  }
-
-  private async checkOllamaHealth(){const health=await this.llm.health().catch(()=>({ok:false,detail:"Ollama indisponível"}));if(this.ollamaOnline===health.ok)return;this.ollamaOnline=health.ok;this.visualEvents.emit({runId:"agent-health",type:health.ok?"agent.online":"agent.offline",state:health.ok?"idle":"offline",label:health.ok?"Ollama conectado":"Ollama offline",stationId:health.ok?"central-desk":"rest-area",severity:health.ok?"success":"error"});}
-
-  private async runAutomationCommand(command:string){
-    const task=this.tasks.create("automation-run",{source:"automation"});
-    const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,stationId:"central-desk"});
-    this.tasks.markRunning(task.id);visual.start("Executando automação");
-    try{
-      const reply=await this.agent.run(command,{
-        visualContext:{visualRunId:task.id,taskId:task.id},
-        onStatus:message=>{this.tasks.setStatus(task.id,message);visual.progress(message);},
-        onToken:token=>this.tasks.appendProgress(task.id,token),
-        onReplaceText:text=>this.tasks.replaceProgress(task.id,text),
-        onToolStarted:(toolName,label)=>{const metadata=visualMetadataForTool(toolName);visual.toolStarted(toolName,metadata.activityLabel||label,metadata.stationId);},
-        onToolCompleted:(toolName,ok)=>{const metadata=visualMetadataForTool(toolName);visual.toolCompleted(toolName,ok,metadata.stationId);},
-        onApprovalRequested:(approvalId,toolName)=>visual.waitingApproval(approvalId,toolName)
-      });
-      if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:task.id,taskId:task.id});this.tasks.markWaitingApproval(task.id,reply.approvalId);}else{this.tasks.complete(task.id,reply);visual.complete("Automação concluída");}
-      return reply;
-    }catch(error){this.tasks.fail(task.id,error);visual.fail("Falha na automação");throw error;}
-  }
-
-  backup() {
-    return this.db.backup();
-  }
-
-  shutdown() {
-    if(this.ollamaHealthTimer)clearInterval(this.ollamaHealthTimer);
-    this.automation.stop();
-    this.logger.info("Nexo Core stopped");
-  }
+  async status(){await this.ready();return{llm:await this.llm.health(),models:await this.llm.models(),settings:this.getSettings(),tools:this.tools.list(),metrics:this.metrics.snapshot(),agents:this.agentPool.snapshot(),resources:this.resources.snapshot()};}
+  private async checkOllamaHealth(){const health=await this.llm.health().catch(()=>({ok:false,detail:"Ollama indisponível"}));if(this.ollamaOnline===health.ok)return;this.ollamaOnline=health.ok;this.visualEvents.emit({runId:"agent-health",agentId:"agent-1",type:health.ok?"agent.online":"agent.offline",state:health.ok?"idle":"offline",label:health.ok?"Ollama conectado":"Ollama offline",stationId:health.ok?"central-desk":"rest-area",severity:health.ok?"success":"error"});}
+  private async runAutomationCommand(command:string){const task=this.tasks.create("automation-run",{source:"automation"});const visual=new VisualTaskReporter(this.visualEvents,{runId:task.id,taskId:task.id,agentId:"agent-1",stationId:"central-desk"});this.tasks.markRunning(task.id);visual.start("Executando automação");try{const reply=await this.agent.run(command,{visualContext:{visualRunId:task.id,taskId:task.id,agentId:"agent-1"},onStatus:message=>{this.tasks.setStatus(task.id,message);visual.progress(message);},onToken:token=>this.tasks.appendProgress(task.id,token),onReplaceText:text=>this.tasks.replaceProgress(task.id,text),onToolStarted:(toolName,label)=>{const metadata=visualMetadataForTool(toolName);visual.toolStarted(toolName,metadata.activityLabel||label,metadata.stationId);},onToolCompleted:(toolName,ok)=>{const metadata=visualMetadataForTool(toolName);visual.toolCompleted(toolName,ok,metadata.stationId);},onApprovalRequested:(approvalId,toolName)=>visual.waitingApproval(approvalId,toolName)});if(reply.approvalId){this.approvals.linkVisualContext(reply.approvalId,{visualRunId:task.id,taskId:task.id});this.tasks.markWaitingApproval(task.id,reply.approvalId);}else{this.tasks.complete(task.id,reply);visual.complete("Automação concluída");}return reply;}catch(error){this.tasks.fail(task.id,error);visual.fail("Falha na automação");throw error;}}
+  private emitVisual(assignment:ScheduledAgentRun,draft:Omit<Parameters<VisualEventBus["emit"]>[0],"runId"|"agentId"|"conversationId"|"taskId">){return this.visualEvents.emit({...draft,runId:assignment.runId,agentId:assignment.agentId,conversationId:assignment.conversationId,taskId:assignment.taskId});}
+  private assignmentForTask(task:{id:string;conversationId?:string;agentId?:string;runId?:string;startedAt?:string;createdAt:string}):ScheduledAgentRun|undefined{return this.scheduler.getByTask(task.id)??(task.conversationId&&task.agentId&&task.runId?{taskId:task.id,conversationId:task.conversationId,agentId:task.agentId,runId:task.runId,startedAt:task.startedAt??task.createdAt,status:"running"}:undefined);}
+  backup(){return this.db.backup();}shutdown(){if(this.ollamaHealthTimer)clearInterval(this.ollamaHealthTimer);this.automation.stop();void this.browserSessions.closeAll();this.logger.info("Nexo Core stopped");}
 }
-
-export { startCoreServer } from "./server/server.js";
-export * from "./permissions/policy.js";
-export * from "./connections/types.js";
+export { startCoreServer } from "./server/server.js";export * from "./permissions/policy.js";export * from "./connections/types.js";export * from "./conversations/service.js";export * from "./agents/agent-pool.js";export * from "./runtime/agent-scheduler.js";export * from "./runtime/resource-manager.js";

@@ -1,15 +1,3 @@
-import type { AgentVisualEvent,OfficeStationId } from "@nexo/shared";
-import type { VisualEventBus } from "./event-bus.js";
-type Context={runId:string;taskId?:string;agentRunId?:string;stationId?:OfficeStationId};
-export class VisualTaskReporter{
-  constructor(private bus:VisualEventBus,private context:Context){}
-  private emit(event:Omit<Parameters<VisualEventBus["emit"]>[0],"runId"|"taskId"|"agentRunId">){return this.bus.emit({...event,...this.context});}
-  start(label:string,stationId=this.context.stationId??"central-desk"){return this.emit({type:"run.created",state:"interpreting",label,stationId,severity:"info"});}
-  progress(label:string,stationId=this.context.stationId??"central-desk"){return this.emit({type:"tool.progress",state:"executing-tool",label,stationId,severity:"info"});}
-  toolStarted(toolName:string,label:string,stationId:OfficeStationId){return this.emit({type:"tool.started",state:"walking",label,toolName,stationId,severity:"info"});}
-  toolCompleted(toolName:string,ok:boolean,stationId:OfficeStationId){return this.emit({type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId,severity:ok?"success":"error"});}
-  waitingApproval(approvalId:string,toolName:string){return this.emit({type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"});}
-  complete(label="Concluído"){return this.emit({type:"run.completed",state:"success",label,stationId:"central-desk",severity:"success"});}
-  fail(label="Precisa de atenção"){return this.emit({type:"run.failed",state:"error",label,stationId:"central-desk",severity:"error"});}
-  cancel(label="Cancelado"){return this.emit({type:"run.cancelled",state:"cancelled",label,stationId:"central-desk",severity:"warning"});}
-}
+import type { OfficeStationId } from "@nexo/shared";import type { VisualEventBus } from "./event-bus.js";
+type Context={runId:string;taskId?:string;agentRunId?:string;agentId?:string;conversationId?:string;stationId?:OfficeStationId};
+export class VisualTaskReporter{constructor(private bus:VisualEventBus,private context:Context){}private emit(event:Omit<Parameters<VisualEventBus["emit"]>[0],"runId"|"taskId"|"agentRunId"|"agentId"|"conversationId">){return this.bus.emit({...this.context,...event});}start(label:string,stationId=this.context.stationId??"central-desk"){return this.emit({type:"run.created",state:"interpreting",label,stationId,severity:"info"});}progress(label:string,stationId=this.context.stationId??"central-desk"){return this.emit({type:"tool.progress",state:"executing-tool",label,stationId,severity:"info"});}toolStarted(toolName:string,label:string,stationId:OfficeStationId){return this.emit({type:"tool.started",state:"walking",label,toolName,stationId,severity:"info"});}toolCompleted(toolName:string,ok:boolean,stationId:OfficeStationId){return this.emit({type:"tool.completed",state:ok?"success":"error",label:ok?"Etapa concluída":"Falha na etapa",toolName,stationId,severity:ok?"success":"error"});}waitingApproval(approvalId:string,toolName:string){return this.emit({type:"approval.requested",state:"awaiting-approval",label:"Esperando aprovação",toolName,stationId:"approval-gate",approvalId,severity:"warning"});}complete(label="Concluído"){return this.emit({type:"run.completed",state:"success",label,stationId:"central-desk",severity:"success"});}fail(label="Precisa de atenção"){return this.emit({type:"run.failed",state:"error",label,stationId:"central-desk",severity:"error"});}cancel(label="Cancelado"){return this.emit({type:"run.cancelled",state:"cancelled",label,stationId:"central-desk",severity:"warning"});}}
