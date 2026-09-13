@@ -91,6 +91,7 @@ function ProviderRow({provider,configured,account,busy,onConnect,onTest,onAddCap
   useEffect(()=>{if(!account){setManaging(false);setExtra([]);}},[account]);
 
   async function disconnect(){if(!account)return;if(!window.confirm(`Desconectar ${title}? Os tokens salvos para esta conta serão removidos deste computador.`))return;await window.nexo.disconnect(account.id);await reload();}
+  async function reauthorize(){if(!account)return;const capabilities=account.requestedCapabilities?.length?account.requestedCapabilities:account.capabilities;if(!capabilities.length)return;await onAddCapabilities(provider,account.id,capabilities);}
 
   return <div className="row providerRow">
     <div>
@@ -109,7 +110,7 @@ function ProviderRow({provider,configured,account,busy,onConnect,onTest,onAddCap
       {account?<>
         <button onClick={()=>void onTest(provider,account.id)} disabled={busy}>{busy?"Testando…":"Testar"}</button>
         {missing.length>0&&<button onClick={()=>setManaging(value=>!value)} disabled={busy}>{managing?"Cancelar permissões":"Gerenciar permissões"}</button>}
-        {(account.status==="reauthorization-required"||account.status==="expired")&&<button onClick={()=>void onConnect(provider,account.requestedCapabilities?.length?account.requestedCapabilities:account.capabilities)} disabled={busy||!configured}>{busy?"Abrindo…":"Reautorizar"}</button>}
+        {(account.status==="reauthorization-required"||account.status==="expired")&&<button onClick={()=>void reauthorize()} disabled={busy||!configured}>{busy?"Abrindo…":"Reautorizar"}</button>}
         <button onClick={()=>void disconnect()} disabled={busy}>Desconectar</button>
       </>:<button onClick={()=>void onConnect(provider,selected)} disabled={busy||!configured||!selected.length}>{busy?"Abrindo…":configured?`Conectar ${title}`:"Configure as credenciais"}</button>}
     </div>
