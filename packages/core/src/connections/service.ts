@@ -91,7 +91,6 @@ export class ConnectionService {
     const providerName=providerLabel(provider);
     if(!clientId)throw new Error(`Configure o Client ID OAuth de ${providerName} em Conexões antes de conectar.`);
     const clientSecret=provider==="google"?await this.oauthCredentials.getGoogleClientSecret():null;
-    if(provider==="google"&&!clientSecret)throw new Error("Configure e salve o Client Secret do Google em Conexões antes de conectar a conta.");
     if(!this.oauthHost?.startLoopbackCallback)throw new Error("O host OAuth desta instalação não suporta callback local.");
 
     const id=randomUUID(),now=new Date().toISOString(),secretKey=`connection:${id}:tokens`;
@@ -171,7 +170,7 @@ export class ConnectionService {
   async addCapabilities(id:string,capabilities:ConnectionCapability[]) {
     const existing=this.get(id);if(!existing)throw new Error("Conexão não encontrada.");
     const expanded=[...new Set([...(existing.requestedCapabilities??existing.capabilities),...capabilities])];
-    const missing=expanded.filter(capability=>!existing.capabilities.includes(capability));if(!missing.length)return existing;
+    const missing=expanded.filter(capability=>!existing.capabilities.includes(capability));if(!missing.length&&existing.status==="connected")return existing;
     const reauthorized=await this.connect(existing.provider,expanded);
     const next=this.db.get<ConnectionRow>("SELECT * FROM connections WHERE id=?",[reauthorized.id])!;
     const previous=this.db.get<ConnectionRow>("SELECT * FROM connections WHERE id=?",[id])!;
