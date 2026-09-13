@@ -1,8 +1,9 @@
 {
   "name": "@nexo/desktop",
-  "version": "0.3.1",
+  "version": "0.5.2",
   "description": "Nexo AI local office agent",
   "author": "Nexo AI",
+  "copyright": "Copyright © 2026 Nexo AI",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -49,22 +50,27 @@
   "build": {
     "appId": "ai.nexo.desktop",
     "productName": "Nexo AI",
+    "executableName": "NexoAI",
     "directories": {
       "output": "../../release"
     },
-    "asar": false,
+    "asar": true,
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "resources/icons/**/*",
       "package.json"
     ],
+    "publish": [{"provider":"github","owner":"rafaelvalquer","repo":"nexo-ai"}],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "resources/icons/icon.ico",
+      "publisherName": "Nexo AI",
       "target": [
         "nsis"
       ],
       "artifactName": "NexoAI-Setup-${version}.${ext}"
     },
+    "mac": {"icon":"resources/icons/icon.icns"},
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true

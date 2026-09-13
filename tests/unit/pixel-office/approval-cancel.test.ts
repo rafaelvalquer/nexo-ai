@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{VisualRunCoordinator}from"../../../apps/desktop/renderer/pixel-office/events/VisualRunCoordinator";import{event}from"./fixtures";
+describe("rejeição",()=>{it("run.cancelled torna o run terminal",()=>{const coordinator=new VisualRunCoordinator();coordinator.restore([event("run.cancelled",{runId:"rejected",state:"cancelled"})]);expect(coordinator.active()).toBeUndefined();});});

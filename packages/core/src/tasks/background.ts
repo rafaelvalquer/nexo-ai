@@ -19,6 +19,7 @@ export type BackgroundTask = {
   statusMessage?: string;
   statusHistory?: string[];
 };
+export type BackgroundTaskEvent={kind:"created"|"status"|"token"|"completed"|"failed"|"cancelled";taskId:string;task?:BackgroundTask;token?:string};
 
 type TaskRow = {
   id: string;
@@ -40,6 +41,7 @@ type LiveProgress = {
 };
 
 export class BackgroundTaskService {
+  private listeners=new Set<(event:BackgroundTaskEvent)=>void>();
   private liveProgress = new Map<string, LiveProgress>();
   private liveResults = new Map<string, unknown>();
   private liveErrors = new Map<string, string>();
@@ -48,6 +50,8 @@ export class BackgroundTaskService {
   constructor(private db: NexoDatabase, private readonly isPrivate = () => false) {
     this.progressPersistence = new ProgressPersistenceScheduler(350, id => this.persistProgress(id));
   }
+  subscribe(listener:(event:BackgroundTaskEvent)=>void){this.listeners.add(listener);return()=>this.listeners.delete(listener);}
+  private notify(event:BackgroundTaskEvent){for(const listener of this.listeners)listener(event);}
 
   recoverInterruptedTasks() {
     const now = new Date().toISOString();
@@ -68,7 +72,7 @@ export class BackgroundTaskService {
       [id, type, "queued", JSON.stringify(this.isPrivate() ? { privateMode: true } : input), null, null, createdAt, null, null, JSON.stringify({ text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] })]
     );
     this.liveProgress.set(id, { text: "", statusMessage: "Na fila…", statusHistory: ["Na fila…"] });
-    return this.get(id)!;
+    const task=this.get(id)!;this.notify({kind:"created",taskId:id,task});return task;
   }
 
   markRunning(id: string) {
@@ -87,6 +91,7 @@ export class BackgroundTaskService {
       statusHistory: history.slice(-8)
     });
     this.persistProgress(id);
+    this.notify({kind:"status",taskId:id,task:this.get(id)});
   }
 
   appendProgress(id: string, token: string) {
@@ -98,6 +103,7 @@ export class BackgroundTaskService {
     };
     this.liveProgress.set(id, { ...current, text: current.text + token });
     this.progressPersistence.schedule(id);
+    this.notify({kind:"token",taskId:id,token});
   }
 
   replaceProgress(id: string, text: string) {
@@ -116,6 +122,7 @@ export class BackgroundTaskService {
       [privateMode ? null : JSON.stringify(result), new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
+    this.notify({kind:"completed",taskId:id,task:this.get(id)});
   }
 
   fail(id: string, error: unknown) {
@@ -128,13 +135,14 @@ export class BackgroundTaskService {
       [privateMode ? "Tarefa privada falhou." : message, new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
+    this.notify({kind:"failed",taskId:id,task:this.get(id)});
   }
   markWaitingApproval(id: string, approvalId: string) {
     const current=this.liveProgress.get(id) ?? {text:"",statusMessage:"",statusHistory:[]};
     const statusMessage="Aguardando sua aprovação…";
     this.liveProgress.set(id,{...current,statusMessage,statusHistory:[...current.statusHistory,statusMessage].slice(-8)});
     this.db.run("UPDATE tasks SET status='waiting_approval', progress_json=? WHERE id=?",[JSON.stringify(this.liveProgress.get(id)),id]);
-    return approvalId;
+    this.notify({kind:"status",taskId:id,task:this.get(id)});return approvalId;
   }
 
   cancel(id: string) {
@@ -146,6 +154,7 @@ export class BackgroundTaskService {
       ["Cancelada pelo usuário.", new Date().toISOString(), null, id]
     );
     this.liveProgress.delete(id);
+    this.notify({kind:"cancelled",taskId:id,task:this.get(id)});
     return true;
   }
 

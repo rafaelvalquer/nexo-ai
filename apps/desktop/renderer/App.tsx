@@ -34,15 +34,15 @@ const pages: Record<string, ComponentType> = {
 export function App() {
   const page = useAppStore(s => s.page);
   const syncAssistant = useAssistantStore(s => s.sync);
-  const assistantBusy = useAssistantStore(s => s.isStreaming);
+  const handleTaskEvent = useAssistantStore(s => s.handleTaskEvent);
   const Page = pages[page] ?? Today;
 
   useEffect(() => {
     void syncAssistant();
-    const interval = assistantBusy ? 250 : 1200;
-    const timer = window.setInterval(() => void syncAssistant(), interval);
-    return () => window.clearInterval(timer);
-  }, [syncAssistant, assistantBusy]);
+    const unsubscribe=window.nexo.onTaskEvent(handleTaskEvent);
+    const timer = window.setInterval(() => void syncAssistant(), 5000);
+    return () => {unsubscribe();window.clearInterval(timer);};
+  }, [syncAssistant, handleTaskEvent]);
 
   return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Suspense fallback={<div className="page">Carregando Pixel Office…</div>}><Page /></Suspense></main><CommandPalette /><Onboarding /></div>;
 }

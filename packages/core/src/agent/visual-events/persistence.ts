@@ -1,0 +1,13 @@
+import type { AgentVisualEvent } from "@nexo/shared";
+import type { NexoDatabase } from "../../database/db.js";
+
+type VisualRunRow={run_id:string;task_id:string|null;agent_run_id:string|null;state:AgentVisualEvent["state"];station_id:AgentVisualEvent["stationId"]|null;label:string;severity:AgentVisualEvent["severity"]|null;updated_at:string;completed_at:string|null;event_type:AgentVisualEvent["type"]|null;event_id:string|null;approval_id:string|null};
+const terminal=new Set<AgentVisualEvent["type"]>(["run.completed","run.failed","run.cancelled"]);
+export class VisualRunRepository{
+  constructor(private db:NexoDatabase){}
+  upsert(event:AgentVisualEvent){const completed=terminal.has(event.type)?event.timestamp:null;this.db.run(`INSERT INTO visual_runs(run_id,task_id,agent_run_id,state,station_id,label,severity,updated_at,completed_at,event_type,event_id,approval_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET task_id=excluded.task_id,agent_run_id=excluded.agent_run_id,state=excluded.state,station_id=excluded.station_id,label=excluded.label,severity=excluded.severity,updated_at=excluded.updated_at,completed_at=excluded.completed_at,event_type=excluded.event_type,event_id=excluded.event_id,approval_id=excluded.approval_id`,[event.runId,event.taskId??null,event.agentRunId??null,event.state,event.stationId??null,event.label,event.severity??null,event.timestamp,completed,event.type,event.eventId,event.approvalId??null]);}
+  listActive(){return this.db.all<VisualRunRow>("SELECT * FROM visual_runs WHERE completed_at IS NULL ORDER BY updated_at ASC").map(row=>this.toEvent(row));}
+  listRecent(limit=20){return this.db.all<VisualRunRow>("SELECT * FROM visual_runs ORDER BY updated_at DESC LIMIT ?",[limit]).reverse().map(row=>this.toEvent(row));}
+  removeOld(days=7){this.db.run("DELETE FROM visual_runs WHERE completed_at IS NOT NULL AND completed_at < ?",[new Date(Date.now()-days*86400000).toISOString()]);}
+  private toEvent(row:VisualRunRow):AgentVisualEvent{return{eventId:row.event_id??`restored-${row.run_id}`,runId:row.run_id,agentId:"nexo-main",timestamp:row.updated_at,type:row.event_type??"run.created",state:row.state,label:row.label,stationId:row.station_id??undefined,severity:row.severity??undefined,approvalId:row.approval_id??undefined,taskId:row.task_id??undefined,agentRunId:row.agent_run_id??undefined};}
+}

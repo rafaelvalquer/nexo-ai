@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{Grid}from"../../../apps/desktop/renderer/pixel-office/navigation/Grid";import{findPath}from"../../../apps/desktop/renderer/pixel-office/navigation/AStar";
+describe("path impossível",()=>{it("não inventa segmento direto",()=>{const grid=new Grid();const start={x:1,y:1};for(const point of grid.neighbors(start))grid.toggle(point);expect(findPath(grid,start,{x:20,y:12})).toEqual([]);});});

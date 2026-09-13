@@ -79,9 +79,10 @@ function validateAutomation(value: unknown) {
 function validateOAuthConfiguration(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Configuração OAuth inválida.");
   const configuration = value as Record<string, unknown>;
-  const googleClientId = requireString(configuration.googleClientId, "Client ID Google");
-  const microsoftClientId = requireString(configuration.microsoftClientId, "Client ID Microsoft");
-  const microsoftTenant = requireString(configuration.microsoftTenant, "Tenant Microsoft");
+  const optional=(input:unknown,name:string)=>input===undefined||input===null||input===""?"":typeof input==="string"?input.trim():(()=>{throw new Error(`${name} inválido.`);})();
+  const googleClientId = optional(configuration.googleClientId, "Client ID Google");
+  const microsoftClientId = optional(configuration.microsoftClientId, "Client ID Microsoft");
+  const microsoftTenant = optional(configuration.microsoftTenant, "Tenant Microsoft")||"common";
   if (googleClientId.length > 300 || microsoftClientId.length > 300 || microsoftTenant.length > 200) throw new Error("Configuração OAuth inválida.");
   if (!/^[a-zA-Z0-9._-]+$/.test(microsoftTenant)) throw new Error("Tenant Microsoft inválido.");
   return { googleClientId, microsoftClientId, microsoftTenant };
@@ -99,6 +100,7 @@ export function registerIpc(
   }
 ) {
   core.visualEvents.subscribe(event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send("nexo:visual:event", event); });
+  core.tasks.subscribe(event => { for (const window of BrowserWindow.getAllWindows()) if (!window.isDestroyed()) window.webContents.send("nexo:task:event", event); });
   ipcMain.handle("nexo:visual:snapshot", () => core.visualEvents.snapshot());
   ipcMain.handle("nexo:chat", (_, text) => core.chat(requireString(text, "Mensagem")));
   ipcMain.handle("nexo:chat:start", (_, text, attachmentIds) => {
@@ -130,6 +132,7 @@ export function registerIpc(
   ipcMain.handle("nexo:task:get", (_, id) => core.getTask(requireString(id, "ID da tarefa")));
   ipcMain.handle("nexo:task:cancel", (_, id) => core.cancelTask(requireString(id, "ID da tarefa")));
   ipcMain.handle("nexo:status", () => core.status());
+  ipcMain.handle("nexo:metrics:record",(_,metric,value,tags)=>{const allowed=new Set(["pixel_office.queue_size","pixel_office.navigation_ms","pixel_office.fps","pixel_office.navigation_failures","pixel_office.restore_ms","assistant.ipc_events"]);const name=requireString(metric,"Métrica");if(!allowed.has(name)||typeof value!=="number"||!Number.isFinite(value))throw new Error("Métrica local inválida.");const safeTags=tags&&typeof tags==="object"&&!Array.isArray(tags)?Object.fromEntries(Object.entries(tags as Record<string,unknown>).filter(([,item])=>["string","number","boolean"].includes(typeof item))):{};core.metrics.record(name,value,safeTags as Record<string,string|number|boolean>);return{ok:true};});
   ipcMain.handle("nexo:settings:get", () => core.getSettings());
   ipcMain.handle("nexo:settings:update", (_, patch) => core.updateSettings(validateSettingsPatch(patch)));
   ipcMain.handle("nexo:approvals:list", () => core.approvals.list());

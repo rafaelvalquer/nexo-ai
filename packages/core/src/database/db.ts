@@ -109,6 +109,10 @@ ALTER TABLE approvals ADD COLUMN visual_run_id TEXT;
 ALTER TABLE approvals ADD COLUMN task_id TEXT;
 CREATE TABLE IF NOT EXISTS visual_runs (run_id TEXT PRIMARY KEY, task_id TEXT, agent_run_id TEXT, state TEXT NOT NULL, station_id TEXT, label TEXT NOT NULL, severity TEXT, updated_at TEXT NOT NULL, completed_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_visual_runs_updated ON visual_runs(updated_at);
+`], [6, `
+ALTER TABLE visual_runs ADD COLUMN event_type TEXT;
+ALTER TABLE visual_runs ADD COLUMN event_id TEXT;
+ALTER TABLE visual_runs ADD COLUMN approval_id TEXT;
 `]];
 
 export class NexoDatabase {

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const api = {
+  onTaskEvent: (callback: (event: unknown) => void) => { const listener = (_event: unknown, payload: unknown) => callback(payload); ipcRenderer.on("nexo:task:event", listener); return () => ipcRenderer.removeListener("nexo:task:event", listener); },
   onVisualEvent: (callback: (event: unknown) => void) => { const listener = (_event: unknown, payload: unknown) => callback(payload); ipcRenderer.on("nexo:visual:event", listener); return () => ipcRenderer.removeListener("nexo:visual:event", listener); },
   getVisualSnapshot: () => ipcRenderer.invoke("nexo:visual:snapshot"),
   chat: (text: string) => ipcRenderer.invoke("nexo:chat", text),
@@ -26,6 +27,7 @@ const api = {
   getTask: (id: string) => ipcRenderer.invoke("nexo:task:get", id),
   cancelTask: (id: string) => ipcRenderer.invoke("nexo:task:cancel", id),
   status: () => ipcRenderer.invoke("nexo:status"),
+  recordMetric: (metric:string,value:number,tags:Record<string,string|number|boolean>={}) => ipcRenderer.invoke("nexo:metrics:record",metric,value,tags),
   getSettings: () => ipcRenderer.invoke("nexo:settings:get"),
   updateSettings: (patch: any) => ipcRenderer.invoke("nexo:settings:update", patch),
   listApprovals: () => ipcRenderer.invoke("nexo:approvals:list"),

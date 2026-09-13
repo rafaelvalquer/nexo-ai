@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 
 export function defaultDataDir() {
+  if(process.env.NEXO_DATA_DIR)return path.resolve(process.env.NEXO_DATA_DIR);
   if (process.platform === "win32") {
     return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "NexoAI");
   }

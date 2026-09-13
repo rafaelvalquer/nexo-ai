@@ -1,6 +1,6 @@
 {
   "name": "nexo-ai",
-  "version": "0.3.1",
+  "version": "0.5.2",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && pnpm -r typecheck",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "package:win": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && pnpm --filter @nexo/desktop package:win && node scripts/verify-installer.mjs",
     "test:installer": "node scripts/verify-installer.mjs",
@@ -17,6 +18,7 @@
     "release:major": "node scripts/release.mjs major"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "^22.10.2",
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3",

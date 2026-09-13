@@ -13,7 +13,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm test:e2e
       - run: pnpm package:win
+      - shell: powershell
+        run: ./scripts/smoke-installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: NexoAI-Setup-Windows

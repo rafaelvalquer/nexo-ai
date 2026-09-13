@@ -13,7 +13,7 @@ if (!app.isPackaged && fs.existsSync(envFile)) process.loadEnvFile(envFile);
 let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
 let quitting=false;
-const core=new NexoCore({ secretStore: new ElectronSecretStore(), oauthHost: new DesktopOAuthHost() });
+const core=new NexoCore({ dataDir:process.env.NEXO_DATA_DIR,secretStore: new ElectronSecretStore(), oauthHost: new DesktopOAuthHost() });
 let httpServer:any=null;
 
 async function createWindow(){
@@ -25,7 +25,7 @@ async function createWindow(){
 }
 
 function createTray(){
-  const icon=nativeImage.createFromDataURL("data:image/svg+xml;base64,"+Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="#6d5dfc"/><text x="16" y="22" text-anchor="middle" font-size="18" font-family="Arial" fill="white">N</text></svg>`).toString("base64")); tray=new Tray(icon); tray.setToolTip("Nexo AI");
+  const icon=nativeImage.createFromPath(path.resolve(__dirname,"../../resources/icons/icon.png")).resize({width:32,height:32}); tray=new Tray(icon); tray.setToolTip("Nexo AI");
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:"Abrir Nexo",click:()=>{win?.show();win?.focus();}},
     {label:"Modo privado",type:"checkbox",checked:core.getSettings().privateMode,click:item=>core.updateSettings({privateMode:item.checked})},
@@ -35,10 +35,15 @@ function createTray(){
 }
 
 app.whenReady().then(async()=>{
+  await core.ready();
   registerIpc(core,{chooseFolder:async()=>{const r=await dialog.showOpenDialog({properties:["openDirectory"]});return r.canceled?null:r.filePaths[0]},chooseDocument:async()=>{const r=await dialog.showOpenDialog({properties:["openFile"],filters:[{name:"Documentos",extensions:["pdf","docx","txt","md"]}]});return r.canceled?null:r.filePaths[0]},saveDocument:async(name:string)=>{const r=await dialog.showSaveDialog({defaultPath:name});return r.canceled?null:r.filePath??null},openPath:(p:string)=>shell.openPath(p),openExternal:(u:string)=>shell.openExternal(u),trashItem:(p:string)=>shell.trashItem(p)});
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   await createWindow(); createTray();
+  if(app.isPackaged)void import("../updater/index.js").then(({configureUpdater})=>configureUpdater(true));
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});
+}).catch(error=>{
+  console.error("Nexo AI startup failed",error);
+  app.exit(1);
 });
 app.on("before-quit",()=>{quitting=true;core.shutdown();void httpServer?.close?.();});
 app.on("window-all-closed",()=>{if(process.platform!=="darwin"&&!core.getSettings().runInBackground)app.quit();});

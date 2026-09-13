@@ -227,6 +227,8 @@ export class AgentEngine {
 
   /** Runs the exact operation captured at approval time; it never re-plans or silently repeats earlier tools. */
   async resumeApproval(checkpointId: string, hooks: AgentRunHooks = {}): Promise<AgentReply> {
+    const assertNotAborted=()=>{if(hooks.signal?.aborted)throw hooks.signal.reason??new DOMException("Cancelada pelo usuário.","AbortError");};
+    assertNotAborted();
     if (!this.runtime) throw new Error("Runtime de agente indisponível.");
     const resumed = this.runtime.resume(checkpointId);
     if (!resumed) throw new Error("Checkpoint de aprovação não está disponível.");
@@ -244,7 +246,9 @@ export class AgentEngine {
     step.input=parsed.data as Record<string,unknown>;
     hooks.onStatus?.(step.explanation ?? `Retomando ${step.tool}…`);
     hooks.onToolStarted?.(step.tool,step.explanation ?? `Retomando ${step.tool}`);
+    assertNotAborted();
     const reply = await this.execute(step.tool, parsed.data);
+    assertNotAborted();
     hooks.onToolCompleted?.(step.tool,Boolean(reply.result?.ok));
     this.runtime.recordStep(resumed.run.id, resumed.state.nextStep, step, reply.result?.ok ? "COMPLETED" : "FAILED", reply.result, reply.result?.error);
     if (!reply.result?.ok) { this.runtime.finish(resumed.run.id, "FAILED", reply.text); return reply; }
@@ -252,6 +256,7 @@ export class AgentEngine {
     let nextState = { ...resumed.state, nextStep: resumed.state.nextStep + 1, results, iteration: resumed.state.iteration + 1 };
     this.runtime.saveState(resumed.run.id, nextState);
     while (nextState.nextStep < nextState.steps.length) {
+      assertNotAborted();
       if (nextState.iteration >= AGENT_LIMITS.maxIterations || nextState.results.length >= AGENT_LIMITS.maxToolCalls) {
         const text = "O fluxo retomado atingiu o limite seguro de etapas."; this.runtime.finish(resumed.run.id, "FAILED", text); return { text, results: nextState.results };
       }
@@ -288,7 +293,9 @@ export class AgentEngine {
       this.runtime.recordStep(resumed.run.id, nextState.nextStep, pending, "RUNNING");
       hooks.onStatus?.(pending.explanation ?? `Executando ${pending.tool}…`);
       hooks.onToolStarted?.(pending.tool,pending.explanation ?? `Executando ${pending.tool}`);
+      assertNotAborted();
       const continued = await this.execute(tool.name, parsed.data);
+      assertNotAborted();
       hooks.onToolCompleted?.(pending.tool,Boolean(continued.result?.ok));
       this.runtime.recordStep(resumed.run.id, nextState.nextStep, pending, continued.result?.ok ? "COMPLETED" : "FAILED", continued.result, continued.result?.error);
       if (!continued.result?.ok) { this.runtime.finish(resumed.run.id, "FAILED", continued.text); return { ...continued, results: nextState.results }; }

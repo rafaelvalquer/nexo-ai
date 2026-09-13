@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{transition}from"../../../apps/desktop/renderer/pixel-office/agent/AgentStateMachine";import{event}from"./fixtures";
+describe("FSM",()=>{it("percorre thinking, walking, working, success",()=>{let state=transition("idle",event("run.created"));state=transition(state,event("tool.started"));state=transition(state,event("tool.progress"));state=transition(state,event("tool.completed",{severity:"success"}));expect(state).toBe("success");});});

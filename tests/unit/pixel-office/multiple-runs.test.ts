@@ -1,0 +1,2 @@
+import{describe,expect,it}from"vitest";import{VisualRunCoordinator}from"../../../apps/desktop/renderer/pixel-office/events/VisualRunCoordinator";import{event}from"./fixtures";
+describe("múltiplos runs",()=>{it("prioriza aprovação e contabiliza os demais",()=>{const c=new VisualRunCoordinator();c.restore([event("tool.progress",{runId:"a",state:"executing-tool"}),event("response.streaming",{runId:"b",state:"responding"}),event("approval.requested",{runId:"c",state:"awaiting-approval"})]);expect(c.active()?.runId).toBe("c");expect(c.backgroundCount()).toBe(2);});});
