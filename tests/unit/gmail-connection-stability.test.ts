@@ -76,6 +76,14 @@ describe("persistent Gmail connection lifecycle",()=>{
     expect(stored).toContain("fresh");
     expect(stored).toContain("refresh-stable");
   });
+
+  it("does not erase a reauthorization requirement when the app restarts",async()=>{
+    const{value,account}=await connectReadAccount();
+    value.markReauthorizationRequired(account.id,"Permissão Gmail insuficiente.");
+    const restarted=service();
+    await restarted.restoreConnections();
+    expect(restarted.get(account.id)).toMatchObject({status:"reauthorization-required",reauthorizationReason:"Permissão Gmail insuficiente."});
+  });
 });
 
 describe("resilient Gmail requests",()=>{
@@ -97,6 +105,20 @@ describe("resilient Gmail requests",()=>{
     await expect(email.latest(account.id)).resolves.toMatchObject({subject:"Teste"});
     expect(listAttempts).toBe(2);
     expect(refreshes).toBe(1);
+  });
+
+  it("marks the account for reauthorization if Gmail still returns 401 after one forced refresh",async()=>{
+    const{value,account}=await connectReadAccount();
+    let refreshes=0;
+    globalThis.fetch=vi.fn(async(input:string|URL)=>{
+      const url=String(input);
+      if(url.includes("oauth2.googleapis.com/token")){refreshes++;return new Response(JSON.stringify({access_token:"fresh-but-rejected",expires_in:3600}),{status:200});}
+      if(url.includes("gmail.googleapis.com"))return new Response(JSON.stringify({error:{message:"Invalid Credentials"}}),{status:401});
+      throw new Error(`Unexpected request ${url}`);
+    }) as typeof fetch;
+    await expect(new EmailService(value).latest(account.id)).rejects.toThrow(/expirou ou foi revogada/i);
+    expect(refreshes).toBe(1);
+    expect(value.get(account.id)?.status).toBe("reauthorization-required");
   });
 
   it("returns real Gmail mailbox totals instead of the first page size",async()=>{

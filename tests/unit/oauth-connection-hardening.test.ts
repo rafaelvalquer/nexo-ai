@@ -41,18 +41,20 @@ function googleHost(onOpen: (url: string) => void = () => undefined): OAuthHost 
   };
 }
 
-function googleService(secrets: SecretStore, host: OAuthHost = googleHost()) {
-  return new ConnectionService(
+async function googleService(secrets: SecretStore, host: OAuthHost = googleHost()) {
+  const service = new ConnectionService(
     db,
     secrets,
     host,
     () => ({ googleClientId: "desktop-client.apps.googleusercontent.com", microsoftClientId: "", microsoftTenant: "common" }),
     () => true
   );
+  await service.saveGoogleClientSecret("GOCSPX-test-secret");
+  return service;
 }
 
 describe("Google OAuth persistence hardening", () => {
-  it("validates the Google profile before persisting a connected account", async () => {
+  it("validates the Google profile and Gmail API before persisting a connected account", async () => {
     const secrets = new RecordingSecretStore();
     let opened = "";
     globalThis.fetch = vi.fn(async (input: string | URL) => {
@@ -63,21 +65,26 @@ describe("Google OAuth persistence hardening", () => {
       if (url.includes("openidconnect.googleapis.com/v1/userinfo")) {
         return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });
       }
+      if (url.includes("gmail.googleapis.com/gmail/v1/users/me/profile")) {
+        return new Response(JSON.stringify({ emailAddress: "person@example.com", messagesTotal: 10, threadsTotal: 8 }), { status: 200 });
+      }
       throw new Error(`Unexpected URL: ${url}`);
     }) as typeof fetch;
 
-    const service = googleService(secrets, googleHost(url => { opened = url; }));
+    const service = await googleService(secrets, googleHost(url => { opened = url; }));
     const account = await service.connect("google", ["email.read"]);
 
     expect(opened).toContain("code_challenge_method=S256");
     expect(opened).toContain(encodeURIComponent("http://127.0.0.1:4567/oauth/callback"));
-    expect(account).toMatchObject({ provider: "google", accountEmail: "person@example.com", status: "connected" });
+    expect(account).toMatchObject({ provider: "google", accountEmail: "person@example.com", status: "connected", capabilities: ["email.read"] });
     expect(db.all("SELECT * FROM connections")).toHaveLength(1);
-    expect(secrets.values.size).toBe(1);
-    expect([...secrets.values.values()][0]).toContain("refresh");
+    expect(secrets.values.has("oauth:google:client_secret")).toBe(true);
+    const tokenEntries = [...secrets.values.entries()].filter(([key]) => key.startsWith("connection:"));
+    expect(tokenEntries).toHaveLength(1);
+    expect(tokenEntries[0][1]).toContain("refresh");
   });
 
-  it("does not leave an orphaned secret when Google profile validation fails", async () => {
+  it("does not leave an orphaned connection token when Google profile validation fails", async () => {
     const secrets = new RecordingSecretStore();
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = String(input);
@@ -87,22 +94,26 @@ describe("Google OAuth persistence hardening", () => {
       return new Response(JSON.stringify({ error: "profile unavailable" }), { status: 503 });
     }) as typeof fetch;
 
-    const service = googleService(secrets);
+    const service = await googleService(secrets);
     await expect(service.connect("google", ["email.read"]))
       .rejects.toThrow(/validando a conta autorizada/i);
 
-    expect(secrets.values.size).toBe(0);
+    expect(secrets.values.has("oauth:google:client_secret")).toBe(true);
+    expect([...secrets.values.keys()].filter(key => key.startsWith("connection:"))).toEqual([]);
     expect(db.all("SELECT * FROM connections")).toEqual([]);
   });
 
-  it("removes the encrypted secret if database persistence fails", async () => {
+  it("removes the encrypted connection token if database persistence fails", async () => {
     const secrets = new RecordingSecretStore();
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = String(input);
       if (url.includes("oauth2.googleapis.com/token")) {
         return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
       }
-      return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });
+      if (url.includes("openidconnect.googleapis.com/v1/userinfo")) {
+        return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ emailAddress: "person@example.com" }), { status: 200 });
     }) as typeof fetch;
 
     const originalRun = db.run.bind(db);
@@ -111,11 +122,12 @@ describe("Google OAuth persistence hardening", () => {
       return originalRun(sql, params);
     });
 
-    const service = googleService(secrets);
+    const service = await googleService(secrets);
     await expect(service.connect("google", ["email.read"]))
       .rejects.toThrow(/registrando a conexão no Nexo/i);
 
-    expect(secrets.values.size).toBe(0);
+    expect(secrets.values.has("oauth:google:client_secret")).toBe(true);
+    expect([...secrets.values.keys()].filter(key => key.startsWith("connection:"))).toEqual([]);
     expect(db.all("SELECT * FROM connections")).toEqual([]);
   });
 
@@ -126,11 +138,12 @@ describe("Google OAuth persistence hardening", () => {
       error_description: "Bad Request"
     }), { status: 400 })) as typeof fetch;
 
-    const service = googleService(secrets);
+    const service = await googleService(secrets);
     await expect(service.connect("google", ["email.read"]))
       .rejects.toThrow(/trocando a autorização por tokens.*código de autorização/i);
 
-    expect(secrets.values.size).toBe(0);
+    expect(secrets.values.has("oauth:google:client_secret")).toBe(true);
+    expect([...secrets.values.keys()].filter(key => key.startsWith("connection:"))).toEqual([]);
     expect(db.all("SELECT * FROM connections")).toEqual([]);
   });
 });

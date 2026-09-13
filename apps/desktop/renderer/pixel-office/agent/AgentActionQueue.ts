@@ -10,7 +10,7 @@ export type AgentAction={
   event:AgentVisualEvent;
 };
 
-export const STATE_DURATION={success:900,error:1600,cancelled:1100} as const;
+export const STATE_DURATION={success:700,error:1400,cancelled:1000} as const;
 
 function stationFor(event:AgentVisualEvent):OfficeStationId{
   if(event.type==="approval.requested"||event.type==="approval.resolved")return"approval-gate";
