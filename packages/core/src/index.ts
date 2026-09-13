@@ -1,4 +1,4 @@
-import type { NexoSettings, OAuthConfiguration } from "@nexo/shared";
+import type { NexoSettings, OAuthConfiguration, OfficeStationId } from "@nexo/shared";
 import { NexoDatabase } from "./database/db.js";
 import { AuditService } from "./audit/audit.js";
 import { ApprovalService } from "./permissions/approvals.js";
@@ -16,6 +16,8 @@ import { BackgroundTaskService } from "./tasks/background.js";
 import { ChatHistoryService } from "./chat/history.js";
 import { ConnectionService } from "./connections/service.js";
 import { DocumentService } from "./documents/service.js";
+import { DocumentAssistantService } from "./documents/assistant.js";
+import { DocumentConversationContext } from "./documents/conversation-context.js";
 import { MemorySecretStore, type OAuthHost, type SecretStore } from "./connections/types.js";
 import { EmailService } from "./email/service.js";
 import { CalendarService } from "./calendar/service.js";
@@ -51,6 +53,8 @@ export class NexoCore {
   visualEvents!: VisualEventBus;
   connections!: ConnectionService;
   documents!: DocumentService;
+  documentAssistant!: DocumentAssistantService;
+  documentConversation!: DocumentConversationContext;
   email!: EmailService;
   calendar!: CalendarService;
   private settings!: NexoSettings;
@@ -85,6 +89,7 @@ export class NexoCore {
     this.security = new SecurityPolicyService(() => this.settings);
     this.connections = new ConnectionService(this.db, this.secretStore, this.oauthHost, () => this.settings.oauth, () => this.settings.connectionsEnabled && !this.settings.privateMode);
     this.documents = new DocumentService(this.db, this.dataDir, this.settings.documentMaxSizeMb, new EmbeddingProvider(this.settings.ollamaUrl, this.settings.embeddingModel));
+    this.documentConversation = new DocumentConversationContext(this.db);
     this.retention = new RetentionService(this.db, this.documents);
     this.retention.purge(this.settings.dataRetentionDays);
     this.email = new EmailService(this.connections);
@@ -98,6 +103,7 @@ export class NexoCore {
 
     this.tools = new ToolRegistry(this.memory, this.email, this.calendar);
     this.llm = new OllamaProvider(this.settings.ollamaUrl, this.settings.model);
+    this.documentAssistant = new DocumentAssistantService(this.documents, this.llm, this.metrics);
     this.planner = new AgentPlanner(this.llm, this.tools);
     this.agentRuntime = new AgentRuntime(this.db);
     this.agent = new AgentEngine(this.planner, this.tools, this.permissions, this.approvals, this.audit, this.connections, this.agentRuntime, this.security, this.metrics);
@@ -194,27 +200,48 @@ export class NexoCore {
     const attachments = attachmentIds.map(id => this.documents.get(id)).filter(Boolean);
     if (attachmentIds.length !== attachments.length) throw new Error("Um ou mais anexos não estão disponíveis.");
     if (attachments.some(document => document!.status !== "ready")) throw new Error("Aguarde a indexação dos documentos antes de perguntar sobre eles.");
-    const task = this.tasks.create("assistant-chat", { text: clean, attachmentIds });
+
+    const resolvedDocumentIds = this.settings.privateMode
+      ? attachmentIds
+      : this.documentConversation.resolve(attachmentIds, clean);
+    const task = this.tasks.create("assistant-chat", { text: clean, attachmentIds, resolvedDocumentIds });
     this.visualEvents.emit({runId:task.id,type:"run.created",state:"interpreting",label:"Entendendo pedido",stationId:"central-desk",severity:"info"});
     const context = !this.settings.privateMode ? this.conversationContext.build(this.chatHistory.list()) : [];
-    if (!this.settings.privateMode) this.chatHistory.add("user", clean, task.id);
-    void this.executeChatTask(task.id, clean, attachmentIds, context);
+    if (!this.settings.privateMode) {
+      const message = this.chatHistory.add("user", clean, task.id);
+      if (attachmentIds.length) this.chatHistory.attachDocuments(message.id, attachmentIds);
+    }
+    void this.executeChatTask(task.id, clean, resolvedDocumentIds, context);
     return task;
   }
 
-  private async executeChatTask(taskId: string, text: string, attachmentIds: string[] = [], context: import("./llm/provider.js").LLMMessage[] = []) {
+  private async executeChatTask(taskId: string, text: string, documentIds: string[] = [], context: import("./llm/provider.js").LLMMessage[] = []) {
     const controller = new AbortController();
     const responseStreaming=new VisualStreamingGate();
     let tokensReceived=0;
     this.chatControllers.set(taskId, controller);
     this.tasks.markRunning(taskId);
+
+    const onToken = (token: string, stationId: OfficeStationId = "central-desk") => {
+      tokensReceived+=1;
+      this.tasks.appendProgress(taskId, token);
+      if(responseStreaming.start())this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId,severity:"info",taskId});
+    };
+
     try {
-      const reply = attachmentIds.length
-        ? { text: attachmentIds.length === 2 && /\b(compare|comparar|diferen[cç]|difere)\b/i.test(text) ? formatDocumentComparison(this.documents.compare(attachmentIds)) : (await this.documents.answer(attachmentIds, text)).text }
+      const reply = documentIds.length
+        ? await this.documentAssistant.process(documentIds, text, {
+            signal: controller.signal,
+            onStatus: message => {
+              this.tasks.setStatus(taskId, message);
+              this.visualEvents.emit({runId:taskId,type:"tool.progress",state:"executing-tool",label:message,stationId:"document-station",severity:"info",taskId});
+            },
+            onToken: token => onToken(token, "document-station")
+          })
         : await this.agent.run(text, {
         visualContext:{visualRunId:taskId,taskId},
         onStatus: message => { this.tasks.setStatus(taskId, message); const planning=/plano|classific/i.test(message); this.visualEvents.emit({runId:taskId,type:planning?"run.planning":"tool.progress",state:planning?"planning":"executing-tool",label:message,stationId:"central-desk",severity:"info"}); },
-        onToken: token => { tokensReceived+=1;this.tasks.appendProgress(taskId, token); if(responseStreaming.start())this.visualEvents.emit({runId:taskId,type:"response.streaming",state:"responding",label:"Gerando resposta",stationId:"central-desk",severity:"info",taskId}); },
+        onToken: token => onToken(token),
         onReplaceText: output => this.tasks.replaceProgress(taskId, output),
         signal: controller.signal,
         onToolStarted:(toolName,label)=>{const visual=visualMetadataForTool(toolName);this.visualEvents.emit({runId:taskId,type:"tool.started",state:"walking",label:visual.activityLabel||label,toolName,stationId:visual.stationId,severity:"info"});},
@@ -230,11 +257,11 @@ export class NexoCore {
       }
       if (reply.approvalId) { this.approvals.linkVisualContext(reply.approvalId,{visualRunId:taskId,taskId}); this.tasks.markWaitingApproval(taskId,reply.approvalId); return; }
       this.tasks.complete(taskId, reply);
-      this.visualEvents.emit({runId:taskId,type:"run.completed",state:"success",label:"Concluído",stationId:"central-desk",severity:"success"});
+      this.visualEvents.emit({runId:taskId,type:"run.completed",state:"success",label:"Concluído",stationId:documentIds.length?"document-station":"central-desk",severity:"success"});
     } catch (error) {
       if (controller.signal.aborted) return;
       this.tasks.fail(taskId, error);
-      this.visualEvents.emit({runId:taskId,type:"run.failed",state:"error",label:"Precisa de atenção",stationId:"central-desk",severity:"error"});
+      this.visualEvents.emit({runId:taskId,type:"run.failed",state:"error",label:"Precisa de atenção",stationId:documentIds.length?"document-station":"central-desk",severity:"error"});
       if (!this.settings.privateMode) {
         const message = error instanceof Error ? error.message : String(error);
         this.chatHistory.add("assistant", `Falha ao processar: ${message}`, taskId);
@@ -392,8 +419,3 @@ export class NexoCore {
 export { startCoreServer } from "./server/server.js";
 export * from "./permissions/policy.js";
 export * from "./connections/types.js";
-
-function formatDocumentComparison(result: ReturnType<DocumentService["compare"]>) {
-  const format = (name:string, items:{locator?:string;text:string}[]) => [`${name} — trechos exclusivos:`, ...(items.length ? items.map(item=>`• ${item.locator ?? "Trecho"}: ${item.text.slice(0,400)}`) : ["• Nenhuma diferença textual identificada nos trechos indexados."])].join("\n");
-  return ["Comparação local concluída.", format(result.left.name,result.left.exclusive), format(result.right.name,result.right.exclusive), `Trechos coincidentes: ${result.sharedChunkCount}.`].join("\n\n");
-}
