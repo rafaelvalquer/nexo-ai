@@ -1,5 +1,6 @@
 import type { ConnectionProvider, OAuthConfiguration } from "@nexo/shared";
 import type { SecretStore } from "../connections/types.js";
+import { environment } from "../config/environment.js";
 
 type StoredTokens = { access_token?: string; refresh_token?: string; expires_at?: string; expires_in?: number; [key: string]: unknown };
 export type TokenRefreshResult = { accessToken: string; expiresAt?: string; refreshed: boolean };
@@ -27,13 +28,21 @@ export class TokenManager {
     if (!tokens.expires_at) return false;
     const expiry = Date.parse(tokens.expires_at); return Number.isFinite(expiry) && expiry <= Date.now() + 60_000;
   }
+
   private async refresh(provider: ConnectionProvider, refreshToken: string): Promise<StoredTokens> {
-    const config = this.configuration(); const clientId = provider === "google" ? config.googleClientId : config.microsoftClientId;
+    const config = this.configuration();
+    const clientId = provider === "google" ? config.googleClientId : config.microsoftClientId;
     const endpoint = provider === "google" ? "https://oauth2.googleapis.com/token" : `https://login.microsoftonline.com/${config.microsoftTenant}/oauth2/v2.0/token`;
-    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: clientId, refresh_token: refreshToken, grant_type: "refresh_token" }) });
-    const body = await response.json() as StoredTokens;
-    if (!response.ok || typeof body.access_token !== "string") throw new Error("Não foi possível renovar o token. Reconecte a conta.");
-    return body;
+    const body = new URLSearchParams({ client_id: clientId, refresh_token: refreshToken, grant_type: "refresh_token" });
+    if (provider === "google") {
+      const clientSecret = environment().googleClientSecret;
+      if (clientSecret) body.set("client_secret", clientSecret);
+    }
+    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+    const responseBody = await response.json() as StoredTokens;
+    if (!response.ok || typeof responseBody.access_token !== "string") throw new Error("Não foi possível renovar o token. Reconecte a conta.");
+    return responseBody;
   }
 }
+
 function expiryDate(expiresIn: unknown) { const seconds = Number(expiresIn); return Number.isFinite(seconds) && seconds > 0 ? new Date(Date.now() + seconds * 1000).toISOString() : undefined; }
