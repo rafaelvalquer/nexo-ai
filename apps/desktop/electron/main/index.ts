@@ -29,11 +29,12 @@ async function createWindow(){
 function createTray(){
   const icon=nativeImage.createFromPath(path.resolve(__dirname,"../../resources/icons/icon.png")).resize({width:32,height:32});tray=new Tray(icon);tray.setToolTip("Nexo AI");
   tray.setContextMenu(Menu.buildFromTemplate([
-    {label:"Abrir Nexo",click:()=>{win?.show();win?.focus();}},
-    {label:"Modo privado",type:"checkbox",checked:core.getSettings().privateMode,click:item=>core.updateSettings({privateMode:item.checked})},
-    {type:"separator"},{label:"Sair",click:()=>{quitting=true;app.quit();}}
+    { label: "Abrir Nexo", click: () => { win?.show(); win?.focus(); } },
+    { label: "Modo privado", type: "checkbox", checked: core.getSettings().privateMode, click: item => core.updateSettings({ privateMode: item.checked }) },
+    { type: "separator" },
+    { label: "Sair", click: () => { quitting = true; app.quit(); } }
   ]));
-  tray.on("double-click",()=>win?.show());
+  tray.on("double-click", () => win?.show());
 }
 
 app.whenReady().then(async()=>{

@@ -3,6 +3,7 @@ export type NexoEnvironment = {
   model: string;
   ollamaUrl: string;
   googleClientId: string;
+  googleClientSecret: string;
   microsoftClientId: string;
   microsoftTenant: string;
   embeddingModel: string;
@@ -16,6 +17,7 @@ export const environment = (): NexoEnvironment => ({
   model: text("NEXO_MODEL", "qwen3:4b"),
   ollamaUrl: text("NEXO_OLLAMA_URL", "http://127.0.0.1:11434"),
   googleClientId: text("NEXO_GOOGLE_CLIENT_ID", ""),
+  googleClientSecret: text("NEXO_GOOGLE_CLIENT_SECRET", ""),
   microsoftClientId: text("NEXO_MICROSOFT_CLIENT_ID", ""),
   microsoftTenant: text("NEXO_MICROSOFT_TENANT", "common"),
   embeddingModel: text("NEXO_EMBEDDING_MODEL", "nomic-embed-text"),
