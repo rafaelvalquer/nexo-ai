@@ -93,4 +93,19 @@ describe("Google OAuth desktop client secret", () => {
       globalThis.fetch = oldFetch;
     }
   });
+
+  it("falls back to NEXO_GOOGLE_CLIENT_SECRET only when no stored secret exists", async () => {
+    const previous = process.env.NEXO_GOOGLE_CLIENT_SECRET;
+    process.env.NEXO_GOOGLE_CLIENT_SECRET = "environment-secret";
+    try {
+      const secrets = new MemorySecretStore();
+      const credentials = new OAuthCredentialService(secrets);
+      await expect(credentials.getGoogleClientSecret()).resolves.toBe("environment-secret");
+      await credentials.saveGoogleClientSecret("stored-secret");
+      await expect(credentials.getGoogleClientSecret()).resolves.toBe("stored-secret");
+    } finally {
+      if (previous === undefined) delete process.env.NEXO_GOOGLE_CLIENT_SECRET;
+      else process.env.NEXO_GOOGLE_CLIENT_SECRET = previous;
+    }
+  });
 });
