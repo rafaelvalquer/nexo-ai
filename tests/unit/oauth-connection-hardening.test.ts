@@ -60,7 +60,7 @@ describe("Google OAuth persistence hardening", () => {
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = String(input);
       if (url.includes("oauth2.googleapis.com/token")) {
-        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly" }), { status: 200 });
       }
       if (url.includes("openidconnect.googleapis.com/v1/userinfo")) {
         return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });
@@ -76,7 +76,9 @@ describe("Google OAuth persistence hardening", () => {
 
     expect(opened).toContain("code_challenge_method=S256");
     expect(opened).toContain(encodeURIComponent("http://127.0.0.1:4567/oauth/callback"));
+    expect(opened).toContain(encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly"));
     expect(account).toMatchObject({ provider: "google", accountEmail: "person@example.com", status: "connected", capabilities: ["email.read"] });
+    expect(account.grantedScopes).toContain("https://www.googleapis.com/auth/gmail.readonly");
     expect(db.all("SELECT * FROM connections")).toHaveLength(1);
     expect(secrets.values.has("oauth:google:client_secret")).toBe(true);
     const tokenEntries = [...secrets.values.entries()].filter(([key]) => key.startsWith("connection:"));
@@ -89,7 +91,7 @@ describe("Google OAuth persistence hardening", () => {
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = String(input);
       if (url.includes("oauth2.googleapis.com/token")) {
-        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly" }), { status: 200 });
       }
       return new Response(JSON.stringify({ error: "profile unavailable" }), { status: 503 });
     }) as typeof fetch;
@@ -108,7 +110,7 @@ describe("Google OAuth persistence hardening", () => {
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = String(input);
       if (url.includes("oauth2.googleapis.com/token")) {
-        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly" }), { status: 200 });
       }
       if (url.includes("openidconnect.googleapis.com/v1/userinfo")) {
         return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });

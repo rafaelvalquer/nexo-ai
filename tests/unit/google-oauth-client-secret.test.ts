@@ -39,7 +39,7 @@ describe("Google OAuth desktop client secret", () => {
       const target = String(url);
       if (target.includes("oauth2.googleapis.com/token")) {
         tokenBody = new URLSearchParams(String(init?.body ?? ""));
-        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600 }), { status: 200 });
+        return new Response(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600, scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly" }), { status: 200 });
       }
       if (target.includes("openidconnect.googleapis.com/v1/userinfo")) {
         return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });

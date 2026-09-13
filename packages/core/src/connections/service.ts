@@ -32,6 +32,12 @@ type ConnectionRow = {
 };
 type OAuthTokens = Record<string,unknown> & { access_token:string;refresh_token?:string;expires_at?:string;expires_in?:number;scope?:string };
 type ProviderProfile = { id?:string;email?:string;name?:string };
+type GoogleCapabilityDiagnostic = {
+  capability:ConnectionCapability; expectedScope:string; reportedScopes:string[]; httpStatus?:number;
+  reason?:string; message?:string; category:"insufficient_scope"|"api_disabled"|"access_denied"|"scope_unknown"|"google_error";
+};
+type GoogleValidationResult = { validatedCapabilities:ConnectionCapability[]; diagnostics:GoogleCapabilityDiagnostic[] };
+export type OAuthDiagnosticLogger = (diagnostic:GoogleCapabilityDiagnostic)=>void;
 
 export class ConnectionService {
   private readonly tokenManager:TokenManager;
@@ -43,7 +49,8 @@ export class ConnectionService {
     private oauthHost?:OAuthHost,
     private oauthConfiguration?:()=>OAuthConfiguration,
     private readonly connectionsEnabled=()=>true,
-    oauthCredentials?:OAuthCredentialService
+    oauthCredentials?:OAuthCredentialService,
+    private readonly logOAuthDiagnostic:OAuthDiagnosticLogger=defaultOAuthDiagnosticLogger
   ) {
     this.ensureMetadataColumns();
     this.oauthCredentials=oauthCredentials??new OAuthCredentialService(secrets);
@@ -118,11 +125,21 @@ export class ConnectionService {
     let profile:ProviderProfile;
     try{profile=await getProfile(provider,tokens.access_token);}catch(error){throw oauthStageError(provider,"validando a conta autorizada",error);}
 
-    const grantedScopes=parseGrantedScopes(tokens.scope,requestedScopes);
-    const grantedCapabilities=capabilities.filter(capability=>scopeAllows(provider,grantedScopes,capability));
-    const missing=capabilities.filter(capability=>!grantedCapabilities.includes(capability));
-    if(missing.length)throw oauthStageError(provider,"confirmando as permissões concedidas",new Error(`O provedor não concedeu: ${missing.join(", ")}. Autorize novamente marcando as permissões solicitadas.`));
-    try{await probeCapabilities(provider,tokens.access_token,grantedCapabilities);}catch(error){throw oauthStageError(provider,"validando o acesso às APIs autorizadas",error);}
+    // Google only reports granted scopes when it chooses to include `scope` in the token response.
+    // An omitted field is intentionally persisted as an empty list; requested scopes are never evidence.
+    const reportedScopes=parseGrantedScopes(tokens.scope);
+    let grantedCapabilities:ConnectionCapability[];
+    if(provider==="google"){
+      const validation=await validateGoogleCapabilities(tokens.access_token,capabilities,reportedScopes);
+      validation.diagnostics.forEach(diagnostic=>this.logOAuthDiagnostic(safeDiagnostic(diagnostic)));
+      grantedCapabilities=validation.validatedCapabilities;
+      if(!grantedCapabilities.length)throw oauthStageError(provider,"validando o acesso às APIs autorizadas",new Error(formatGoogleDiagnostics(validation.diagnostics)));
+    }else{
+      grantedCapabilities=capabilities.filter(capability=>scopeAllows(provider,reportedScopes,capability));
+      const missing=capabilities.filter(capability=>!grantedCapabilities.includes(capability));
+      if(missing.length)throw oauthStageError(provider,"confirmando as permissões concedidas",new Error(`O provedor não concedeu: ${missing.join(", ")}. Autorize novamente marcando as permissões solicitadas.`));
+      await probeCapabilities(provider,tokens.access_token,grantedCapabilities);
+    }
 
     const storedTokens=TokenManager.withExpiry(tokens) as OAuthTokens;
     try{await this.secrets.set(secretKey,JSON.stringify(storedTokens));}
@@ -131,7 +148,7 @@ export class ConnectionService {
     try{
       this.db.run(
         "INSERT INTO connections(id,provider,account_email,display_name,capabilities_json,token_secret_key,status,created_at,updated_at,last_error,last_connected_at,last_validated_at,token_expires_at,provider_account_id,requested_capabilities_json,granted_scopes_json,last_health_check_at,reauthorization_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [id,provider,profile.email??null,profile.name??null,JSON.stringify(grantedCapabilities),secretKey,"connected",now,now,null,now,now,storedTokens.expires_at??null,profile.id??null,JSON.stringify(capabilities),JSON.stringify(grantedScopes),now,null]
+      [id,provider,profile.email??null,profile.name??null,JSON.stringify(grantedCapabilities),secretKey,"connected",now,now,null,now,now,storedTokens.expires_at??null,profile.id??null,JSON.stringify(capabilities),JSON.stringify(reportedScopes),now,null]
       );
     }catch(error){await this.secrets.delete(secretKey).catch(()=>undefined);throw oauthStageError(provider,"registrando a conexão no Nexo",error);}
     const account=this.get(id);
@@ -192,7 +209,11 @@ export class ConnectionService {
     try{
       const token=await this.accessToken(id,capability);
       const profile=await getProfile(account.provider,token);
-      await probeCapabilities(account.provider,token,account.capabilities);
+      if(account.provider==="google"){
+        const validation=await validateGoogleCapabilities(token,account.capabilities,account.grantedScopes??[]);
+        validation.diagnostics.forEach(diagnostic=>this.logOAuthDiagnostic(safeDiagnostic(diagnostic)));
+        if(validation.diagnostics.length)throw new Error(formatGoogleDiagnostics(validation.diagnostics));
+      }else await probeCapabilities(account.provider,token,account.capabilities);
       const now=new Date().toISOString();
       this.db.run("UPDATE connections SET account_email=COALESCE(?,account_email),display_name=COALESCE(?,display_name),provider_account_id=COALESCE(?,provider_account_id),last_validated_at=?,last_health_check_at=?,status='connected',last_error=NULL,reauthorization_reason=NULL,updated_at=? WHERE id=?",[profile.email??null,profile.name??null,profile.id??null,now,now,now,id]);
       return this.get(id)!;
@@ -212,11 +233,11 @@ export class ConnectionService {
     if(!row.token_secret_key)throw new Error("A credencial segura não está disponível. Reconecte a conta.");
     try{
       const token=await this.tokenManager.accessToken(row.provider,row.token_secret_key);
-      if(token.refreshed){const now=new Date().toISOString();this.db.run("UPDATE connections SET status='connected',last_refresh_at=?,token_expires_at=?,last_error=NULL,reauthorization_reason=NULL,updated_at=? WHERE id=?",[now,token.expiresAt??null,now,id]);}
+      if(token.refreshed)await this.recordRefresh(row,token.accessToken,token.expiresAt,token.reportedScope);
       return token.accessToken;
     }catch(error){
       const message=error instanceof Error?error.message:String(error);
-      if(/client secret|refresh_token|refresh token|reconecte|revogad/i.test(message))this.markReauthorizationRequired(id,message);else this.db.run("UPDATE connections SET last_error=?,updated_at=? WHERE id=?",[message,new Date().toISOString(),id]);
+      if(this.get(id)?.status==="reauthorization-required"||/client secret|refresh_token|refresh token|reconecte|revogad/i.test(message))this.markReauthorizationRequired(id,message);else this.db.run("UPDATE connections SET last_error=?,updated_at=? WHERE id=?",[message,new Date().toISOString(),id]);
       throw error;
     }
   }
@@ -228,12 +249,11 @@ export class ConnectionService {
     try{
       this.db.run("UPDATE connections SET status='refreshing',updated_at=? WHERE id=?",[new Date().toISOString(),id]);
       const token=await this.tokenManager.forceRefresh(row.provider,row.token_secret_key);
-      const now=new Date().toISOString();
-      this.db.run("UPDATE connections SET status='connected',last_refresh_at=?,token_expires_at=?,last_error=NULL,reauthorization_reason=NULL,updated_at=? WHERE id=?",[now,token.expiresAt??null,now,id]);
+      await this.recordRefresh(row,token.accessToken,token.expiresAt,token.reportedScope);
       return token;
     }catch(error){
       const message=error instanceof Error?error.message:String(error);
-      if(/client secret|refresh_token|refresh token|reconecte|revogad/i.test(message))this.markReauthorizationRequired(id,message);else this.db.run("UPDATE connections SET status='connected',last_error=?,updated_at=? WHERE id=?",[message,new Date().toISOString(),id]);
+      if(this.get(id)?.status==="reauthorization-required"||/client secret|refresh_token|refresh token|reconecte|revogad/i.test(message))this.markReauthorizationRequired(id,message);else this.db.run("UPDATE connections SET status='connected',last_error=?,updated_at=? WHERE id=?",[message,new Date().toISOString(),id]);
       throw error;
     }
   }
@@ -247,6 +267,19 @@ export class ConnectionService {
     return{googleClientId:saved?.googleClientId.trim()||env.googleClientId,microsoftClientId:saved?.microsoftClientId.trim()||env.microsoftClientId,microsoftTenant:saved?.microsoftTenant.trim()||env.microsoftTenant};
   }
   private assertEnabled(){if(!this.connectionsEnabled())throw new Error("Conexões externas ficam desativadas no modo privado.");}
+
+  private async recordRefresh(row:ConnectionRow,accessToken:string,expiresAt?:string,reportedScope?:string) {
+    let capabilities=safeCapabilities(row.capabilities_json),grantedScopes=safeStringArray(row.granted_scopes_json);
+    if(row.provider==="google"&&reportedScope!==undefined){
+      grantedScopes=parseGrantedScopes(reportedScope);
+      const validation=await validateGoogleCapabilities(accessToken,capabilities,grantedScopes);
+      validation.diagnostics.forEach(diagnostic=>this.logOAuthDiagnostic(safeDiagnostic(diagnostic)));
+      capabilities=validation.validatedCapabilities;
+      if(!capabilities.length){this.markReauthorizationRequired(row.id,formatGoogleDiagnostics(validation.diagnostics));throw new Error(formatGoogleDiagnostics(validation.diagnostics));}
+    }
+    const now=new Date().toISOString();
+    this.db.run("UPDATE connections SET capabilities_json=?,granted_scopes_json=?,status='connected',last_refresh_at=?,token_expires_at=?,last_error=NULL,reauthorization_reason=NULL,updated_at=? WHERE id=?",[JSON.stringify(capabilities),JSON.stringify(grantedScopes),now,expiresAt??null,now,row.id]);
+  }
 
   private ensureMetadataColumns() {
     const columns=new Set(this.db.all<{name:string}>("PRAGMA table_info(connections)").map(column=>String(column.name)));
@@ -265,7 +298,7 @@ export class ConnectionService {
 const googleScopes=(items:ConnectionCapability[])=>[...new Set(["openid","email","profile",...items.map(item=>GOOGLE_SCOPE_BY_CAPABILITY[item])])];
 const microsoftScopes=(items:ConnectionCapability[])=>[...new Set(["openid","profile","offline_access","User.Read",...items.map(item=>MICROSOFT_SCOPE_BY_CAPABILITY[item])])];
 
-function parseGrantedScopes(scope:string|undefined,fallback:string[]){return[...new Set((scope?.trim()?scope.trim().split(/\s+/):fallback).filter(Boolean))];}
+function parseGrantedScopes(scope?:string){return[...new Set((scope?.trim()?scope.trim().split(/\s+/):[]).filter(Boolean))];}
 function scopeAllows(provider:ConnectionProvider,scopes:string[],capability:ConnectionCapability){
   const set=new Set(scopes);
   if(provider==="microsoft"){
@@ -304,17 +337,52 @@ async function getProfile(provider:ConnectionProvider,token:string):Promise<Prov
 
 async function probeCapabilities(provider:ConnectionProvider,token:string,capabilities:ConnectionCapability[]){
   if(provider!=="google")return;
-  const headers={Authorization:`Bearer ${token}`};
-  if(capabilities.some(capability=>capability==="email.read"||capability==="email.modify")){
-    const gmail=await fetch(GOOGLE_GMAIL_PROFILE,{headers,signal:AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)});
-    if(!gmail.ok)throw new Error(await googleProbeMessage(gmail,"Gmail"));
-  }
-  if(capabilities.some(capability=>capability==="calendar.read"||capability==="calendar.write")){
-    const calendar=await fetch(GOOGLE_CALENDAR_PROBE,{headers,signal:AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)});
-    if(!calendar.ok)throw new Error(await googleProbeMessage(calendar,"Google Calendar"));
-  }
+  const validation=await validateGoogleCapabilities(token,capabilities,[]);
+  if(validation.diagnostics.length)throw new Error(formatGoogleDiagnostics(validation.diagnostics));
 }
-async function googleProbeMessage(response:Response,service:string){const body=await safeJson(response);const raw=JSON.stringify(body).toLowerCase();if(response.status===403&&/(insufficient|scope|permission)/.test(raw))return`${service}: a permissão OAuth concedida é insuficiente.`;if(response.status===403&&/(accessnotconfigured|disabled|has not been used)/.test(raw))return`${service}: a API não está habilitada no projeto Google Cloud.`;return`${service}: o Google recusou a validação (HTTP ${response.status}).`;}
+async function validateGoogleCapabilities(token:string,capabilities:ConnectionCapability[],reportedScopes:string[]):Promise<GoogleValidationResult>{
+  const validatedCapabilities:ConnectionCapability[]=[];const diagnostics:GoogleCapabilityDiagnostic[]=[];
+  for(const capability of capabilities){
+    const diagnostic=await probeGoogleCapability(token,capability,reportedScopes);
+    if(diagnostic)diagnostics.push(diagnostic);else validatedCapabilities.push(capability);
+  }
+
+  return{validatedCapabilities,diagnostics};
+}
+async function probeGoogleCapability(token:string,capability:ConnectionCapability,reportedScopes:string[]):Promise<GoogleCapabilityDiagnostic|undefined>{
+  // Gmail exposes no non-mutating endpoint authorized by gmail.send alone. The token's
+  // reported grant is therefore the only safe proof for send; we never create a draft or send a message to test it.
+  if(capability==="email.send"){
+    if(scopeAllows("google",reportedScopes,capability))return;
+    return{capability,expectedScope:GOOGLE_SCOPE_BY_CAPABILITY[capability],reportedScopes,category:reportedScopes.length?"insufficient_scope":"scope_unknown",message:reportedScopes.length?"O token não informou um escopo compatível com envio.":"O Google não informou os escopos do token e não existe uma chamada Gmail de envio sem efeito colateral para validar esta permissão."};
+  }
+  const url=capability.startsWith("email.")?GOOGLE_GMAIL_PROFILE:GOOGLE_CALENDAR_PROBE;
+  const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS)});
+  if(response.ok)return;
+  const body=await safeJson(response),details=googleErrorDetails(body),raw=`${details.reason??""} ${details.message??""}`.toLowerCase();
+  const category:GoogleCapabilityDiagnostic["category"]=response.status===403&&/(accessnotconfigured|disabled|has not been used)/.test(raw)?"api_disabled":response.status===401||response.status===403&&/(insufficient|scope|permission|accessdenied|forbidden)/.test(raw)?"insufficient_scope":response.status===403?"access_denied":"google_error";
+  return{capability,expectedScope:GOOGLE_SCOPE_BY_CAPABILITY[capability],reportedScopes,httpStatus:response.status,reason:details.reason,message:details.message,category};
+}
+function googleErrorDetails(body:Record<string,unknown>){
+  const error=body.error&&typeof body.error==="object"?body.error as Record<string,unknown>:body;
+  const errors=Array.isArray(error.errors)?error.errors:[];
+  const first=errors.find(item=>item&&typeof item==="object") as Record<string,unknown>|undefined;
+  return{reason:firstString(first?.reason,error.reason,body.reason),message:firstString(error.message,body.message)};
+}
+function formatGoogleDiagnostics(diagnostics:GoogleCapabilityDiagnostic[]){
+  const details=diagnostics.map(diagnostic=>{
+    const prefix=`${capabilityLabel(diagnostic.capability)} requer ${diagnostic.expectedScope}`;
+    if(diagnostic.category==="api_disabled")return`${prefix}: habilite a ${diagnostic.capability.startsWith("calendar")?"Google Calendar API":"Gmail API"} no Google Cloud.`;
+    if(diagnostic.category==="scope_unknown")return`${prefix}: o token não informou os escopos concedidos; revogue o acesso do Nexo e reautorize.`;
+    if(diagnostic.category==="insufficient_scope")return`${prefix}: o Google recusou esta permissão. Em Google Cloud → Google Auth Platform → Data Access, adicione o escopo; em Publishing status “Testing”, inclua a conta em Test users; depois revogue o acesso do Nexo e reautorize.`;
+    if(diagnostic.category==="access_denied")return`${prefix}: o Google negou o acesso (HTTP ${diagnostic.httpStatus}). Verifique Data Access, Test users e as restrições da conta.`;
+    return`${prefix}: o Google recusou a validação${diagnostic.httpStatus?` (HTTP ${diagnostic.httpStatus})`:""}.`;
+  });
+  return details.join("\n");
+}
+function capabilityLabel(capability:ConnectionCapability){return({"email.read":"Ler e-mails","email.send":"Enviar e-mails","email.modify":"Alterar e-mails","calendar.read":"Ler agenda","calendar.write":"Alterar agenda"} as Record<ConnectionCapability,string>)[capability];}
+function safeDiagnostic(diagnostic:GoogleCapabilityDiagnostic):GoogleCapabilityDiagnostic{return{...diagnostic,reportedScopes:[...diagnostic.reportedScopes],reason:diagnostic.reason?.slice(0,300),message:diagnostic.message?.slice(0,500)};}
+function defaultOAuthDiagnosticLogger(diagnostic:GoogleCapabilityDiagnostic){console.info("[oauth-google-probe]",JSON.stringify(diagnostic));}
 async function safeJson(response:Response):Promise<Record<string,unknown>>{try{return await response.json() as Record<string,unknown>;}catch{return{};}}
 function firstString(...values:unknown[]){return values.find(value=>typeof value==="string"&&value.length>0) as string|undefined;}
 function providerLabel(provider:ConnectionProvider){return provider==="google"?"Google":"Microsoft";}

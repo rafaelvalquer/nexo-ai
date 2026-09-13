@@ -4,7 +4,7 @@ import type { OAuthCredentialService } from "../connections/oauth-credential-ser
 
 const TOKEN_HTTP_TIMEOUT_MS = 30_000;
 type StoredTokens = { access_token?: string; refresh_token?: string; expires_at?: string; expires_in?: number; scope?: string; [key: string]: unknown };
-export type TokenRefreshResult = { accessToken: string; expiresAt?: string; refreshed: boolean };
+export type TokenRefreshResult = { accessToken: string; expiresAt?: string; refreshed: boolean; reportedScope?: string };
 export type TokenState = { exists:boolean; hasAccessToken:boolean; hasRefreshToken:boolean; expiresAt?:string; expired:boolean };
 
 export class TokenManager {
@@ -49,7 +49,7 @@ export class TokenManager {
     next.expires_at = expiryDate(refreshed.expires_in);
     await this.secrets.set(secretKey, JSON.stringify(next));
     if (typeof next.access_token !== "string") throw new Error("O provedor não retornou um novo token de acesso.");
-    return { accessToken: next.access_token, expiresAt: next.expires_at, refreshed: true };
+    return { accessToken: next.access_token, expiresAt: next.expires_at, refreshed: true, reportedScope:typeof refreshed.scope==="string"?refreshed.scope:undefined };
   }
 
   static withExpiry(tokens: Record<string, unknown>) { return { ...tokens, expires_at: expiryDate(tokens.expires_in) }; }
