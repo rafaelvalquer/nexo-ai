@@ -82,6 +82,27 @@ ALTER TABLE connections ADD COLUMN granted_scopes_json TEXT;
 ALTER TABLE connections ADD COLUMN last_health_check_at TEXT;
 ALTER TABLE connections ADD COLUMN reauthorization_reason TEXT;
 UPDATE connections SET requested_capabilities_json=capabilities_json WHERE requested_capabilities_json IS NULL;
+`], [10, `
+ALTER TABLE connections ADD COLUMN oauth_client_id TEXT;
+ALTER TABLE connections ADD COLUMN scope_source TEXT;
+CREATE TABLE IF NOT EXISTS connection_capabilities (
+  connection_id TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  requested INTEGER NOT NULL DEFAULT 0,
+  expected_scopes_json TEXT NOT NULL DEFAULT '[]',
+  granted INTEGER NOT NULL DEFAULT 0,
+  granted_scope TEXT,
+  validated INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  validation_source TEXT,
+  provider_reason TEXT,
+  provider_message TEXT,
+  http_status INTEGER,
+  last_validated_at TEXT,
+  PRIMARY KEY(connection_id, capability)
+);
+CREATE INDEX IF NOT EXISTS idx_connection_capabilities_connection ON connection_capabilities(connection_id);
+CREATE INDEX IF NOT EXISTS idx_connection_capabilities_status ON connection_capabilities(status);
 `]];
 
 export class NexoDatabase {
