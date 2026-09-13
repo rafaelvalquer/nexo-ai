@@ -76,6 +76,12 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id
 CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id,created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_run ON tasks(run_id);
 CREATE INDEX IF NOT EXISTS idx_visual_runs_agent ON visual_runs(agent_id,updated_at);
+`], [9, `
+ALTER TABLE connections ADD COLUMN requested_capabilities_json TEXT;
+ALTER TABLE connections ADD COLUMN granted_scopes_json TEXT;
+ALTER TABLE connections ADD COLUMN last_health_check_at TEXT;
+ALTER TABLE connections ADD COLUMN reauthorization_reason TEXT;
+UPDATE connections SET requested_capabilities_json=capabilities_json WHERE requested_capabilities_json IS NULL;
 `]];
 
 export class NexoDatabase {
