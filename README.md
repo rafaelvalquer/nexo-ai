@@ -67,12 +67,12 @@ As ações em arquivos só funcionam dentro das pastas autorizadas em **Configur
 
 ## Conexões de escritório
 
-Na versão instalada, abra **Conexões** e informe os Client IDs públicos da organização. Eles identificam o aplicativo e não são segredos; nunca informe um Client Secret. A configuração fica somente neste computador e os tokens permanecem no cofre criptografado do Windows, sem serem gravados no banco ou enviados ao Renderer.
+Na versão instalada, abra **Conexões** e configure as credenciais OAuth usadas pelo Nexo. As credenciais ficam somente neste computador. O Client Secret do Google é enviado apenas ao processo principal do Electron e armazenado no cofre criptografado do sistema; ele não é devolvido ao Renderer nem gravado no banco SQLite. Os tokens das contas conectadas também permanecem no armazenamento seguro.
 
-- Google: crie um cliente OAuth de **aplicativo de desktop**, habilite Gmail API e Google Calendar API e configure a tela de consentimento. Em modo de teste, inclua os usuários autorizados.
+- Google: crie um cliente OAuth de **aplicativo de desktop**, habilite Gmail API e Google Calendar API, configure a tela de consentimento e informe o **Client ID** e o **Client Secret** na tela Conexões. Em modo de teste, inclua os usuários autorizados.
 - Microsoft: registre um aplicativo multitenant com contas pessoais, habilite **Allow public client flows** e, em **Mobile and desktop applications**, registre `http://localhost` como redirect URI. O tenant padrão `common` aceita contas corporativas/escolares e pessoais.
 
-Durante o desenvolvimento, os mesmos valores também podem ser definidos em `.env` a partir de `.env.example`; a interface configurada tem precedência.
+Durante o desenvolvimento, os mesmos valores também podem ser definidos em `.env` a partir de `.env.example`. Para o Google, `NEXO_GOOGLE_CLIENT_SECRET` funciona como fallback de desenvolvimento; quando existir um Client Secret salvo pelo aplicativo, o valor armazenado com segurança tem precedência.
 
 ## Segurança
 

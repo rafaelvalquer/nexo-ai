@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NexoDatabase } from "../../packages/core/src/database/db.js";
 import { ConnectionService } from "../../packages/core/src/connections/service.js";
 import { MemorySecretStore, type OAuthHost } from "../../packages/core/src/connections/types.js";
+import { OAuthCredentialService } from "../../packages/core/src/connections/oauth-credential-service.js";
 import { TokenManager } from "../../packages/core/src/auth/token-manager.js";
 
 let root: string;
@@ -21,13 +22,8 @@ afterEach(() => {
 });
 
 describe("Google OAuth desktop client secret", () => {
-  it("sends NEXO_GOOGLE_CLIENT_SECRET when exchanging the authorization code", async () => {
-    const oldClientId = process.env.NEXO_GOOGLE_CLIENT_ID;
-    const oldClientSecret = process.env.NEXO_GOOGLE_CLIENT_SECRET;
+  it("uses the securely stored client secret when exchanging the authorization code", async () => {
     const oldFetch = globalThis.fetch;
-    process.env.NEXO_GOOGLE_CLIENT_ID = "desktop-client";
-    process.env.NEXO_GOOGLE_CLIENT_SECRET = "desktop-secret";
-
     let tokenBody: URLSearchParams | undefined;
     const secrets = new MemorySecretStore();
     const host: OAuthHost = {
@@ -48,11 +44,20 @@ describe("Google OAuth desktop client secret", () => {
       if (target.includes("openidconnect.googleapis.com/v1/userinfo")) {
         return new Response(JSON.stringify({ sub: "google-user", email: "person@example.com", name: "Person" }), { status: 200 });
       }
+      if (target.includes("gmail.googleapis.com/gmail/v1/users/me/profile")) {
+        return new Response(JSON.stringify({ emailAddress: "person@example.com", messagesTotal: 10, threadsTotal: 8 }), { status: 200 });
+      }
       throw new Error(`Unexpected URL: ${target}`);
     }) as typeof fetch;
 
     try {
-      const service = new ConnectionService(db, secrets, host);
+      const service = new ConnectionService(
+        db,
+        secrets,
+        host,
+        () => ({ googleClientId: "desktop-client", microsoftClientId: "", microsoftTenant: "common" })
+      );
+      await service.saveGoogleClientSecret("desktop-secret");
       const account = await service.connect("google", ["email.read"]);
       expect(account.status).toBe("connected");
       expect(tokenBody?.get("client_id")).toBe("desktop-client");
@@ -60,16 +65,14 @@ describe("Google OAuth desktop client secret", () => {
       expect(tokenBody?.get("code_verifier")).toBeTruthy();
     } finally {
       globalThis.fetch = oldFetch;
-      if (oldClientId === undefined) delete process.env.NEXO_GOOGLE_CLIENT_ID; else process.env.NEXO_GOOGLE_CLIENT_ID = oldClientId;
-      if (oldClientSecret === undefined) delete process.env.NEXO_GOOGLE_CLIENT_SECRET; else process.env.NEXO_GOOGLE_CLIENT_SECRET = oldClientSecret;
     }
   });
 
-  it("sends the same client secret when refreshing a Google access token", async () => {
-    const oldClientSecret = process.env.NEXO_GOOGLE_CLIENT_SECRET;
+  it("uses the same securely stored client secret when refreshing a Google access token", async () => {
     const oldFetch = globalThis.fetch;
-    process.env.NEXO_GOOGLE_CLIENT_SECRET = "desktop-secret";
     const secrets = new MemorySecretStore();
+    const credentials = new OAuthCredentialService(secrets);
+    await credentials.saveGoogleClientSecret("desktop-secret");
     await secrets.set("connection:test:tokens", JSON.stringify({ access_token: "expired", refresh_token: "refresh", expires_at: "2000-01-01T00:00:00.000Z" }));
 
     let refreshBody: URLSearchParams | undefined;
@@ -79,12 +82,30 @@ describe("Google OAuth desktop client secret", () => {
     }) as typeof fetch;
 
     try {
-      const manager = new TokenManager(secrets, () => ({ googleClientId: "desktop-client", microsoftClientId: "", microsoftTenant: "common" }));
+      const manager = new TokenManager(
+        secrets,
+        () => ({ googleClientId: "desktop-client", microsoftClientId: "", microsoftTenant: "common" }),
+        credentials
+      );
       await expect(manager.accessToken("google", "connection:test:tokens")).resolves.toMatchObject({ accessToken: "fresh", refreshed: true });
       expect(refreshBody?.get("client_secret")).toBe("desktop-secret");
     } finally {
       globalThis.fetch = oldFetch;
-      if (oldClientSecret === undefined) delete process.env.NEXO_GOOGLE_CLIENT_SECRET; else process.env.NEXO_GOOGLE_CLIENT_SECRET = oldClientSecret;
+    }
+  });
+
+  it("falls back to NEXO_GOOGLE_CLIENT_SECRET only when no stored secret exists", async () => {
+    const previous = process.env.NEXO_GOOGLE_CLIENT_SECRET;
+    process.env.NEXO_GOOGLE_CLIENT_SECRET = "environment-secret";
+    try {
+      const secrets = new MemorySecretStore();
+      const credentials = new OAuthCredentialService(secrets);
+      await expect(credentials.getGoogleClientSecret()).resolves.toBe("environment-secret");
+      await credentials.saveGoogleClientSecret("stored-secret");
+      await expect(credentials.getGoogleClientSecret()).resolves.toBe("stored-secret");
+    } finally {
+      if (previous === undefined) delete process.env.NEXO_GOOGLE_CLIENT_SECRET;
+      else process.env.NEXO_GOOGLE_CLIENT_SECRET = previous;
     }
   });
 });
