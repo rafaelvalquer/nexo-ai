@@ -48,8 +48,8 @@ export class AgentComicBubble extends Container{
     this.currentHeight=active?ACTIVE_HEIGHT:IDLE_HEIGHT;
     this.lastActive=active;
     const severityColor=snapshot.severity==="error"?0xff6e7c:snapshot.severity==="warning"?0xffc857:station.accent;
-    const panelAlpha=active?.96:.88;
-    const borderAlpha=active?.96:.58;
+    const panelAlpha=active?0.96:0.88;
+    const borderAlpha=active?0.96:0.58;
 
     this.panel.clear()
       .roundRect(0,0,WIDTH,this.currentHeight,16)
