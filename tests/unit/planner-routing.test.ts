@@ -86,7 +86,12 @@ describe("AgentEngine tool loop", () => {
       override async plan() { this.planCalls++; return this.planCalls === 1 ? JSON.stringify({tool:"memory_usage",input:{}}) : JSON.stringify({direct:"Diagnóstico analisado."}); }
     }
     try {
-      const llm = new LoopLLM(); const registry = new ToolRegistry(); const planner = new AgentPlanner(llm, registry);
+      const llm = new LoopLLM();
+      const registry = new ToolRegistry();
+      const memoryUsage = registry.get("memory_usage");
+      if (!memoryUsage) throw new Error("memory_usage não registrada no teste");
+      memoryUsage.execute = async () => ({ ok:true, summary:"Memória simulada para o loop.", data:{ usedPercent:42 } });
+      const planner = new AgentPlanner(llm, registry);
       const engine = new AgentEngine(planner, registry, new PermissionEngine(() => ({ autonomy:"balanced", allowedRoots:[], memoryEnabled:false, memoryAskBeforeSave:false, privateMode:false } as any)), new ApprovalService(db), new AuditService(db), undefined, new AgentRuntime(db));
       await expect(engine.run("execute uma ação avançada no meu ambiente")).resolves.toMatchObject({text:"Diagnóstico analisado."});
       expect(llm.planCalls).toBe(2); expect(db.get<{status:string}>("SELECT status FROM agent_runs LIMIT 1")?.status).toBe("COMPLETED");

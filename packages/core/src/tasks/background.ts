@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import type { NexoDatabase } from "../database/db.js";
 import type { AgentReply } from "../agent/engine.js";
 import { ProgressPersistenceScheduler } from "./progress-persistence.js";
+import { LLM_STREAM_CONTENT_STARTED, LLM_STREAM_THINKING_STARTED } from "../llm/stream-events.js";
 
 export type BackgroundTaskStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
 
@@ -96,6 +97,14 @@ export class BackgroundTaskService {
 
   appendProgress(id: string, token: string) {
     if (!this.isActive(id)) return;
+    if (token === LLM_STREAM_THINKING_STARTED) {
+      this.setStatus(id, "Raciocinando localmente…");
+      return;
+    }
+    if (token === LLM_STREAM_CONTENT_STARTED) {
+      this.setStatus(id, "Respondendo…");
+      return;
+    }
     const current = this.liveProgress.get(id) ?? {
       text: "",
       statusMessage: "Gerando resposta…",
