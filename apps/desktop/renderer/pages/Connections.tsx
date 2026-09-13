@@ -1,42 +1,129 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ConnectionAccount, ConnectionCapability, ConnectionProvider } from "@nexo/shared";
 
-const allCapabilities: ConnectionCapability[] = ["email.read", "email.send", "email.modify", "calendar.read", "calendar.write"];
-type OAuthConfiguration = { googleClientId: string; microsoftClientId: string; microsoftTenant: string; googleConfigured: boolean; microsoftConfigured: boolean };
-const emptyConfiguration: OAuthConfiguration = { googleClientId: "", microsoftClientId: "", microsoftTenant: "common", googleConfigured: false, microsoftConfigured: false };
+const allCapabilities:ConnectionCapability[]=["email.read","email.send","email.modify","calendar.read","calendar.write"];
+const capabilityLabels:Record<ConnectionCapability,string>={
+  "email.read":"Ler e-mails",
+  "email.send":"Enviar e-mails",
+  "email.modify":"Alterar e-mails",
+  "calendar.read":"Ler agenda",
+  "calendar.write":"Alterar agenda"
+};
+type OAuthConfiguration={googleClientId:string;microsoftClientId:string;microsoftTenant:string;googleConfigured:boolean;microsoftConfigured:boolean;googleClientSecretConfigured:boolean};
+const emptyConfiguration:OAuthConfiguration={googleClientId:"",microsoftClientId:"",microsoftTenant:"common",googleConfigured:false,microsoftConfigured:false,googleClientSecretConfigured:false};
 
-export function Connections() {
-  const [accounts, setAccounts] = useState<ConnectionAccount[]>([]);
-  const [configuration, setConfiguration] = useState<OAuthConfiguration>(emptyConfiguration);
-  const [busy, setBusy] = useState<ConnectionProvider | "settings" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const reload = async () => { const [nextAccounts, nextConfiguration] = await Promise.all([window.nexo.listConnections(), window.nexo.getConnectionConfiguration()]); setAccounts(nextAccounts); setConfiguration(nextConfiguration); };
-  useEffect(() => { void reload().catch(e => setError(e instanceof Error ? e.message : String(e))); }, []);
+export function Connections(){
+  const[accounts,setAccounts]=useState<ConnectionAccount[]>([]);
+  const[configuration,setConfiguration]=useState<OAuthConfiguration>(emptyConfiguration);
+  const[googleClientSecret,setGoogleClientSecret]=useState("");
+  const[showGoogleSecret,setShowGoogleSecret]=useState(false);
+  const[busy,setBusy]=useState<ConnectionProvider|"settings"|"secret"|null>(null);
+  const[error,setError]=useState<string|null>(null);
+  const[notice,setNotice]=useState<string|null>(null);
 
-  async function saveConfiguration() {
-    setBusy("settings"); setError(null);
-    try { setConfiguration(await window.nexo.saveConnectionConfiguration(configuration)); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(null); }
+  const reload=async()=>{const[nextAccounts,nextConfiguration]=await Promise.all([window.nexo.listConnections(),window.nexo.getConnectionConfiguration()]);setAccounts(nextAccounts);setConfiguration(nextConfiguration);};
+  useEffect(()=>{void reload().catch(e=>setError(errorText(e)));},[]);
+
+  async function saveConfiguration(){
+    setBusy("settings");setError(null);setNotice(null);
+    try{
+      const next=await window.nexo.saveConnectionConfiguration({googleClientId:configuration.googleClientId,googleClientSecret:googleClientSecret.trim()||undefined,microsoftClientId:configuration.microsoftClientId,microsoftTenant:configuration.microsoftTenant});
+      setConfiguration(next);setGoogleClientSecret("");setShowGoogleSecret(false);setNotice("Configuração OAuth salva. O Client Secret do Google foi armazenado criptografado neste computador.");
+    }catch(e){setError(errorText(e));}finally{setBusy(null);}
   }
-  async function connect(provider: ConnectionProvider, capabilities: ConnectionCapability[]) { setBusy(provider); setError(null); try { await window.nexo.connect(provider, capabilities); await reload(); } catch(e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); } }
-  async function testConnection(provider: ConnectionProvider, id: string) { setBusy(provider); setError(null); try { await window.nexo.testConnection(id); await reload(); } catch(e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(null); } }
 
-  return <div><header><div><h1>Conexões</h1><p>Configure os Client IDs públicos da organização uma vez e conecte contas sem expor tokens ao aplicativo visual.</p></div></header>
-    {error && <p className="notice error">{error}</p>}
-    <section className="panel settings oauthSetup"><h3>Configuração OAuth da organização</h3><p className="muted">Client IDs identificam o aplicativo, não são segredos. Nunca informe um Client Secret nesta tela.</p>
-      <label>Client ID do Google<input value={configuration.googleClientId} placeholder="…apps.googleusercontent.com" onChange={event => setConfiguration(current => ({ ...current, googleClientId: event.target.value }))} /></label>
-      <label>Client ID do Microsoft<input value={configuration.microsoftClientId} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" onChange={event => setConfiguration(current => ({ ...current, microsoftClientId: event.target.value }))} /></label>
-      <label>Tenant Microsoft<input value={configuration.microsoftTenant} placeholder="common" onChange={event => setConfiguration(current => ({ ...current, microsoftTenant: event.target.value }))} /></label>
-      <button onClick={() => void saveConfiguration()} disabled={busy !== null}>{busy === "settings" ? "Salvando…" : "Salvar configuração OAuth"}</button>
-      <div className="oauthHelp"><b>Antes de conectar</b><ul><li>Google: crie um cliente OAuth de desktop, habilite Gmail e Calendar APIs e configure a tela de consentimento.</li><li>Microsoft: registre aplicativo multitenant, habilite fluxo de cliente público e use <code>http://localhost</code> como redirect desktop.</li><li>Para Google em teste, inclua os usuários autorizados na tela de consentimento.</li></ul></div>
+  async function removeGoogleSecret(){
+    if(!window.confirm("Remover o Client Secret do Google? As contas Google conectadas precisarão ser autorizadas novamente."))return;
+    setBusy("secret");setError(null);setNotice(null);
+    try{await window.nexo.deleteGoogleClientSecret();await reload();setNotice("Client Secret removido. Configure uma nova credencial antes de reconectar o Google.");}
+    catch(e){setError(errorText(e));}finally{setBusy(null);}
+  }
+
+  async function connect(provider:ConnectionProvider,capabilities:ConnectionCapability[]){setBusy(provider);setError(null);setNotice(null);try{await window.nexo.connect(provider,capabilities);await reload();setNotice(`${provider==="google"?"Google":"Microsoft"} conectado e validado.`);}catch(e){setError(errorText(e));}finally{setBusy(null);}}
+  async function testConnection(provider:ConnectionProvider,id:string){setBusy(provider);setError(null);setNotice(null);try{await window.nexo.testConnection(id);await reload();setNotice("Conexão validada com sucesso, incluindo as APIs autorizadas.");}catch(e){setError(errorText(e));await reload().catch(()=>undefined);}finally{setBusy(null);}}
+  async function addCapabilities(provider:ConnectionProvider,id:string,capabilities:ConnectionCapability[]){if(!capabilities.length)return;setBusy(provider);setError(null);setNotice(null);try{await window.nexo.addConnectionCapabilities(id,capabilities);await reload();setNotice("Permissões atualizadas e validadas.");}catch(e){setError(errorText(e));await reload().catch(()=>undefined);}finally{setBusy(null);}}
+
+  return <div>
+    <header><div><h1>Conexões</h1><p>Configure as credenciais OAuth e mantenha suas contas conectadas com tokens criptografados e renovação automática.</p></div></header>
+    {error&&<p className="notice error">{error}</p>}
+    {notice&&<p className="notice success">{notice}</p>}
+
+    <section className="panel settings oauthSetup">
+      <h3>Google OAuth</h3>
+      <p className="muted">O Client ID fica nas configurações locais. O Client Secret é enviado ao processo principal e armazenado com a criptografia segura do sistema; ele não é devolvido ao React depois de salvo.</p>
+      <label>Client ID do Google<input value={configuration.googleClientId} placeholder="…apps.googleusercontent.com" onChange={event=>setConfiguration(current=>({...current,googleClientId:event.target.value}))}/></label>
+      <label>Client Secret do Google
+        <div className="secretInputRow">
+          <input type={showGoogleSecret?"text":"password"} value={googleClientSecret} placeholder={configuration.googleClientSecretConfigured?"Client Secret já armazenado — deixe em branco para manter":"GOCSPX-…"} onChange={event=>setGoogleClientSecret(event.target.value)} autoComplete="new-password"/>
+          <button type="button" onClick={()=>setShowGoogleSecret(value=>!value)} disabled={!googleClientSecret}>{showGoogleSecret?"Ocultar":"Mostrar"}</button>
+        </div>
+      </label>
+      <p className="muted">{configuration.googleClientSecretConfigured?"✓ Client Secret armazenado com segurança neste computador.":"Client Secret ainda não configurado."}</p>
+      <div className="rowActions">
+        <button onClick={()=>void saveConfiguration()} disabled={busy!==null}>{busy==="settings"?"Salvando…":"Salvar credenciais"}</button>
+        {configuration.googleClientSecretConfigured&&<button onClick={()=>void removeGoogleSecret()} disabled={busy!==null}>{busy==="secret"?"Removendo…":"Remover Client Secret"}</button>}
+      </div>
+      <div className="oauthHelp"><b>Antes de conectar</b><ul><li>Crie um cliente OAuth do tipo aplicativo para computador.</li><li>Habilite a Gmail API e, se usar agenda, a Google Calendar API.</li><li>Em ambiente de teste, inclua sua conta em Usuários de teste.</li></ul></div>
     </section>
-    <section className="panel list"><StaticConnection name="Ollama" detail="IA local" />
-      {(["google", "microsoft"] as const).map(provider => <ProviderRow key={provider} provider={provider} configured={provider === "google" ? configuration.googleConfigured : configuration.microsoftConfigured} account={accounts.find(a => a.provider === provider)} busy={busy === provider} onConnect={connect} onTest={testConnection} reload={reload} />)}
-    </section></div>;
+
+    <section className="panel settings oauthSetup">
+      <h3>Microsoft OAuth</h3>
+      <label>Client ID do Microsoft<input value={configuration.microsoftClientId} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" onChange={event=>setConfiguration(current=>({...current,microsoftClientId:event.target.value}))}/></label>
+      <label>Tenant Microsoft<input value={configuration.microsoftTenant} placeholder="common" onChange={event=>setConfiguration(current=>({...current,microsoftTenant:event.target.value}))}/></label>
+      <button onClick={()=>void saveConfiguration()} disabled={busy!==null}>{busy==="settings"?"Salvando…":"Salvar configuração Microsoft"}</button>
+    </section>
+
+    <section className="panel list">
+      <StaticConnection name="Ollama" detail="IA local"/>
+      {(["google","microsoft"] as const).map(provider=><ProviderRow key={provider} provider={provider} configured={provider==="google"?configuration.googleConfigured:configuration.microsoftConfigured} account={accounts.find(account=>account.provider===provider)} busy={busy===provider} onConnect={connect} onTest={testConnection} onAddCapabilities={addCapabilities} reload={reload}/>) }
+    </section>
+  </div>;
 }
-function ProviderRow({ provider, configured, account, busy, onConnect, onTest, reload }: { provider: ConnectionProvider; configured: boolean; account?: ConnectionAccount; busy: boolean; onConnect: (provider: ConnectionProvider, capabilities: ConnectionCapability[]) => Promise<void>; onTest: (provider: ConnectionProvider, id: string) => Promise<void>; reload: () => Promise<void> }) {
-  const [selected, setSelected] = useState<ConnectionCapability[]>(["email.read", "calendar.read"]); const title = provider === "google" ? "Google" : "Microsoft";
-  return <div className="row providerRow"><div><b>{title}</b><span>{account?.accountEmail ?? account?.lastError ?? (configured ? "Pronto para autorizar no navegador padrão" : "Client ID OAuth ainda não configurado")}</span>{account ? <small>{account.capabilities.join(" · ")}{account.lastValidatedAt ? ` · testado ${new Date(account.lastValidatedAt).toLocaleString("pt-BR")}` : ""}</small> : <div className="capabilities">{allCapabilities.map(capability => <label key={capability}><input type="checkbox" checked={selected.includes(capability)} onChange={() => setSelected(current => current.includes(capability) ? current.filter(x => x !== capability) : [...current, capability])} />{capability}</label>)}</div>}</div><div className="rowActions"><span className={`tag ${account?.status === "connected" || (!account && configured) ? "success" : "pending"}`}>{account?.status === "connected" ? "conectado" : configured ? "pronto" : "configurar"}</span>{account ? <><button onClick={() => void onTest(provider, account.id)} disabled={busy}>{busy ? "Testando…" : "Testar"}</button><button onClick={() => void window.nexo.disconnect(account.id).then(reload)} disabled={busy}>Desconectar</button></> : <button onClick={() => void onConnect(provider, selected)} disabled={busy || !configured || !selected.length}>{busy ? "Abrindo…" : configured ? `Conectar ${title}` : "Configure o Client ID"}</button>}</div></div>;
+
+function ProviderRow({provider,configured,account,busy,onConnect,onTest,onAddCapabilities,reload}:{provider:ConnectionProvider;configured:boolean;account?:ConnectionAccount;busy:boolean;onConnect:(provider:ConnectionProvider,capabilities:ConnectionCapability[])=>Promise<void>;onTest:(provider:ConnectionProvider,id:string)=>Promise<void>;onAddCapabilities:(provider:ConnectionProvider,id:string,capabilities:ConnectionCapability[])=>Promise<void>;reload:()=>Promise<void>}){
+  const[selected,setSelected]=useState<ConnectionCapability[]>(provider==="google"?["email.read"]:["email.read","calendar.read"]);
+  const[managing,setManaging]=useState(false);
+  const[extra,setExtra]=useState<ConnectionCapability[]>([]);
+  const title=provider==="google"?"Google":"Microsoft";
+  const missing=useMemo(()=>account?allCapabilities.filter(capability=>!account.capabilities.includes(capability)):allCapabilities,[account]);
+  const status=statusPresentation(account,configured);
+
+  useEffect(()=>{if(!account){setManaging(false);setExtra([]);}},[account]);
+
+  async function disconnect(){if(!account)return;if(!window.confirm(`Desconectar ${title}? Os tokens salvos para esta conta serão removidos deste computador.`))return;await window.nexo.disconnect(account.id);await reload();}
+
+  return <div className="row providerRow">
+    <div>
+      <b>{title}</b>
+      <span>{account?.accountEmail??account?.lastError??(configured?"Pronto para autorizar no navegador padrão":"Credenciais OAuth ainda não configuradas")}</span>
+      {account?<>
+        <div className="capabilities grantedCapabilities">{allCapabilities.map(capability=><span key={capability}>{account.capabilities.includes(capability)?"✓":"○"} {capabilityLabels[capability]}</span>)}</div>
+        {account.lastValidatedAt&&<small>Última validação: {new Date(account.lastValidatedAt).toLocaleString("pt-BR")}</small>}
+        {account.lastRefreshAt&&<small> · Última renovação: {new Date(account.lastRefreshAt).toLocaleString("pt-BR")}</small>}
+        {account.reauthorizationReason&&<small className="notice error">{account.reauthorizationReason}</small>}
+        {managing&&missing.length>0&&<div className="capabilities"><b>Adicionar permissões</b>{missing.map(capability=><label key={capability}><input type="checkbox" checked={extra.includes(capability)} onChange={()=>setExtra(current=>current.includes(capability)?current.filter(item=>item!==capability):[...current,capability])}/>{capabilityLabels[capability]}</label>)}<button disabled={busy||!extra.length} onClick={()=>void onAddCapabilities(provider,account.id,extra).then(()=>{setManaging(false);setExtra([]);})}>{busy?"Autorizando…":"Autorizar selecionadas"}</button></div>}
+      </>:<div className="capabilities">{allCapabilities.map(capability=><label key={capability}><input type="checkbox" checked={selected.includes(capability)} onChange={()=>setSelected(current=>current.includes(capability)?current.filter(item=>item!==capability):[...current,capability])}/>{capabilityLabels[capability]}</label>)}</div>}
+    </div>
+    <div className="rowActions">
+      <span className={`tag ${status.success?"success":"pending"}`}>{status.label}</span>
+      {account?<>
+        <button onClick={()=>void onTest(provider,account.id)} disabled={busy}>{busy?"Testando…":"Testar"}</button>
+        {missing.length>0&&<button onClick={()=>setManaging(value=>!value)} disabled={busy}>{managing?"Cancelar permissões":"Gerenciar permissões"}</button>}
+        {(account.status==="reauthorization-required"||account.status==="expired")&&<button onClick={()=>void onConnect(provider,account.requestedCapabilities?.length?account.requestedCapabilities:account.capabilities)} disabled={busy||!configured}>{busy?"Abrindo…":"Reautorizar"}</button>}
+        <button onClick={()=>void disconnect()} disabled={busy}>Desconectar</button>
+      </>:<button onClick={()=>void onConnect(provider,selected)} disabled={busy||!configured||!selected.length}>{busy?"Abrindo…":configured?`Conectar ${title}`:"Configure as credenciais"}</button>}
+    </div>
+  </div>;
 }
-function StaticConnection({name,detail}:{name:string;detail:string}) { return <div className="row"><div><b>{name}</b><span>{detail}</span></div><span className="tag success">ativo</span></div>; }
+
+function statusPresentation(account:ConnectionAccount|undefined,configured:boolean){
+  if(!account)return{label:configured?"pronto":"configurar",success:configured};
+  if(account.status==="connected")return{label:"conectado",success:true};
+  if(account.status==="refreshing")return{label:"renovando",success:false};
+  if(account.status==="validating")return{label:"validando",success:false};
+  if(account.status==="expired")return{label:"expirado",success:false};
+  if(account.status==="reauthorization-required")return{label:"reautorizar",success:false};
+  return{label:"atenção",success:false};
+}
+function errorText(value:unknown){return value instanceof Error?value.message:String(value);}
+function StaticConnection({name,detail}:{name:string;detail:string}){return <div className="row"><div><b>{name}</b><span>{detail}</span></div><span className="tag success">ativo</span></div>;}
