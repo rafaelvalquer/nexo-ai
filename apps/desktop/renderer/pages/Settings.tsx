@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { NexoSettings } from "@nexo/shared";
 import { useAppStore } from "../stores/app";
+
+const RECOMMENDED_MODELS = ["qwen3:1.7b", "qwen3:4b"];
+
+function modelLabel(model: string, installed: boolean) {
+  const suffix = installed ? "" : " · requer download";
+  if (model === "qwen3:1.7b") return `qwen3:1.7b · leve / notebook${suffix}`;
+  if (model === "qwen3:4b") return `qwen3:4b · mais qualidade${suffix}`;
+  return `${model}${suffix}`;
+}
 
 export function Settings() {
   const [settings, setSettings] = useState<NexoSettings | null>(null);
@@ -13,6 +22,11 @@ export function Settings() {
       setModels(status.models ?? []);
     });
   }, []);
+
+  const modelOptions = useMemo(() => {
+    if (!settings) return [];
+    return Array.from(new Set([settings.model, ...RECOMMENDED_MODELS, ...models]));
+  }, [models, settings]);
 
   if (!settings) return <div>Carregando…</div>;
 
@@ -58,10 +72,12 @@ export function Settings() {
         <label>
           Modelo
           <select value={settings.model} onChange={event => void save({ model: event.target.value })}>
-            <option value={settings.model}>{settings.model}</option>
-            {models.filter(model => model !== settings.model).map(model => <option key={model}>{model}</option>)}
+            {modelOptions.map(model => <option key={model} value={model}>{modelLabel(model, models.includes(model))}</option>)}
           </select>
         </label>
+        <small>
+          Para notebooks limitados, recomendamos <strong>qwen3:1.7b</strong>. Se ainda não estiver instalado, execute <code>ollama pull qwen3:1.7b</code> no PowerShell antes de selecioná-lo.
+        </small>
 
         <h3>Segurança</h3>
         <label>
