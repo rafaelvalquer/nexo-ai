@@ -103,6 +103,25 @@ CREATE TABLE IF NOT EXISTS connection_capabilities (
 );
 CREATE INDEX IF NOT EXISTS idx_connection_capabilities_connection ON connection_capabilities(connection_id);
 CREATE INDEX IF NOT EXISTS idx_connection_capabilities_status ON connection_capabilities(status);
+`], [11, `
+CREATE TABLE IF NOT EXISTS intent_examples (
+  id TEXT PRIMARY KEY,
+  utterance TEXT NOT NULL,
+  normalized_utterance TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  entities_json TEXT NOT NULL,
+  source TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 1,
+  successful INTEGER NOT NULL DEFAULT 1,
+  confirmed_by_user INTEGER NOT NULL DEFAULT 0,
+  embedding_json TEXT,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_intent_examples_domain ON intent_examples(domain, last_used_at);
+CREATE INDEX IF NOT EXISTS idx_intent_examples_normalized ON intent_examples(normalized_utterance);
 `]];
 
 export class NexoDatabase {
