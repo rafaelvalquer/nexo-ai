@@ -1,0 +1,2 @@
+import type { BrowserRun } from "@nexo/shared/browser-agent";
+export function BrowserProgress({run}:{run:BrowserRun}){return <div className="browserProgress" role="status"><span>{run.currentStep??(run.status==="starting"?"Abrindo navegador…":run.status==="completed"?"Pesquisa concluída":run.status==="failed"?run.error??"Falha na execução":"Navegando…")}</span>{run.stepCount>0&&<small>Etapa {run.stepCount}</small>}</div>;}
