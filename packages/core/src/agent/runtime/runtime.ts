@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ToolResult } from "@nexo/shared";
 import type { NexoDatabase } from "../../database/db.js";
+import { LocalMetricsService } from "../../observability/metrics.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
 import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
 import { IntentMemoryStore } from "../intent-memory/store.js";
@@ -12,7 +13,7 @@ export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
   constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
-    configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled());
+    configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
   start(userRequest:string,steps:PlanStep[],context:AgentRuntimeContext={},metadata:Partial<Pick<PersistedAgentState,"intent"|"deferredAction"|"responseMode">>={}):AgentRun{const id=randomUUID(),now=new Date().toISOString(),state:PersistedAgentState={userRequest,steps,nextStep:0,results:[],iteration:0,...metadata};this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id) VALUES(?,?,?,?,?,?,?,?,?)",[id,userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??null,context.taskId??null,context.agentId??null]);return{id,status:"RUNNING",state,createdAt:now,updatedAt:now};}
   get(id:string){const row=this.db.get<RunRow>("SELECT * FROM agent_runs WHERE id=?",[id]);return row&&this.toRun(row);}
