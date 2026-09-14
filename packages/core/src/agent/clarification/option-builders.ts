@@ -1,5 +1,21 @@
-import type { ClarificationQuestion } from "@nexo/shared";
+import type { ClarificationQuestion,ConnectionProvider } from "@nexo/shared";
 import type { AgentIntent } from "../orchestrator/intent-schema.js";
+import { getMailboxOptions } from "../../email/preferences/category-resolver.js";
+import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
+
+export function buildEmailMailboxQuestion(provider: ConnectionProvider, selected: EmailMailboxPreferenceCategory[], mode: "initial" | "update"): ClarificationQuestion {
+  return {
+    id: "emailCategories",
+    field: "emailCategories",
+    prompt: mode === "initial" ? "Quais caixas de e-mail devo considerar?" : "Selecione as caixas usadas nas pesquisas:",
+    type: "multi_choice",
+    options: getMailboxOptions(provider),
+    selectedOptionIds: selected,
+    required: true,
+    helperText: mode === "initial" ? "Essa escolha será usada nas próximas buscas e ficará salva neste dispositivo." : "A configuração atual só será alterada quando você confirmar.",
+    submitLabel: mode === "initial" ? "Salvar e continuar" : "Atualizar",
+  };
+}
 
 export function buildClarificationQuestion(field: string, intent: AgentIntent): ClarificationQuestion {
   if (field === "folder") {
