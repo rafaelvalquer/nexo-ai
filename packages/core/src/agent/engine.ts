@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ToolResult,VisualExecutionContext,ConnectionCapability } from "@nexo/shared";
+import type { ToolResult,VisualExecutionContext,ConnectionCapability,ClarificationResolutionRequest,ChatPresentation } from "@nexo/shared";
 import { AgentPlanner,type PlanStep,type Plan } from "./planner.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { PermissionEngine } from "../permissions/policy.js";
@@ -16,30 +16,73 @@ import type { ToolDefinition,ToolExecutionContext } from "../tools/types.js";
 import { OllamaConnectionError,OllamaInvalidResponseError,OllamaModelNotFoundError,OllamaTimeoutError,OllamaUnavailableError } from "../llm/errors.js";
 import { CapabilityAwareToolCatalog } from "./orchestrator/tool-catalog.js";
 import { buildConfirmation,confirmationText } from "./orchestrator/confirmation-builder.js";
+import { ClarificationRepository } from "./clarification/repository.js";
+import { ClarificationResolver } from "./clarification/resolver.js";
+import { ClarificationService } from "./clarification/service.js";
+import type { PendingClarification } from "./clarification/types.js";
+import { ChatPresentationSession } from "../chat/presentation/session.js";
 
-export type AgentReply={text:string;result?:ToolResult;results?:ToolResult[];approvalId?:string};
+export type AgentReply={text:string;result?:ToolResult;results?:ToolResult[];approvalId?:string;conversationId?:string;presentation?:ChatPresentation};
 export type AgentRunHooks={onToolResult?:(toolName:string,input:Record<string,unknown>,result:ToolResult)=>void;onStatus?:(message:string)=>void;onToken?:(token:string)=>void;onReplaceText?:(text:string)=>void;signal?:AbortSignal;onToolStarted?:(toolName:string,label:string)=>void;onToolCompleted?:(toolName:string,ok:boolean)=>void;onApprovalRequested?:(approvalId:string,toolName:string)=>void;visualContext?:VisualExecutionContext};
 
 export class AgentEngine{
   private readonly toolCatalog:CapabilityAwareToolCatalog;
-  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager){this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections);}
+  private readonly clarifications?:ClarificationService;
+  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager){this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections);if(runtime)this.clarifications=new ClarificationService(new ClarificationRepository(runtime),new ClarificationResolver(permissions));}
 
   async run(userText:string,hooks:AgentRunHooks={},context:LLMMessage[]=[]):Promise<AgentReply>{
     const conversationId=hooks.visualContext?.conversationId;
     const previous=this.runtime?.getConversationActionContext(conversationId);
+    if(conversationId&&this.clarifications){
+      const pendingAttempt=this.clarifications.tryResolveText(conversationId,userText);
+      if(pendingAttempt.kind==="pending"){
+        if(pendingAttempt.pending.status!=="pending"){const text=pendingAttempt.message??"Esclarecimento cancelado.";hooks.onReplaceText?.(text);hooks.onStatus?.("Esclarecimento encerrado.");return{text,conversationId};}
+        return this.clarificationReply(pendingAttempt.pending,hooks,pendingAttempt.message);
+      }
+      if(pendingAttempt.kind==="resolved"){
+        const plan=this.planner.buildIntentPlan(pendingAttempt.value.intent,previous,this.toolCatalog.list());
+        return this.executePlan(pendingAttempt.value.originalRequest,plan,hooks,context);
+      }
+    }
+
     let plan:Plan;
     try{hooks.onStatus?.("Interpretando sua intenção com a IA local…");plan=await this.planner.plan(userText,context,hooks.signal,previous,this.toolCatalog.list());}
     catch(error){const text=this.formatOllamaError(error,"interpretar este pedido");hooks.onReplaceText?.(text);hooks.onStatus?.("Não foi possível concluir a interpretação.");return{text};}
 
+    if(plan.intent?.status==="needs_clarification"&&conversationId&&this.clarifications){const pending=this.clarifications.create(conversationId,userText,plan.intent);return this.clarificationReply(pending,hooks);}
     if(plan.directStream){hooks.onStatus?.("Conversa identificada. Preparando a IA local…");hooks.onReplaceText?.("");try{hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.planner.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text};}}
     if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);hooks.onStatus?.("Resposta concluída.");return{text:plan.direct};}
 
     return this.executePlan(userText, plan, hooks, context);
   }
 
+  async resolveClarification(request:ClarificationResolutionRequest,hooks:AgentRunHooks={},context:LLMMessage[]=[]):Promise<AgentReply>{
+    if(!this.clarifications)throw new Error("Serviço de esclarecimento indisponível.");
+    const existing=this.clarifications.get(request.clarificationId);if(!existing)throw new Error("Esclarecimento não encontrado.");
+    const session=new ChatPresentationSession();
+    const capturedHooks:AgentRunHooks={...hooks,onToolResult:(name,input,result)=>{session.add(name,input,result);hooks.onToolResult?.(name,input,result);}};
+    const attempt=this.clarifications.resolve(request);
+    if(attempt.kind==="none")throw new Error("Esse esclarecimento não está mais pendente.");
+    let reply:AgentReply;
+    if(attempt.kind==="pending")reply=await this.clarificationReply(attempt.pending,capturedHooks,attempt.message);
+    else{const previous=this.runtime?.getConversationActionContext(existing.conversationId),plan=this.planner.buildIntentPlan(attempt.value.intent,previous,this.toolCatalog.list());reply=await this.executePlan(attempt.value.originalRequest,plan,capturedHooks,context);}
+    const approval=reply.approvalId?this.approvals.list().find(item=>item.id===reply.approvalId):undefined;
+    const presentation=session.finish(reply.text,approval)?.presentation;
+    return{...reply,conversationId:existing.conversationId,presentation};
+  }
+
+  getPendingClarification(conversationId:string){const pending=this.clarifications?.pending(conversationId);return pending?this.clarifications?.block(pending):undefined;}
+  cancelClarification(id:string){const existing=this.clarifications?.get(id);const cancelled=this.clarifications?.cancel(id);return cancelled&&existing?{conversationId:existing.conversationId,block:this.clarifications?.block(cancelled)}:undefined;}
+
   /** Core action registry entry point. Uses the same policy, checkpoints and approvals as chat. */
   async runPlan(userText: string, steps: PlanStep[], hooks: AgentRunHooks = {}): Promise<AgentReply> {
     return this.executePlan(userText, { steps: structuredClone(steps) }, hooks, []);
+  }
+
+  private async clarificationReply(pending:PendingClarification,hooks:AgentRunHooks,message?:string):Promise<AgentReply>{
+    if(!this.clarifications)return{text:message??pending.questions[0]?.prompt??"Preciso de mais informações."};
+    const block=this.clarifications.block(pending),text=message??block.title,result:ToolResult={ok:true,summary:text,data:block};
+    hooks.onToolResult?.("__clarification__",{},result);hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando resposta.");return{text,result,conversationId:pending.conversationId};
   }
 
   private async executePlan(userText: string, plan: Plan, hooks: AgentRunHooks, context: LLMMessage[]): Promise<AgentReply> {
