@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { ToolResult } from "@nexo/shared";
 import type { NexoDatabase } from "../../database/db.js";
 import { LocalMetricsService } from "../../observability/metrics.js";
+import { EmailSearchPreferenceRepository } from "../../email/preferences/repository.js";
+import { EmailSearchPreferenceService } from "../../email/preferences/service.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
 import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
 import { IntentMemoryStore } from "../intent-memory/store.js";
@@ -13,8 +15,10 @@ type ClarificationRow={id:string;conversation_id:string;domain:PendingClarificat
 export type AgentRuntimeContext={conversationId?:string;taskId?:string;agentId?:string};
 export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
+  readonly emailPreferences:EmailSearchPreferenceService;
   constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
+    this.emailPreferences=new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(db));
     this.ensureClarificationSchema();
     configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
