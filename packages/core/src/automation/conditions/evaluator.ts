@@ -1,0 +1,47 @@
+import type { AutomationCondition, AutomationConditionLogicalOperator, AutomationExecutionContext } from "@nexo/shared";
+
+export class AutomationConditionEvaluator {
+  evaluate(conditions: AutomationCondition[], operator: AutomationConditionLogicalOperator, context: AutomationExecutionContext): boolean {
+    if (!conditions.length) return true;
+    const results = conditions.map(condition => this.evaluateOne(condition, context));
+    return operator === "OR" ? results.some(Boolean) : results.every(Boolean);
+  }
+
+  private evaluateOne(condition: AutomationCondition, context: AutomationExecutionContext): boolean {
+    const actual = resolveField(condition.field, context);
+    const expected = condition.value;
+    switch (condition.operator) {
+      case "equals": return normalize(actual) === normalize(expected);
+      case "notEquals": return normalize(actual) !== normalize(expected);
+      case "contains": return stringify(actual).includes(stringify(expected));
+      case "notContains": return !stringify(actual).includes(stringify(expected));
+      case "startsWith": return stringify(actual).startsWith(stringify(expected));
+      case "endsWith": return stringify(actual).endsWith(stringify(expected));
+      case "greaterThan": return Number(actual) > Number(expected);
+      case "lessThan": return Number(actual) < Number(expected);
+      case "exists": return expected === false ? actual === undefined || actual === null : actual !== undefined && actual !== null;
+    }
+  }
+}
+
+export function resolveField(field: string, context: AutomationExecutionContext): unknown {
+  const normalized = field.startsWith("$") ? field.slice(1) : `trigger.data.${field}`;
+  const parts = normalized.split(".").filter(Boolean);
+  let current: unknown = context;
+  for (const part of parts) {
+    if (current === null || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function normalize(value: unknown): string | number | boolean | null | undefined {
+  if (typeof value === "string") return value.trim().toLocaleLowerCase("pt-BR");
+  if (typeof value === "number" || typeof value === "boolean" || value === null || value === undefined) return value;
+  return JSON.stringify(value);
+}
+
+function stringify(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return (typeof value === "string" ? value : JSON.stringify(value)).toLocaleLowerCase("pt-BR");
+}
