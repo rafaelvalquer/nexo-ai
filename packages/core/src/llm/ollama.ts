@@ -16,7 +16,7 @@ export class OllamaProvider implements LLMProvider {
     private resources?: ResourceManager,
     intentModel?: string
   ) {
-    this.intentModel = intentModel?.trim() || undefined;
+    this.intentModel = intentModel?.trim() || process.env.NEXO_INTENT_MODEL?.trim() || undefined;
   }
 
   setModel(model: string) { this.model = model; }
@@ -172,9 +172,7 @@ export class OllamaProvider implements LLMProvider {
         try {
           return await invoke(preferredModel, false);
         } catch (firstError: any) {
-          if (firstError?.status === 404 && preferredModel !== this.model) {
-            return await invoke(this.model, false);
-          }
+          if (firstError?.status === 404 && preferredModel !== this.model) return await invoke(this.model, false);
           try {
             return await invoke(preferredModel, true);
           } catch (secondError: any) {
