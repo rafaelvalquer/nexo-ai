@@ -1,0 +1,10 @@
+[
+  {"input":"abra o github no navegador","variants":["abre github.com","acesse o github","entre no site github","navegue para github.com"],"expected":{"domain":"browser","intent":"read","operation":"open_url"}},
+  {"input":"abra o google","variants":["acesse google.com","entre no Google pelo navegador","navegue até google.com","abre o site do google"],"expected":{"domain":"browser","intent":"read","operation":"open_url"}},
+  {"input":"abra o navegador","variants":["abre o browser","inicie o navegador","quero abrir o browser","abra o chrome controlado"],"expected":{"domain":"browser","intent":"read","operation":"launch"}},
+  {"input":"entre no youtube","variants":["abre youtube.com","acesse o YouTube","navegue para youtube","abra o site youtube.com"],"expected":{"domain":"browser","intent":"read","operation":"open_url"}},
+  {"input":"abra o instagram no navegador","variants":["acesse instagram.com","abre o instagram","entre no site instagram","navegue pro instagram"],"expected":{"domain":"browser","intent":"read","operation":"open_url"}},
+  {"input":"veja o uso de memória do computador","variants":["uso de memória","quanto de ram está usando","memoria do pc","verifique a memória usada"],"expected":{"domain":"system","intent":"read"}},
+  {"input":"veja o uso do disco","variants":["quanto espaço tenho no disco","disco ocupado","uso de armazenamento","verifique o espaço em disco"],"expected":{"domain":"system","intent":"read"}},
+  {"input":"por que meu computador está lento?","variants":["pc lento","meu computador tá lento","analise porque o pc está devagar","descubra o motivo da lentidão do computador"],"expected":{"domain":"system","intent":"read"}}
+]
