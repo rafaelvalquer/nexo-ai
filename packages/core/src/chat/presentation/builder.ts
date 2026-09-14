@@ -8,6 +8,7 @@ import { calendarAdapter } from "./adapters/calendar.js";
 import { emailStatsAdapter } from "./adapters/system.js";
 import { safeArraySummaryAdapter } from "./adapters/generic.js";
 import { clarificationAdapter } from "./adapters/clarification.js";
+import { browserAgentAdapter } from "./adapters/browser-agent.js";
 import { emailComposeReviewAdapter } from "./adapters/email-compose.js";
 
 export function defaultPresentationRegistry() {

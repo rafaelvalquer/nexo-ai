@@ -7,6 +7,7 @@ import { registerIpc } from "../ipc/register.js";
 import { registerClarificationIpc } from "../ipc/clarification.js";
 import { registerAutomationV2Ipc } from "../ipc/automation-v2.js";
 import { registerEmailDraftIpc } from "../ipc/email-draft.js";
+import { registerBrowserAgentIpc } from "../browser-agent-ipc.js";
 import { ElectronSecretStore } from "../oauth/secret-store.js";
 import { DesktopOAuthHost } from "../oauth/desktop-oauth-host.js";
 import { createDesktopStoragePaths,migrateLegacySecrets } from "../storage/storage-paths.js";
