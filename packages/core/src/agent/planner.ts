@@ -8,20 +8,21 @@ import type { ConversationActionContextState } from "./context/conversation-acti
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
 import { materializeDeferredAction } from "./orchestrator/action-preflight.js";
 import { IntentOrchestrator,type IntentDiagnostic } from "./orchestrator/intent-orchestrator.js";
-import { buildIntentPlan } from "./orchestrator/plan-builder.js";
+import { buildIntentPlan,type EmailComposePlanDraft } from "./orchestrator/plan-builder.js";
 import { ResponseSynthesizer } from "./orchestrator/response-synthesizer.js";
 import type { AgentIntent,ApprovalPlanMetadata,DeferredAction } from "./orchestrator/intent-schema.js";
 import type { AgentToolDescriptor } from "./orchestrator/tool-catalog.js";
 import { resolveDomainHint } from "./orchestrator/domain-resolver.js";
 import { deterministicFilesystemIntent,enrichFilesystemIntent } from "./orchestrator/filesystem-intent-enricher.js";
 import { deterministicEmailCategoryIntent,deterministicEmailPreferenceIntent,enrichEmailIntent } from "./orchestrator/email-intent-enricher.js";
+import { validateIntentRequirements } from "./orchestrator/intent-requirements-validator.js";
 import { IntentMemoryStore } from "./intent-memory/store.js";
 import { IntentMemoryRetriever } from "./intent-memory/retriever.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata};
 export type PlanOrigin="fast"|"llm";
-export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences"};
+export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences";emailDraft?:EmailComposePlanDraft};
 
 const fastRouter=new FastIntentRouter();
 const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","memory_usage","disk_usage","system_info","process_list"]);
@@ -51,7 +52,7 @@ export class AgentPlanner{
     const filesystemIntent=deterministicFilesystemIntent(userText);
     if(filesystemIntent){
       const built=buildIntentPlan(filesystemIntent,tools,previous);
-      if(built.steps?.length||built.direct&&!isUnavailableToolPlan(built.direct))return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
+      if(built.steps?.length||built.direct&&!isUnavailableToolPlan(built.direct))return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
       const fallback=fastRouter.route(userText);
       if(fallback)return withPresentationPolicy({...fallback,origin:"fast",intent:filesystemIntent},filesystemIntent);
       return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
@@ -59,11 +60,12 @@ export class AgentPlanner{
     const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
-    const intent=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
+    const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
+    const intent=validateIntentRequirements(enriched);
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
-  buildIntentPlan(intent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
+  buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result),store=this.activeIntentMemory();
@@ -84,7 +86,7 @@ export class AgentPlanner{
 }
 
 function withPresentationPolicy(plan:Plan,intent?:AgentIntent):Plan{
-  if(plan.deferredAction||plan.responseMode==="deterministic")return plan;
+  if(plan.deferredAction||plan.responseMode==="deterministic"||plan.emailDraft)return plan;
   const toolNames=plan.steps?.map(step=>step.tool)??(plan.tool?[plan.tool]:[]);
   if(!toolNames.length)return plan;
   return responsePolicy(toolNames,intent).mode==="presentation"?{...plan,responseMode:"presentation"}:plan;
