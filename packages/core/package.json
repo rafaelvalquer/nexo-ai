@@ -4,6 +4,11 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./browser-agent": { "types": "./dist/browser-agent/index.d.ts", "import": "./dist/browser-agent/index.js" },
+    "./tools/browser-agent": { "types": "./dist/tools/browser-agent/index.d.ts", "import": "./dist/tools/browser-agent/index.js" }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
@@ -11,6 +16,7 @@
   },
   "dependencies": {
     "@langchain/langgraph": "^0.2.41",
+    "@nexo/browser-agent": "workspace:*",
     "@nexo/shared": "workspace:*",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",

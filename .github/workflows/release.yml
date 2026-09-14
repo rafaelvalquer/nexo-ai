@@ -19,12 +19,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.20.0
       - run: corepack enable
       - run: corepack prepare pnpm@10.15.1 --activate
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm --filter @nexo/shared build
+      - run: pnpm --filter @nexo/browser-agent build
       - run: pnpm --filter @nexo/core build
       - run: pnpm --filter @nexo/desktop exec electron-builder --win nsis --publish always

@@ -1,3 +1,4 @@
+import type { BrowserRunBlock } from "./browser-agent.js";
 /** Core-produced presentation data. Provider credentials and tool inputs never belong here. */
 export type ResourceActionState = "idle" | "preparing" | "awaiting_approval" | "executing" | "success" | "failed";
 export type ResourceAction = {
@@ -71,7 +72,7 @@ export type ClarificationResolution = {
 export type StatusBlock = ChatBlockBase & {
   type: "status"; state: ResourceActionState; text: string;
 };
-export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | StatusBlock;
+export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | StatusBlock | BrowserRunBlock;
 export type ChatPresentation = { version: 1; blocks: ChatBlock[] };
 export type ChatActionRequest = {
   conversationId: string; messageId: string; blockId: string; itemId: string; actionId: string;

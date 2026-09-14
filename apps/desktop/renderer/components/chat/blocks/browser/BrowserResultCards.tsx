@@ -1,0 +1,3 @@
+import { ExternalLink } from "lucide-react";
+import type { BrowserResearchResult } from "@nexo/shared/browser-agent";
+export function BrowserResultCards({result}:{result:BrowserResearchResult}){return <section className="browserResults"><p className="browserResultSummary">{result.summary}</p>{result.findings.map((finding,index)=><article className="browserResultCard" key={`${finding.sourceUrl}-${index}`}><h4>{finding.title}</h4><p>{finding.summary}</p><button type="button" className="browserLink" onClick={()=>void window.nexo.openExternal(finding.sourceUrl)}>Abrir fonte <ExternalLink size={13}/></button></article>)}</section>;}
