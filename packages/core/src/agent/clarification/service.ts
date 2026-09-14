@@ -6,6 +6,7 @@ import { ClarificationRepository } from "./repository.js";
 import { ClarificationResolver,type ClarificationAnswer } from "./resolver.js";
 import type { ClarificationAttempt,ClarificationResume,PendingClarification } from "./types.js";
 import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
+import { normalizeRecipients } from "../../email/compose/normalizer.js";
 
 const KNOWN_FOLDERS = new Set(["downloads", "documents", "desktop"]);
 
@@ -18,171 +19,75 @@ export class ClarificationService {
     if (!field) throw new Error("Não há campo faltante para esclarecer.");
     const createdAt = new Date().toISOString();
     const record: PendingClarification = {
-      id: randomUUID(),
-      conversationId,
-      domain: normalizeDomain(intent.domain),
-      intent: intent.intent,
-      operation: intent.operation,
-      originalRequest,
-      partialEntities: { ...intent.entities },
-      questions: [buildClarificationQuestion(field, intent)],
-      status: "pending",
-      createdAt,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      intentSnapshot: structuredClone(intent),
-      values: {},
+      id: randomUUID(), conversationId, domain: normalizeDomain(intent.domain), intent: intent.intent, operation: intent.operation, originalRequest,
+      partialEntities: { ...intent.entities }, questions: [buildClarificationQuestion(field, intent)], status: "pending", createdAt,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), intentSnapshot: structuredClone(intent), values: {},
     };
     return this.repository.save(record);
   }
 
-  createEmailMailboxPreference(
-    conversationId: string,
-    originalRequest: string,
-    intent: AgentIntent,
-    connectionId: string,
-    provider: ConnectionProvider,
-    selected: EmailMailboxPreferenceCategory[],
-    mode: "initial" | "update",
-  ) {
+  createEmailMailboxPreference(conversationId: string,originalRequest: string,intent: AgentIntent,connectionId: string,provider: ConnectionProvider,selected: EmailMailboxPreferenceCategory[],mode: "initial" | "update") {
     const createdAt = new Date().toISOString();
-    const snapshot: AgentIntent = {
-      ...structuredClone(intent),
-      status: "needs_clarification",
-      entities: { ...intent.entities, connectionId },
-      missing: ["emailCategories"],
-      question: "Quais caixas de e-mail devo considerar?",
-    };
+    const snapshot: AgentIntent = {...structuredClone(intent),status: "needs_clarification",entities: { ...intent.entities, connectionId },missing: ["emailCategories"],question: "Quais caixas de e-mail devo considerar?"};
     const record: PendingClarification = {
-      id: randomUUID(),
-      conversationId,
-      domain: "email",
-      intent: intent.intent,
-      operation: intent.operation,
-      originalRequest,
-      partialEntities: {
-        ...intent.entities,
-        connectionId,
-        __emailPreferenceFlow: true,
-        __emailPreferenceMode: mode,
-        __emailProvider: provider,
-      },
-      questions: [buildEmailMailboxQuestion(provider, selected, mode)],
-      status: "pending",
-      createdAt,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      intentSnapshot: snapshot,
-      values: {},
+      id: randomUUID(),conversationId,domain: "email",intent: intent.intent,operation: intent.operation,originalRequest,
+      partialEntities: {...intent.entities,connectionId,__emailPreferenceFlow: true,__emailPreferenceMode: mode,__emailProvider: provider},
+      questions: [buildEmailMailboxQuestion(provider, selected, mode)],status: "pending",createdAt,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),intentSnapshot: snapshot,values: {},
     };
     return this.repository.save(record);
   }
 
-  pending(conversationId: string) {
-    return this.repository.pendingForConversation(conversationId);
-  }
-
-  get(id: string) {
-    return this.repository.get(id);
-  }
+  pending(conversationId: string) {return this.repository.pendingForConversation(conversationId);}
+  get(id: string) {return this.repository.get(id);}
 
   block(record: PendingClarification): ClarificationBlock {
-    return {
-      id: `clarification:${record.id}`,
-      version: 1,
-      type: "clarification",
-      clarificationId: record.id,
-      title: record.questions[0]?.prompt ?? "Preciso de uma informação",
-      questions: record.questions,
-      state: record.status === "resolved" ? "submitted" : record.status,
-      values: Object.keys(record.values).length ? record.values : undefined,
-    };
+    return {id: `clarification:${record.id}`,version: 1,type: "clarification",clarificationId: record.id,title: record.questions[0]?.prompt ?? "Preciso de uma informação",questions: record.questions,state: record.status === "resolved" ? "submitted" : record.status,values: Object.keys(record.values).length ? record.values : undefined};
   }
 
   tryResolveText(conversationId: string, text: string): ClarificationAttempt {
-    const pending = this.pending(conversationId);
-    if (!pending) return { kind: "none" };
-    if (/^\s*(cancelar|cancela|cancel)\s*$/i.test(text)) {
-      const cancelled = this.cancel(pending.id);
-      return { kind: "pending", pending: cancelled ?? pending, message: "Esclarecimento cancelado." };
-    }
-    const question = pending.questions[0];
-    if (!question) return { kind: "none" };
-    const answer = this.resolver.resolve(question, { chatText: text });
-    return this.applyAnswer(pending, question.id, answer);
+    const pending = this.pending(conversationId);if (!pending) return { kind: "none" };
+    if (/^\s*(cancelar|cancela|cancel)\s*$/i.test(text)) {const cancelled = this.cancel(pending.id);return { kind: "pending", pending: cancelled ?? pending, message: "Esclarecimento cancelado." };}
+    const question = pending.questions[0];if (!question) return { kind: "none" };
+    const answer = this.resolver.resolve(question, { chatText: text });return this.applyAnswer(pending, question.id, answer);
   }
 
   resolve(request: ClarificationResolutionRequest): ClarificationAttempt {
-    const pending = this.repository.get(request.clarificationId);
-    if (!pending || pending.status !== "pending") return { kind: "none" };
-    const question = pending.questions.find((item) => item.id === request.questionId) ?? pending.questions[0];
-    if (!question) return { kind: "none" };
-    const answer = this.resolver.resolve(question, { optionId: request.optionId, optionIds: request.optionIds, customValue: request.customValue });
-    return this.applyAnswer(pending, question.id, answer);
+    const pending = this.repository.get(request.clarificationId);if (!pending || pending.status !== "pending") return { kind: "none" };
+    const question = pending.questions.find((item) => item.id === request.questionId) ?? pending.questions[0];if (!question) return { kind: "none" };
+    const answer = this.resolver.resolve(question, { optionId: request.optionId, optionIds: request.optionIds, customValue: request.customValue });return this.applyAnswer(pending, question.id, answer);
   }
 
-  cancel(id: string) {
-    return this.repository.cancel(id);
-  }
+  cancel(id: string) {return this.repository.cancel(id);}
 
   private applyAnswer(pending: PendingClarification, questionId: string, answer: ClarificationAnswer): ClarificationAttempt {
-    const question = pending.questions.find((item) => item.id === questionId) ?? pending.questions[0];
-    if (!question) return { kind: "pending", pending };
-    if (!answer.resolved) {
-      const questions = pending.questions.map((item) => item.id === question.id && answer.suggestedOptionId ? { ...item, suggestedOptionId: answer.suggestedOptionId } : item);
-      const updated = this.repository.update({ ...pending, questions });
-      return { kind: "pending", pending: updated, message: answer.message };
-    }
+    const question = pending.questions.find((item) => item.id === questionId) ?? pending.questions[0];if (!question) return { kind: "pending", pending };
+    if (!answer.resolved) {const questions = pending.questions.map((item) => item.id === question.id && answer.suggestedOptionId ? { ...item, suggestedOptionId: answer.suggestedOptionId } : item);const updated = this.repository.update({ ...pending, questions });return { kind: "pending", pending: updated, message: answer.message };}
 
     const values = { ...pending.values, [question.field]: answer.value };
     const entityPatch = this.entityPatch(question.field, answer.value);
     const entities = { ...pending.partialEntities, ...entityPatch };
     const remaining = (pending.intentSnapshot.missing ?? []).filter((field) => field !== question.field && values[field] === undefined);
-    const intent: AgentIntent = {
-      ...pending.intentSnapshot,
-      entities,
-      status: remaining.length ? "needs_clarification" : "ready",
-      missing: remaining.length ? remaining : undefined,
-      question: remaining.length ? pending.intentSnapshot.question : undefined,
-    };
+    const intent: AgentIntent = {...pending.intentSnapshot,entities,status: remaining.length ? "needs_clarification" : "ready",missing: remaining.length ? remaining : undefined,question: remaining.length ? pending.intentSnapshot.question : undefined};
 
     if (remaining.length) {
-      const updated = this.repository.update({
-        ...pending,
-        partialEntities: entities,
-        values,
-        intentSnapshot: intent,
-        questions: [buildClarificationQuestion(remaining[0], intent)],
-      });
+      const updated = this.repository.update({...pending,partialEntities: entities,values,intentSnapshot: intent,questions: [buildClarificationQuestion(remaining[0], intent)]});
       return { kind: "pending", pending: updated };
     }
 
     const resolvedAt = new Date().toISOString();
-    const resolved = this.repository.update({
-      ...pending,
-      partialEntities: entities,
-      values,
-      intentSnapshot: intent,
-      questions: pending.questions,
-      status: "resolved",
-      resolvedAt,
-    });
-    const resolution: ClarificationResolution = {
-      clarificationId: pending.id,
-      values,
-      source: answer.source,
-      status: "resolved",
-    };
+    const resolved = this.repository.update({...pending,partialEntities: entities,values,intentSnapshot: intent,questions: pending.questions,status: "resolved",resolvedAt});
+    const resolution: ClarificationResolution = {clarificationId: pending.id,values,source: answer.source,status: "resolved"};
     const value: ClarificationResume = { pending: resolved, intent, originalRequest: pending.originalRequest, resolution };
     return { kind: "resolved", value };
   }
 
   private entityPatch(field: string, value: unknown): Record<string, unknown> {
-    if (field === "folder" && typeof value === "string" && !KNOWN_FOLDERS.has(value)) {
-      return { path: value };
-    }
+    if (field === "folder" && typeof value === "string" && !KNOWN_FOLDERS.has(value)) return { path: value };
+    if(["to","recipient","recipients","recipientEmail","recipientEmails","email"].includes(field))return{to:normalizeRecipients(value)};
+    if(["body","message","text","content"].includes(field))return{body:String(value)};
     return { [field]: value };
   }
 }
 
-function normalizeDomain(domain: AgentIntent["domain"]): PendingClarification["domain"] {
-  return domain === "filesystem" || domain === "email" || domain === "calendar" ? domain : "general";
-}
+function normalizeDomain(domain: AgentIntent["domain"]): PendingClarification["domain"] {return domain === "filesystem" || domain === "email" || domain === "calendar" ? domain : "general";}
