@@ -1,6 +1,13 @@
 import { createModels, createProvider, type Model } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
+/**
+ * pi-ai's OpenAI-compatible transport requires a non-empty API key (or auth header)
+ * before it sends a request. Ollama itself does not require authentication, so Nexo
+ * supplies a deterministic compatibility token that never represents a real secret.
+ */
+export const NEXO_OLLAMA_COMPAT_API_KEY = "nexo-local-ollama";
+
 /** Adapts the Nexo Ollama endpoint to Pi's model catalog without any cloud dependency. */
 export class NexoBrowserModelAdapter {
   constructor(private readonly ollamaUrl: string, private readonly modelId: string) {}
@@ -31,7 +38,15 @@ export class NexoBrowserModelAdapter {
       id: "ollama",
       name: "Ollama local do Nexo",
       baseUrl: `${base}/v1`,
-      auth: { apiKey: { name: "Ollama local", resolve: async () => ({ auth: {} }) } },
+      auth: {
+        apiKey: {
+          name: "Ollama local",
+          resolve: async () => ({
+            auth: { apiKey: NEXO_OLLAMA_COMPAT_API_KEY },
+            source: "Nexo local Ollama compatibility token"
+          })
+        }
+      },
       models: [model],
       api: openAICompletionsApi()
     });
