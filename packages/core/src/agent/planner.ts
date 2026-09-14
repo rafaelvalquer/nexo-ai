@@ -21,6 +21,7 @@ export type PlanOrigin="fast"|"llm";
 export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"};
 
 const fastRouter=new FastIntentRouter();
+const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","memory_usage","disk_usage","system_info","process_list"]);
 
 export class AgentPlanner{
   private readonly orchestrator:IntentOrchestrator;
@@ -60,7 +61,7 @@ export class AgentPlanner{
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result);
     if(result.ok&&plan.intent?.status==="ready"&&this.intentMemory&&this.intentLearningEnabled()){
       const tool=this.registry.get(step.tool);
-      const mutation=tool?.mutatesState??tool?.risk!=="READ";
+      const mutation=tool ? (tool.mutatesState ?? tool.risk!=="READ") : false;
       this.intentMemory.remember(userRequest,plan.intent,mutation?"confirmed_execution":"successful_execution");
       if(previous?.lastQuery&&/^\s*(n[aã]o\b|quis\s+dizer\b|corrigindo\b)/i.test(userRequest)){
         this.intentMemory.remember(previous.lastQuery,plan.intent,"user_correction");
@@ -122,6 +123,7 @@ export class AgentPlanner{
 }
 
 function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">|null){
+  if(local?.tool&&DETERMINISTIC_SAFE_TOOLS.has(local.tool))return false;
   if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite|arquivos?|pastas?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho)\b|\.[a-z0-9]{2,8}\b/i.test(text))return true;
   if(previous?.lastDomain&&["email","calendar","filesystem"].includes(previous.lastDomain)&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere|remova|leia)\b/i.test(text))return true;
   if(typeof local?.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;
