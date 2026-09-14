@@ -42,7 +42,7 @@ export class OfficeAgent extends Container {
     this.cursor = "pointer";
     this.on("pointertap", () => onClick(this));
   }
-  get activeRunId() { const event=this.work.event; return event && !isTerminalEvent(event) ? event.runId : undefined; }
+  get activeRunId() { return this.work.event?.runId; }
   get conversationId() { return this.work.event?.conversationId; }
   get taskId() { return this.work.event?.taskId; }
   get station(): OfficeStationId { return this.work.event?.stationId ?? "central-desk"; }
@@ -108,7 +108,7 @@ export class OfficeAgent extends Container {
         event?.label ?? (this.motion === "wander" ? "Passeando" : "Disponível"),
       stationId: this.station, stationName: OFFICE_STATIONS[this.station].name,
       deskName: this.desk.name, color: this.desk.color,
-      active: Boolean(event && !isTerminalEvent(event)), offline: this.work.offline,
+      active: Boolean(event), offline: this.work.offline,
       progress: typeof event?.progress === "number" && Number.isFinite(event.progress) ? event.progress : undefined,
       severity: this.navigationError ? "error" : event?.severity ?? (event?.type === "run.failed" ? "error" : event?.type === "run.completed" ? "success" : "info"),
       elapsedSeconds: event ? Math.max(0, Math.floor((Date.now() - this.work.startedAt) / 1000)) : 0
