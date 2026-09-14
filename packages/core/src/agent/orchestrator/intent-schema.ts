@@ -36,4 +36,5 @@ export type DeferredAction =
 export type OrchestrationContext = {
   conversationId?: string;
   previous?: import("../context/conversation-action-context.js").ConversationActionContextState;
+  learnedExamples?: Array<{ utterance: string; intent: AgentIntentV1; score?: number; source?: string }>;
 };
