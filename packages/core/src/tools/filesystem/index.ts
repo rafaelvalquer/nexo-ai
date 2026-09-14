@@ -24,20 +24,31 @@ export function filesystemTools(): ToolDefinition[] {
   return [
     {
       name: "list_files", description: "Lista arquivos de uma pasta", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
-      inputSchema: z.object({ path: z.string() }),
-      async execute({path:p}) {
+      inputSchema: z.object({
+        path: z.string(),
+        kind: z.enum(["all", "file", "directory"]).default("all"),
+        sortBy: z.enum(["name", "modifiedAt", "size"]).default("name"),
+        sortDirection: z.enum(["asc", "desc"]).default("asc"),
+        limit: z.number().int().min(1).max(100).default(100)
+      }),
+      async execute({path:p,kind,sortBy,sortDirection,limit}) {
         const names = await fs.readdir(p, { withFileTypes:true });
-        const entries: Array<{name:string;type:string;path:string;size?:number;modifiedAt?:string;childCount?:number}> = [];
+        const entries: Array<{name:string;type:"directory"|"file";path:string;size?:number;modifiedAt?:string;childCount?:number}> = [];
         for(let offset=0;offset<names.length;offset+=32) entries.push(...await Promise.all(names.slice(offset,offset+32).map(async entry=>{
           const full=path.join(p,entry.name),stat=await fs.lstat(full).catch(()=>undefined);
           return {name:entry.name,type:entry.isDirectory()?"directory":"file",path:full,size:entry.isFile()?stat?.size:undefined,modifiedAt:stat?.mtime.toISOString(),childCount:entry.isDirectory()?(await fs.readdir(full).catch(()=>[])).length:undefined};
         })));
-        const rows = entries
-          .sort((a,b)=>a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1);
-        const visible = rows.slice(0,100);
+        const filtered=kind==="all"?entries:entries.filter(entry=>entry.type===kind);
+        const direction=sortDirection==="desc"?-1:1;
+        const rows=filtered.sort((a,b)=>{
+          if(sortBy==="modifiedAt")return ((Date.parse(a.modifiedAt??"")||0)-(Date.parse(b.modifiedAt??"")||0))*direction||a.name.localeCompare(b.name);
+          if(sortBy==="size")return ((a.size??0)-(b.size??0))*direction||a.name.localeCompare(b.name);
+          return a.name.localeCompare(b.name)*direction;
+        });
+        const visible = rows.slice(0,limit);
         const lines = visible.map(row => `${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.name}`);
         const suffix = rows.length > visible.length ? `\n… e mais ${rows.length - visible.length} item(ns).` : "";
-        return { ok:true, summary:`${rows.length} item(ns) encontrados em ${p}.\n${lines.join("\n")}${suffix}`, data:rows };
+        return { ok:true, summary:`${visible.length} de ${rows.length} item(ns) encontrados em ${p}.\n${lines.join("\n")}${suffix}`, data:visible };
       }
     },
     {
