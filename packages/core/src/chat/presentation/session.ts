@@ -15,10 +15,10 @@ export class ChatPresentationSession {
     this.summaries.push(result.summary);
     return this.record.presentation;
   }
-  finish(text: string, approval?: Approval): PresentationRecord | undefined {
+  finish(text: string, approval?: Approval, options: { appendText?: boolean } = {}): PresentationRecord | undefined {
     if (approval) {
       this.record.presentation.blocks.push({ id: randomUUID(), version: 1, type: "approval", approvalId: approval.id, title: approval.reason, preview: approval.preview, consequence: approval.consequence, affectedCount: approval.affectedCount, expiresAt: approval.expiresAt, status: approval.status });
-    } else if (this.record.presentation.blocks.length && text && !this.summaries.includes(text) && text !== this.summaries.join("\n")) {
+    } else if (options.appendText !== false && this.record.presentation.blocks.length && text && !this.summaries.includes(text) && text !== this.summaries.join("\n")) {
       this.record.presentation.blocks.push({ id: randomUUID(), version: 1, type: "text", content: text });
     }
     return this.record.presentation.blocks.length ? this.record : undefined;

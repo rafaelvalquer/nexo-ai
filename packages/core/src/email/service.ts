@@ -25,6 +25,14 @@ export class EmailService {
   async stats(connectionId:string,categories?:EmailMailboxCategory[],signal?:AbortSignal):Promise<EmailMailboxStats>{
     const account=this.requireAccount(connectionId);
     if(account.provider==="google"){
+      if(!categories?.length){
+        const [profile,inbox,unread]=await Promise.all([
+          this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/profile",{},signal),
+          this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX",{},signal),
+          this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/labels/UNREAD",{},signal)
+        ]);
+        return{totalMessages:numberOrUndefined(profile.messagesTotal),totalThreads:numberOrUndefined(profile.threadsTotal),inboxMessages:numberOrUndefined(inbox.messagesTotal),unreadMessages:numberOrUndefined(unread.messagesTotal)};
+      }
       const inboxQuery=buildGmailSearchQuery({categories});
       const unreadQuery=buildGmailSearchQuery({categories,unread:true});
       const [profile,inbox,unread]=await Promise.all([

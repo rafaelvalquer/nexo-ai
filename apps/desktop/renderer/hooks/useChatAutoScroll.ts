@@ -5,6 +5,7 @@ type ChatAutoScrollOptions={
   messageCount:number;
   streaming:boolean;
   streamRevision?:string|number;
+  pendingApprovalId?:string;
 };
 
 const NEAR_BOTTOM_THRESHOLD=120;
@@ -14,7 +15,7 @@ function isNearBottom(node:HTMLDivElement){
 }
 
 export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAutoScrollOptions){
-  const{sessionId,messageCount,streaming,streamRevision=0}=options;
+  const{sessionId,messageCount,streaming,streamRevision=0,pendingApprovalId}=options;
   const[nearBottom,setNearBottom]=useState(true),[unread,setUnread]=useState(false);
   const followRef=useRef(true);
   const anchoringRef=useRef(false);
@@ -24,6 +25,7 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
   const previousSessionRef=useRef<string>();
   const previousMessageCountRef=useRef(0);
   const previousStreamRevisionRef=useRef<string|number>(streamRevision);
+  const previousApprovalIdRef=useRef<string>();
   const currentSessionRef=useRef(sessionId);
   const scheduledFrameRef=useRef<number>();
   const scheduledSecondFrameRef=useRef<number>();
@@ -133,6 +135,39 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
       setUnread(true);
     }
   },[messageCount,ref,scheduleBottom,sessionId,streaming,streamRevision]);
+
+  useLayoutEffect(() => {
+    if (!pendingApprovalId) return;
+    if (previousApprovalIdRef.current === pendingApprovalId) return;
+
+    previousApprovalIdRef.current = pendingApprovalId;
+    const expectedSession = currentSessionRef.current;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (currentSessionRef.current !== expectedSession) return;
+        const viewport = ref.current;
+        if (!viewport) return;
+
+        const selector = `[data-approval-id="${CSS.escape(pendingApprovalId)}"]`;
+        const approval = viewport.querySelector<HTMLElement>(selector);
+
+        if (approval) {
+          followRef.current = true;
+          pendingInitialScrollRef.current = false;
+          approval.scrollIntoView({ behavior: "smooth", block: "center" });
+          setNearBottom(true);
+          setUnread(false);
+          window.setTimeout(() => {
+            approval.focus({ preventScroll: true });
+          }, 350);
+          return;
+        }
+
+        scrollToBottom("smooth");
+      });
+    });
+  }, [pendingApprovalId, ref, scrollToBottom]);
 
   useLayoutEffect(()=>()=>{
     cancelScheduledScroll();

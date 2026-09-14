@@ -48,7 +48,13 @@ export class AgentPlanner{
     const explicitEmailIntent=deterministicEmailCategoryIntent(userText);
     if(explicitEmailIntent){const built=buildIntentPlan(explicitEmailIntent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:explicitEmailIntent};}
     const filesystemIntent=deterministicFilesystemIntent(userText);
-    if(filesystemIntent){const built=buildIntentPlan(filesystemIntent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};}
+    if(filesystemIntent){
+      const built=buildIntentPlan(filesystemIntent,tools,previous);
+      if(built.steps?.length||built.direct)return{...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+      const fallback=fastRouter.route(userText);
+      if(fallback)return{...fallback,origin:"fast",intent:filesystemIntent};
+      return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+    }
     const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return{...local,origin:"fast"};if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
@@ -56,7 +62,7 @@ export class AgentPlanner{
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent};
   }
-  buildIntentPlan(intent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent};}
+  buildIntentPlan(intent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return{...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent};}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result),store=this.activeIntentMemory();
