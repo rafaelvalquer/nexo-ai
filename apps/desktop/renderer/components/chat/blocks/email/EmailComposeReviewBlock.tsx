@@ -17,17 +17,18 @@ export function EmailComposeReviewBlock({block}:{block:EmailComposeReviewModel})
   draftRef.current=draft;fieldsRef.current=fields;
 
   const applyDraft=useCallback((next:EmailComposeDraftSnapshot)=>{draftRef.current=next;setDraft(next);setFields({to:[...next.to],subject:next.subject,bodyText:next.bodyText});setError(next.lastError??"");return next;},[]);
+  const applyPersistedVersion=useCallback((next:EmailComposeDraftSnapshot)=>{draftRef.current=next;setDraft(next);setError(next.lastError??"");return next;},[]);
 
   const queueSave=useCallback((target:Fields)=>{
     const run=saveChain.current.catch(()=>draftRef.current).then(async current=>{
       if(current.status!=="review")return current;
       if(equalFields(current,target))return current;
       const updated=await window.nexo.updateEmailDraft({draftId:current.id,expectedVersion:current.version,patch:{to:[...target.to],subject:target.subject,bodyText:target.bodyText}}) as EmailComposeDraftSnapshot;
-      return applyDraft(updated);
+      return applyPersistedVersion(updated);
     });
     saveChain.current=run;
     return run;
-  },[applyDraft]);
+  },[applyPersistedVersion]);
 
   useEffect(()=>{
     let active=true;
@@ -65,14 +66,14 @@ export function EmailComposeReviewBlock({block}:{block:EmailComposeReviewModel})
     if(timerRef.current!==undefined)window.clearTimeout(timerRef.current);
     setBusy(true);setError("");
     try{
-      const current=await saveChain.current.catch(()=>draftRef.current);
-      const cancelled=await window.nexo.cancelEmailDraft({draftId:current.id,expectedVersion:current.version}) as EmailComposeDraftSnapshot;
+      const saved=await queueSave({to:[...fieldsRef.current.to],subject:fieldsRef.current.subject,bodyText:fieldsRef.current.bodyText});
+      const cancelled=await window.nexo.cancelEmailDraft({draftId:saved.id,expectedVersion:saved.version}) as EmailComposeDraftSnapshot;
       applyDraft(cancelled);
     }catch(caught){setError(caught instanceof Error?caught.message:String(caught));}
     finally{setBusy(false);}
   }
 
-  if(draft.status==="sent"||draft.status==="cancelled")return <div ref={rootRef as React.RefObject<HTMLDivElement>} data-email-draft-id={draft.id}><EmailComposeStatus draft={draft}/></div>;
+  if(draft.status==="sent"||draft.status==="cancelled")return <section ref={rootRef} data-email-draft-id={draft.id}><EmailComposeStatus draft={draft}/></section>;
 
   return <section ref={rootRef} className="emailComposeReview" data-email-draft-id={draft.id} tabIndex={-1} aria-label="Revisar e-mail">
     <h3><Mail size={18}/>Novo e-mail</h3>
