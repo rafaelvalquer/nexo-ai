@@ -13,6 +13,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm exec playwright install chromium
       - run: pnpm test:e2e
       - run: pnpm package:win
       - shell: powershell
