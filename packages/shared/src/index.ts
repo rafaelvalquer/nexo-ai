@@ -1,5 +1,6 @@
 import type { ChatBlock, ChatPresentation } from "./chat.js";
 export * from "./chat.js";
+export * from "./automation.js";
 export type RiskLevel = "READ" | "SAFE_WRITE" | "SENSITIVE" | "CRITICAL";
 
 export type ToolRequest = { name: string; input: Record<string, unknown> };

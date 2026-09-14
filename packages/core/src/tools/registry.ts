@@ -12,12 +12,18 @@ import type { CalendarService } from "../calendar/service.js";
 import { calendarTools } from "./calendar/index.js";
 import type { BrowserSessionManager } from "../browser/browser-session-manager.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
+
+let activeToolRegistry: ToolRegistry | undefined;
+
 export class ToolRegistry{
   private tools=new Map<string,ToolDefinition>();
-  constructor(memory?:MemoryService,email?:EmailService,calendar?:CalendarService,browserSessions?:BrowserSessionManager){const base=[...filesystemTools(),...systemTools(),...applicationTools(),...shellTools(),...browserTools(browserSessions)];const mem=memory?memoryTools(memory):[];for(const tool of[...base,...mem,...(email?emailTools(email):[]),...(calendar?calendarTools(calendar):[])])this.tools.set(tool.name,tool);}
+  constructor(memory?:MemoryService,email?:EmailService,calendar?:CalendarService,browserSessions?:BrowserSessionManager){const base=[...filesystemTools(),...systemTools(),...applicationTools(),...shellTools(),...browserTools(browserSessions)];const mem=memory?memoryTools(memory):[];for(const tool of[...base,...mem,...(email?emailTools(email):[]),...(calendar?calendarTools(calendar):[])])this.tools.set(tool.name,tool);activeToolRegistry=this;}
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}
   agentSchema(name:string){const tool=this.tools.get(name);return tool?zodToJsonSchema(tool.inputSchema,{$refStrategy:"none"}):undefined;}
   list(){return[...this.tools.values()].map(t=>({name:t.name,description:t.description,risk:t.risk,permissions:t.permissions,domain:t.domain,operation:t.operation,mutatesState:t.mutatesState??t.risk!=="READ"}));}
   listForAgent(){return[...this.tools.values()].map(tool=>({name:tool.name,description:tool.description,risk:tool.risk,permissions:tool.permissions,domain:tool.domain,operation:tool.operation,mutatesState:tool.mutatesState??tool.risk!=="READ",requiresConfirmation:tool.mutatesState??tool.risk!=="READ",parameters:zodToJsonSchema(tool.inputSchema,{$refStrategy:"none"})}));}
 }
+
+/** Read-only automation trigger probes reuse the already configured application registry. */
+export function getActiveToolRegistry(): ToolRegistry | undefined { return activeToolRegistry; }
