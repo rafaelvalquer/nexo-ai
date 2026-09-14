@@ -8,6 +8,7 @@ import { EmailSearchPreferenceService } from "../../packages/core/src/email/pref
 import { defaultMailboxCategories, getMailboxOptions } from "../../packages/core/src/email/preferences/category-resolver";
 import { buildGmailSearchQuery } from "../../packages/core/src/email/google/query-builder";
 import { deterministicEmailCategoryIntent, deterministicEmailPreferenceIntent } from "../../packages/core/src/agent/orchestrator/email-intent-enricher";
+import { resolveFallbackIntent } from "../../packages/core/src/agent/orchestrator/fallback-intent-resolver";
 import { ClarificationResolver } from "../../packages/core/src/agent/clarification/resolver";
 import { buildEmailMailboxQuestion } from "../../packages/core/src/agent/clarification/option-builders";
 
@@ -26,6 +27,14 @@ describe("email mailbox preferences", () => {
     const restored = new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(reopened));
     expect(restored.get("conta-a")?.categories).toEqual(["primary"]);
     expect(restored.get("conta-b")?.categories).toEqual(["primary", "updates"]);
+  });
+
+  it("registra preferências e esclarecimentos na migração formal", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-email-migration-")); roots.push(root);
+    const db = new NexoDatabase(root); await db.ready();
+    expect(db.get<{version:number}>("SELECT version FROM schema_migrations WHERE version=14")?.version).toBe(14);
+    expect(db.get<{name:string}>("SELECT name FROM sqlite_master WHERE type='table' AND name='email_search_preferences'")?.name).toBe("email_search_preferences");
+    expect(db.get<{name:string}>("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_clarifications'")?.name).toBe("pending_clarifications");
   });
 
   it("não permite seleção vazia", async () => {
@@ -72,6 +81,15 @@ describe("email intent enrichment", () => {
       entities: { categories: ["promotions"], maxResults: 20 }
     });
   });
+
+  it("mantém configuração e categorias explícitas no fallback", () => {
+    expect(resolveFallbackIntent("selecionar caixas de e-mails")).toMatchObject({
+      domain: "email", intent: "update", operation: "select_mailboxes"
+    });
+    expect(resolveFallbackIntent("mostre meus emails de Promoções")).toMatchObject({
+      domain: "email", entities: { categories: ["promotions"] }
+    });
+  });
 });
 
 describe("mailbox clarification", () => {
@@ -92,5 +110,14 @@ describe("mailbox clarification", () => {
       source: "button",
     });
     expect(resolver.resolve(question, { optionIds: [] })).toMatchObject({ resolved: false });
+  });
+
+  it("aceita selecionar todas as caixas pelo texto do chat", () => {
+    const question = buildEmailMailboxQuestion("google", ["primary"], "initial");
+    expect(resolver.resolve(question, { chatText: "todas" })).toEqual({
+      resolved: true,
+      value: ["primary", "promotions", "social", "updates", "forums"],
+      source: "chat_text",
+    });
   });
 });
