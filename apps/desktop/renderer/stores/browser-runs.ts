@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import type { BrowserRun, BrowserRunEvent } from "@nexo/shared/browser-agent";
 
-type StoredEvent={id:string;browser_run_id:string;type:string;label:string|null;url:string|null;created_at:string};
-type BrowserRunState={
+export type StoredEvent={id:string;browser_run_id:string;type:string;label:string|null;url:string|null;created_at:string};
+export type BrowserRunState={
   runs:Record<string,BrowserRun>;
   events:Record<string,BrowserRunEvent[]>;
   history:Record<string,StoredEvent[]>;
@@ -12,6 +12,21 @@ type BrowserRunState={
   steer:(runId:string,instruction:string)=>Promise<void>;
   resolveApproval:(approvalId:string,approved:boolean)=>Promise<void>;
 };
+
+// Zustand 5 uses useSyncExternalStore under the hood. A selector must return the
+// same reference while the underlying state is unchanged. Never use `?? []`
+// directly inside a selector: that creates a new snapshot on every read and can
+// trigger React's "Maximum update depth exceeded" protection.
+const EMPTY_BROWSER_RUN_EVENTS:BrowserRunEvent[]=[];
+const EMPTY_BROWSER_RUN_HISTORY:StoredEvent[]=[];
+
+export function selectBrowserRunEvents(state:Pick<BrowserRunState,"events">,runId:string){
+  return state.events[runId]??EMPTY_BROWSER_RUN_EVENTS;
+}
+
+export function selectBrowserRunHistory(state:Pick<BrowserRunState,"history">,runId:string){
+  return state.history[runId]??EMPTY_BROWSER_RUN_HISTORY;
+}
 
 function applyEvent(run:BrowserRun,event:BrowserRunEvent):BrowserRun{
   switch(event.type){
