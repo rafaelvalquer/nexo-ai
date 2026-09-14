@@ -15,9 +15,16 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 let activeToolRegistry: ToolRegistry | undefined;
 
-export class ToolRegistry{
-  private tools=new Map<string,ToolDefinition>();
-  constructor(memory?:MemoryService,email?:EmailService,calendar?:CalendarService,browserSessions?:BrowserSessionManager){const base=[...filesystemTools(),...systemTools(),...applicationTools(),...shellTools(),...browserTools(browserSessions)];const mem=memory?memoryTools(memory):[];for(const tool of[...base,...mem,...(email?emailTools(email):[]),...(calendar?calendarTools(calendar):[])])this.tools.set(tool.name,tool);activeToolRegistry=this;}
+export class ToolRegistry {
+  private tools = new Map<string,ToolDefinition>();
+  constructor(memory?:MemoryService,email?:EmailService,calendar?:CalendarService,browserSessions?:BrowserSessionManager) {
+    const base=[...filesystemTools(),...systemTools(),...applicationTools(),...shellTools(),...browserTools(browserSessions)];
+    const mem=memory?memoryTools(memory):[];
+    this.register(...base,...mem,...(email?emailTools(email):[]),...(calendar?calendarTools(calendar):[]));
+    activeToolRegistry=this;
+  }
+  register(...tools:ToolDefinition[]) { for (const tool of tools) this.tools.set(tool.name,tool); return this; }
+  unregister(name:string) { return this.tools.delete(name); }
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}
   agentSchema(name:string){const tool=this.tools.get(name);return tool?zodToJsonSchema(tool.inputSchema,{$refStrategy:"none"}):undefined;}

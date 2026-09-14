@@ -1,3 +1,4 @@
+import type { BrowserRunBlock } from "./browser-agent.js";
 /** Core-produced presentation data. Provider credentials and tool inputs never belong here. */
 export type ResourceActionState = "idle" | "preparing" | "awaiting_approval" | "executing" | "success" | "failed";
 export type ResourceAction = {

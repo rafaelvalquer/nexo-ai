@@ -23,6 +23,12 @@ function siteFromText(text: string): string | null {
   const explicit = text.match(/\b((?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:\/[^\s]*)?)/i);
   if (explicit) return normalizeUrl(explicit[1]);
   const aliases: Array<[RegExp, string]> = [
+    [/\binfomoney\b/i, "https://www.infomoney.com.br"],
+    [/\bvalor(?:\s+econ[oô]mico|\s+investe)?\b/i, "https://valor.globo.com"],
+    [/\binvesting(?:\.com)?\b/i, "https://br.investing.com"],
+    [/\bg1\b/i, "https://g1.globo.com"],
+    [/\buol\b/i, "https://www.uol.com.br"],
+    [/\blinkedin\b/i, "https://www.linkedin.com"],
     [/\bgoogle\b/i, "https://www.google.com"],
     [/\binstagram\b/i, "https://www.instagram.com"],
     [/\byoutube\b/i, "https://www.youtube.com"],
@@ -33,7 +39,15 @@ function siteFromText(text: string): string | null {
 
 function isBrowserAction(text: string) {
   return /\b(abra|abrir|abre|acesse|acessar|entre|entrar|navegue|navegar|ir\s+para)\b/i.test(text) &&
-    /\b(navegador|browser|site|p[aá]gina|chrome|edge|google|instagram|youtube|github)|https?:\/\/|\bwww\./i.test(text);
+    /\b(navegador|browser|site|p[aá]gina|chrome|edge|google|instagram|youtube|github|infomoney|investing|linkedin)|https?:\/\/|\bwww\./i.test(text);
+}
+
+/** Explicit web research must never fall back to e-mail or local-file search. */
+function isBrowserAgentTask(text:string) {
+  if (/\b(e-?mails?|gmail|caixa\s+de\s+entrada|agenda|calend[aá]rio|arquivos?|pastas?|downloads?|desktop|[aá]rea\s+de\s+trabalho)\b/i.test(text)) return false;
+  const researchVerb=/\b(pesquise|pesquisar|procure|procurar|busque|buscar|investigue|investigar|analise|analisar|leia|ler|resuma|resumir|compare|comparar|verifique|verificar|consulte|consultar|encontre|encontrar|veja)\b/i.test(text);
+  const explicitWeb=/\b(internet|web|site|p[aá]gina|not[ií]cias?\s+(?:de|do|da|no|na)|infomoney|investing|valor(?:\s+econ[oô]mico|\s+investe)?|g1|uol|linkedin|youtube|github)\b|https?:\/\/|\bwww\./i.test(text);
+  return researchVerb && (explicitWeb || Boolean(siteFromText(text)));
 }
 
 export class FastIntentRouter {
@@ -89,6 +103,11 @@ export class FastIntentRouter {
 
     if (/\b(configur|adicion|alter|gerenci).*(pastas?\s+permitidas?)|\bpastas?\s+permitidas?\b/i.test(text)) {
       return { direct: "Abra Configurações → Segurança → Pastas permitidas. Downloads, Documents e Desktop são autorizadas por padrão; você pode adicionar outras pastas manualmente." };
+    }
+
+    if (isBrowserAgentTask(text)) {
+      const personal=/\b(minha\s+conta|log(?:in|ar)|autenticad[oa]|sess[aã]o\s+salva|meu\s+perfil)\b/i.test(text);
+      return { tool:"browser_agent_run", input:{request:text,mode:personal?"personal":"research"}, explanation:"Abrindo o Browser Agent para pesquisar na web…" };
     }
 
     if (isBrowserAction(text)) {

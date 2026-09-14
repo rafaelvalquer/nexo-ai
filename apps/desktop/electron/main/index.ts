@@ -20,6 +20,7 @@ let tray:Tray|null=null;
 let quitting=false;
 const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost()});
 let httpServer:any=null;
+let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
 
 async function createWindow(){
   await core.ready();
@@ -48,11 +49,12 @@ app.whenReady().then(async()=>{
   registerClarificationIpc(core);
   registerEmailDraftIpc(core);
   registerAutomationV2Ipc(core);
+  browserAgentRuntime=registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")});
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   await createWindow();createTray();
   setTimeout(()=>{for(const account of core.connections.list().filter(item=>item.status==="connected"))void core.connections.test(account.id).catch(()=>undefined);},1500).unref?.();
   if(app.isPackaged)void import("../updater/index.js").then(({configureUpdater})=>configureUpdater(true));
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});
 }).catch(error=>{console.error("Nexo AI startup failed",error);app.exit(1);});
-app.on("before-quit",()=>{quitting=true;core.shutdown();void httpServer?.close?.();});
+app.on("before-quit",()=>{quitting=true;void browserAgentRuntime?.shutdown();core.shutdown();void httpServer?.close?.();});
 app.on("window-all-closed",()=>{if(process.platform!=="darwin"&&!core.getSettings().runInBackground)app.quit();});

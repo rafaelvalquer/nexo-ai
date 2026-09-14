@@ -16,6 +16,7 @@ export function defaultPresentationRegistry() {
     .register(["list_files", "search_files", "largest_files"], filesystemAdapter)
     .register(["calendar_list", "calendar_search", "calendar_get"], calendarAdapter)
     .register(["email_stats"], emailStatsAdapter)
+    .register(["browser_agent_run"], browserAgentAdapter)
     .register(["__clarification__"], clarificationAdapter)
     .register(["__email_compose_review__"], emailComposeReviewAdapter)
     .registerFallback(safeArraySummaryAdapter);
@@ -23,7 +24,7 @@ export function defaultPresentationRegistry() {
 export class ChatPresentationBuilder {
   constructor(private registry = defaultPresentationRegistry()) {}
   fromToolResult(toolName: string, result: ToolResult, input: Record<string, unknown> = {}): PresentationRecord {
-    const adapter=this.registry.get(toolName)??this.registry.getFallback();
+    const adapter = this.registry.get(toolName) ?? this.registry.getFallback();
     const projected = result.ok ? adapter?.(result, { toolName, input }) : undefined;
     if (projected) return projected;
     return { presentation: { version: 1, blocks: [{ id: randomUUID(), version: 1, type: "text", content: result.summary }] }, bindings: [] };
