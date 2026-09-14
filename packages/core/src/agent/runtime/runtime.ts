@@ -2,13 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { ToolResult } from "@nexo/shared";
 import type { NexoDatabase } from "../../database/db.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
-import type { PlanStep } from "../planner.js";
+import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
+import { IntentMemoryStore } from "../intent-memory/store.js";
 import type { AgentRun, AgentRunStatus, PersistedAgentState } from "./state.js";
 
 type RunRow={id:string;status:AgentRunStatus;state_json:string;final_response:string|null;created_at:string;updated_at:string;conversation_id?:string|null;task_id?:string|null;agent_id?:string|null};
 export type AgentRuntimeContext={conversationId?:string;taskId?:string;agentId?:string};
 export class AgentRuntime{
-  constructor(private db:NexoDatabase){}
+  private readonly intentMemory:IntentMemoryStore;
+  constructor(private db:NexoDatabase){
+    this.intentMemory=new IntentMemoryStore(db);
+    configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled());
+  }
   start(userRequest:string,steps:PlanStep[],context:AgentRuntimeContext={},metadata:Partial<Pick<PersistedAgentState,"intent"|"deferredAction"|"responseMode">>={}):AgentRun{const id=randomUUID(),now=new Date().toISOString(),state:PersistedAgentState={userRequest,steps,nextStep:0,results:[],iteration:0,...metadata};this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id) VALUES(?,?,?,?,?,?,?,?,?)",[id,userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??null,context.taskId??null,context.agentId??null]);return{id,status:"RUNNING",state,createdAt:now,updatedAt:now};}
   get(id:string){const row=this.db.get<RunRow>("SELECT * FROM agent_runs WHERE id=?",[id]);return row&&this.toRun(row);}
   saveState(id:string,state:PersistedAgentState,status:AgentRunStatus="RUNNING"){this.db.run("UPDATE agent_runs SET state_json=?,status=?,updated_at=? WHERE id=?",[JSON.stringify(state),status,new Date().toISOString(),id]);}
@@ -21,5 +26,12 @@ export class AgentRuntime{
   getConversationActionContext(conversationId?:string):ConversationActionContextState|undefined{if(!conversationId)return undefined;const row=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`conversation-action:${conversationId}`]);if(!row)return undefined;try{return JSON.parse(row.value) as ConversationActionContextState;}catch{return undefined;}}
   saveConversationActionContext(conversationId:string|undefined,state:ConversationActionContextState){if(!conversationId)return;this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`conversation-action:${conversationId}`,JSON.stringify(state)]);}
   clearConversationActionContext(conversationId:string){this.db.run("DELETE FROM application_state WHERE key=?",[`conversation-action:${conversationId}`]);}
+  clearIntentLearning(){this.intentMemory.clear();}
+  intentLearningCount(){return this.intentMemory.count();}
+  private intentLearningEnabled(){
+    const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");
+    if(!row)return true;
+    try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}
+  }
   private toRun(row:RunRow):AgentRun{return{id:row.id,status:row.status,state:JSON.parse(row.state_json),finalResponse:row.final_response??undefined,createdAt:row.created_at,updatedAt:row.updated_at};}
 }
