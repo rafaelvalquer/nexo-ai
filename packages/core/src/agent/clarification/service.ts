@@ -6,6 +6,8 @@ import { ClarificationRepository } from "./repository.js";
 import { ClarificationResolver,type ClarificationAnswer } from "./resolver.js";
 import type { ClarificationAttempt,ClarificationResume,PendingClarification } from "./types.js";
 
+const KNOWN_FOLDERS = new Set(["downloads", "documents", "desktop"]);
+
 export class ClarificationService {
   constructor(private readonly repository: ClarificationRepository, private readonly resolver: ClarificationResolver) {}
 
@@ -89,7 +91,8 @@ export class ClarificationService {
     }
 
     const values = { ...pending.values, [question.field]: answer.value };
-    const entities = { ...pending.partialEntities, ...values };
+    const entityPatch = this.entityPatch(question.field, answer.value);
+    const entities = { ...pending.partialEntities, ...entityPatch };
     const remaining = (pending.intentSnapshot.missing ?? []).filter((field) => field !== question.field && values[field] === undefined);
     const intent: AgentIntent = {
       ...pending.intentSnapshot,
@@ -128,6 +131,13 @@ export class ClarificationService {
     };
     const value: ClarificationResume = { pending: resolved, intent, originalRequest: pending.originalRequest, resolution };
     return { kind: "resolved", value };
+  }
+
+  private entityPatch(field: string, value: unknown): Record<string, unknown> {
+    if (field === "folder" && typeof value === "string" && !KNOWN_FOLDERS.has(value)) {
+      return { path: value };
+    }
+    return { [field]: value };
   }
 }
 
