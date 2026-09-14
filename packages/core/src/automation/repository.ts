@@ -13,9 +13,10 @@ import type {
 } from "@nexo/shared";
 import { DEFAULT_AUTOMATION_OUTPUT, DEFAULT_AUTOMATION_POLICY } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
+import { migrateAutomationSchema } from "./migrations.js";
 
 export class AutomationRepository {
-  constructor(private db: NexoDatabase) { this.ensureSchema(); }
+  constructor(private db: NexoDatabase) { migrateAutomationSchema(this.db); }
 
   list(): AutomationV2[] {
     return this.db.all<AutomationRow>("SELECT * FROM automations ORDER BY created_at DESC").map(row => this.map(row));
@@ -146,21 +147,6 @@ export class AutomationRepository {
       };
     }
     return legacyToV2(row);
-  }
-
-  private ensureSchema(): void {
-    const columns = new Set(this.db.all<{ name: string }>("PRAGMA table_info(automations)").map(column => String(column.name)));
-    const additions: Array<[string, string]> = [
-      ["version", "INTEGER DEFAULT 1"], ["description", "TEXT"], ["icon", "TEXT"], ["trigger_json", "TEXT"], ["conditions_json", "TEXT"], ["condition_operator", "TEXT DEFAULT 'AND'"],
-      ["actions_json", "TEXT"], ["output_json", "TEXT"], ["policy_json", "TEXT"], ["updated_at", "TEXT"], ["next_run_at", "TEXT"], ["last_run_status", "TEXT"], ["consecutive_failures", "INTEGER DEFAULT 0"]
-    ];
-    for (const [name, type] of additions) if (!columns.has(name)) this.db.run(`ALTER TABLE automations ADD COLUMN ${name} ${type}`);
-    this.db.run("CREATE TABLE IF NOT EXISTS automation_runs(id TEXT PRIMARY KEY,automation_id TEXT NOT NULL,trigger_type TEXT NOT NULL,trigger_payload_json TEXT,status TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,duration_ms INTEGER,summary TEXT,error TEXT,task_id TEXT,approval_id TEXT,context_json TEXT,next_action_index INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(automation_id) REFERENCES automations(id))");
-    this.db.run("CREATE TABLE IF NOT EXISTS automation_run_steps(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,ordinal INTEGER NOT NULL,action_id TEXT NOT NULL,action_type TEXT NOT NULL,status TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,duration_ms INTEGER,summary TEXT,error TEXT,approval_id TEXT,FOREIGN KEY(run_id) REFERENCES automation_runs(id))");
-    this.db.run("CREATE TABLE IF NOT EXISTS automation_trigger_state(automation_id TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(automation_id) REFERENCES automations(id))");
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_automation_runs_automation_started ON automation_runs(automation_id,started_at)");
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_automation_runs_status ON automation_runs(status)");
-    this.db.run("CREATE INDEX IF NOT EXISTS idx_automation_run_steps_run ON automation_run_steps(run_id,ordinal)");
   }
 }
 
