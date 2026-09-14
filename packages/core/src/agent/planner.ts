@@ -22,11 +22,26 @@ export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string
 
 const fastRouter=new FastIntentRouter();
 const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","memory_usage","disk_usage","system_info","process_list"]);
+let defaultIntentMemory:IntentMemoryStore|undefined;
+let defaultIntentLearningEnabled:()=>boolean=()=>true;
+let defaultIntentMetrics:LocalMetricsService|undefined;
+
+/**
+ * AgentRuntime calls this after the database is ready. Keeping this registration
+ * at runtime level avoids a second SQLite instance and preserves compatibility
+ * with existing NexoCore construction and tests.
+ */
+export function configureDefaultIntentLearning(store:IntentMemoryStore,enabled:()=>boolean,metrics?:LocalMetricsService){
+  defaultIntentMemory=store;
+  defaultIntentLearningEnabled=enabled;
+  defaultIntentMetrics=metrics;
+}
 
 export class AgentPlanner{
   private readonly orchestrator:IntentOrchestrator;
   private readonly synthesizer:ResponseSynthesizer;
-  private readonly intentRetriever?:IntentMemoryRetriever;
+  private intentRetriever?:IntentMemoryRetriever;
+  private retrieverStore?:IntentMemoryStore;
   constructor(
     private llm:LLMProvider,
     private registry:ToolRegistry,
@@ -36,7 +51,7 @@ export class AgentPlanner{
   ){
     this.orchestrator=new IntentOrchestrator(llm,diagnostic=>this.recordIntentDiagnostic(diagnostic));
     this.synthesizer=new ResponseSynthesizer(llm);
-    this.intentRetriever=intentMemory?new IntentMemoryRetriever(intentMemory,text=>llm.embed(text)):undefined;
+    if(intentMemory){this.intentRetriever=new IntentMemoryRetriever(intentMemory,text=>llm.embed(text));this.retrieverStore=intentMemory;}
   }
 
   async plan(userText:string,context:LLMMessage[]=[],signal?:AbortSignal,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Promise<Plan>{
@@ -49,7 +64,9 @@ export class AgentPlanner{
 
     const tools=availableTools??this.registry.listForAgent().map((tool:any)=>({name:tool.name,description:tool.description,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name,risk:tool.risk,mutatesState:tool.mutatesState??tool.risk!=="READ",requiresConfirmation:tool.requiresConfirmation??tool.risk!=="READ",permissions:tool.permissions,parameters:tool.parameters}));
     const hint=resolveDomainHint(userText);
-    const learned=this.intentRetriever&&this.intentLearningEnabled()?await this.intentRetriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
+    const store=this.activeIntentMemory();
+    const retriever=this.retrieverFor(store);
+    const learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const intent=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const built=buildIntentPlan(intent,tools,previous);
     return{...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent};
@@ -59,13 +76,14 @@ export class AgentPlanner{
 
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result);
-    if(result.ok&&plan.intent?.status==="ready"&&this.intentMemory&&this.intentLearningEnabled()){
+    const store=this.activeIntentMemory();
+    if(result.ok&&plan.intent?.status==="ready"&&store&&this.isIntentLearningEnabled()){
       const tool=this.registry.get(step.tool);
       const mutation=tool ? (tool.mutatesState ?? tool.risk!=="READ") : false;
-      this.intentMemory.remember(userRequest,plan.intent,mutation?"confirmed_execution":"successful_execution");
+      store.remember(userRequest,plan.intent,mutation?"confirmed_execution":"successful_execution");
       if(previous?.lastQuery&&/^\s*(n[aã]o\b|quis\s+dizer\b|corrigindo\b)/i.test(userRequest)){
-        this.intentMemory.remember(previous.lastQuery,plan.intent,"user_correction");
-        this.metrics?.record("intent.user_correction",1,{domain:plan.intent.domain});
+        store.remember(previous.lastQuery,plan.intent,"user_correction");
+        this.activeMetrics()?.record("intent.user_correction",1,{domain:plan.intent.domain});
       }
     }
     return next;
@@ -113,12 +131,21 @@ export class AgentPlanner{
     return{direct:raw,origin:"llm"};
   }
 
+  private activeIntentMemory(){return this.intentMemory??defaultIntentMemory;}
+  private isIntentLearningEnabled(){return this.intentMemory?this.intentLearningEnabled():defaultIntentLearningEnabled();}
+  private activeMetrics(){return this.metrics??defaultIntentMetrics;}
+  private retrieverFor(store?:IntentMemoryStore){
+    if(!store)return undefined;
+    if(this.intentRetriever&&this.retrieverStore===store)return this.intentRetriever;
+    this.intentRetriever=new IntentMemoryRetriever(store,text=>this.llm.embed(text));this.retrieverStore=store;return this.intentRetriever;
+  }
   private recordIntentDiagnostic(diagnostic:IntentDiagnostic){
-    this.metrics?.record("intent.requests",1,{domain:diagnostic.selectedDomain??diagnostic.domainHint??"unknown"});
-    if(diagnostic.validationSuccess)this.metrics?.record("intent.structured_success",1,{domain:diagnostic.selectedDomain??"unknown"});
-    if(diagnostic.fallbackUsed)this.metrics?.record("intent.fallback",1,{domain:diagnostic.finalIntent?.domain??"unknown"});
-    if(diagnostic.retryCount)this.metrics?.record("intent.retry",diagnostic.retryCount,{domain:diagnostic.selectedDomain??"unknown"});
-    if(!diagnostic.validationSuccess&&!diagnostic.fallbackUsed)this.metrics?.record("intent.schema_failure",1,{domain:diagnostic.selectedDomain??"unknown"});
+    const metrics=this.activeMetrics();
+    metrics?.record("intent.requests",1,{domain:diagnostic.selectedDomain??diagnostic.domainHint??"unknown"});
+    if(diagnostic.validationSuccess)metrics?.record("intent.structured_success",1,{domain:diagnostic.selectedDomain??"unknown"});
+    if(diagnostic.fallbackUsed)metrics?.record("intent.fallback",1,{domain:diagnostic.finalIntent?.domain??"unknown"});
+    if(diagnostic.retryCount)metrics?.record("intent.retry",diagnostic.retryCount,{domain:diagnostic.selectedDomain??"unknown"});
+    if(!diagnostic.validationSuccess&&!diagnostic.fallbackUsed)metrics?.record("intent.schema_failure",1,{domain:diagnostic.selectedDomain??"unknown"});
   }
 }
 
