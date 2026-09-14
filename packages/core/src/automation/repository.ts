@@ -166,10 +166,11 @@ function legacyToV2(row: AutomationRow): AutomationV2 {
     : { type: "manual" };
   const action: AutomationAction = { id: "legacy-command", type: "nexo.command", config: { command: row.command } };
   const isUnreadEmailSummary = row.name === "Resumir e-mails não lidos";
+  const isEndOfDaySummary = row.name === "Resumo do fim do dia";
   return {
     id: row.id, version: 2, name: row.name, enabled: Boolean(row.enabled), trigger, conditions: [], conditionOperator: "AND", actions: [action],
-    output: isUnreadEmailSummary ? { type: "chat", conversationMode: "automation" } : DEFAULT_AUTOMATION_OUTPUT,
-    prompt: isUnreadEmailSummary ? "Resuma meus e-mails não lidos e destaque os que exigem ação." : undefined,
+    output: { type: "chat", conversationMode: "automation" },
+    prompt: isUnreadEmailSummary ? "Resuma meus e-mails não lidos e destaque os que exigem ação." : isEndOfDaySummary ? "Faça um resumo objetivo das pendências, agenda e e-mails importantes do dia." : undefined,
     policy: DEFAULT_AUTOMATION_POLICY, createdAt: row.created_at, updatedAt: row.updated_at ?? row.created_at,
     lastRunAt: row.last_run_at ?? undefined, lastRunStatus: asRunStatus(row.last_run_status), consecutiveFailures: Number(row.consecutive_failures ?? 0)
   };
