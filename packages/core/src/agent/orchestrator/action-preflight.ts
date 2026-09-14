@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ToolResult } from "@nexo/shared";
 import type { DeferredAction } from "./intent-schema.js";
 import type { BuiltPlanStep } from "./plan-builder.js";
@@ -8,7 +9,8 @@ export function materializeDeferredAction(action: DeferredAction, result: ToolRe
   if (!result.ok) return { direct: result.error ?? result.summary };
   if (action.kind === "email.bulk") return materializeEmail(action, result.data);
   if (action.kind === "calendar.delete") return materializeCalendarDelete(action, result.data);
-  return materializeCalendarUpdate(action, result.data);
+  if (action.kind === "calendar.update") return materializeCalendarUpdate(action, result.data);
+  return materializeFilesystemTrash(action, result.data);
 }
 
 function materializeEmail(action: Extract<DeferredAction, { kind: "email.bulk" }>, data: unknown): MaterializedAction {
@@ -78,8 +80,37 @@ function materializeCalendarUpdate(action: Extract<DeferredAction, { kind: "cale
   };
 }
 
+function materializeFilesystemTrash(action: Extract<DeferredAction, { kind: "filesystem.trash" }>, data: unknown): MaterializedAction {
+  const info = data && typeof data === "object" ? data as { size?: number; isDirectory?: boolean } : {};
+  const name = path.basename(action.path);
+  const kind = info.isDirectory ? "pasta" : "arquivo";
+  const size = typeof info.size === "number" && !info.isDirectory ? `\nTamanho: ${formatBytes(info.size)}` : "";
+  return {
+    step: {
+      tool: "trash_file",
+      input: { path: action.path },
+      explanation: `Aguardando confirmação para mover ${name} para a lixeira…`,
+      approval: {
+        domain: "filesystem",
+        actionType: "trash",
+        affectedCount: 1,
+        preview: `${kind[0].toUpperCase()}${kind.slice(1)}: ${name}\nCaminho: ${action.path}${size}`,
+        consequence: `O ${kind} será movido para a lixeira do sistema.`,
+        expiresInMs: 5 * 60_000
+      }
+    }
+  };
+}
+
 function ambiguity(events: any[]) {
   const list = events.slice(0, 10).map((event, index) => `${index + 1}. ${event.title ?? "(sem título)"}${event.start ? ` — ${new Date(event.start).toLocaleString("pt-BR")}` : ""}`).join("\n");
   return `Encontrei ${events.length} compromissos possíveis. Para evitar alterar o evento errado, escolha um deles:\n${list}`;
 }
 function eventPreview(event: any) { return `${event.title ?? "(sem título)"}${event.start ? `\n${new Date(event.start).toLocaleString("pt-BR")}` : ""}`; }
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024, index = 0;
+  while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[index]}`;
+}
