@@ -8,6 +8,8 @@ import { EmailSearchPreferenceService } from "../../packages/core/src/email/pref
 import { defaultMailboxCategories, getMailboxOptions } from "../../packages/core/src/email/preferences/category-resolver";
 import { buildGmailSearchQuery } from "../../packages/core/src/email/google/query-builder";
 import { deterministicEmailCategoryIntent, deterministicEmailPreferenceIntent } from "../../packages/core/src/agent/orchestrator/email-intent-enricher";
+import { ClarificationResolver } from "../../packages/core/src/agent/clarification/resolver";
+import { buildEmailMailboxQuestion } from "../../packages/core/src/agent/clarification/option-builders";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach(root => fs.rmSync(root, { recursive: true, force: true })));
@@ -69,5 +71,26 @@ describe("email intent enrichment", () => {
       domain: "email",
       entities: { categories: ["promotions"], maxResults: 20 }
     });
+  });
+});
+
+describe("mailbox clarification", () => {
+  const resolver = new ClarificationResolver({} as any);
+
+  it("mantém Principal pré-marcada no primeiro uso", () => {
+    const question = buildEmailMailboxQuestion("google", ["primary"], "initial");
+    expect(question.type).toBe("multi_choice");
+    expect(question.selectedOptionIds).toEqual(["primary"]);
+    expect(question.submitLabel).toBe("Salvar e continuar");
+  });
+
+  it("resolve múltiplas caixas e rejeita seleção vazia", () => {
+    const question = buildEmailMailboxQuestion("google", ["primary"], "initial");
+    expect(resolver.resolve(question, { optionIds: ["primary", "updates"] })).toEqual({
+      resolved: true,
+      value: ["primary", "updates"],
+      source: "button",
+    });
+    expect(resolver.resolve(question, { optionIds: [] })).toMatchObject({ resolved: false });
   });
 });
