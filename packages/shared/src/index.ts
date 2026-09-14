@@ -6,7 +6,8 @@ export type ToolResult = { ok: boolean; summary: string; data?: unknown; error?:
 export type VisualExecutionContext = { visualRunId:string; taskId?:string; agentRunId?:string; conversationId?:string; agentId?:string };
 export type Approval = {
   id:string; createdAt:string; toolName:string; input:Record<string,unknown>; risk:RiskLevel; reason:string;
-  status:"pending"|"approved"|"rejected"; agentRunId?:string; checkpointId?:string; visualRunId?:string; taskId?:string;
+  status:"pending"|"approved"|"rejected"|"expired"; agentRunId?:string; checkpointId?:string; visualRunId?:string; taskId?:string;
+  domain?:string;actionType?:string;preview?:string;affectedCount?:number;consequence?:string;fingerprint?:string;expiresAt?:string;
 };
 
 export type ChatMessage = {
