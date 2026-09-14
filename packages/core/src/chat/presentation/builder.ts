@@ -7,6 +7,7 @@ import { filesystemAdapter } from "./adapters/filesystem.js";
 import { calendarAdapter } from "./adapters/calendar.js";
 import { emailStatsAdapter } from "./adapters/system.js";
 import { safeArraySummaryAdapter } from "./adapters/generic.js";
+import { clarificationAdapter } from "./adapters/clarification.js";
 
 export function defaultPresentationRegistry() {
   return new PresentationRegistry()
@@ -14,6 +15,7 @@ export function defaultPresentationRegistry() {
     .register(["list_files", "search_files", "largest_files"], filesystemAdapter)
     .register(["calendar_list", "calendar_search", "calendar_get"], calendarAdapter)
     .register(["email_stats"], emailStatsAdapter)
+    .register(["__clarification__"], clarificationAdapter)
     .registerFallback(safeArraySummaryAdapter);
 }
 export class ChatPresentationBuilder {

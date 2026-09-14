@@ -43,10 +43,34 @@ export type ApprovalBlock = ChatBlockBase & {
   consequence?: string; affectedCount?: number; expiresAt?: string;
   status: "pending" | "approved" | "rejected" | "expired";
 };
+export type ClarificationOption = {
+  id: string; label: string; value: unknown; description?: string; icon?: string;
+};
+export type ClarificationQuestion = {
+  id: string; field: string; prompt: string;
+  type: "single_choice" | "multi_choice" | "text" | "choice_or_text";
+  options?: ClarificationOption[]; suggestedOptionId?: string;
+  allowCustomValue?: boolean; customPlaceholder?: string; required: boolean;
+};
+export type ClarificationBlock = ChatBlockBase & {
+  type: "clarification"; clarificationId: string; title: string;
+  questions: ClarificationQuestion[];
+  state: "pending" | "submitted" | "cancelled" | "expired";
+  values?: Record<string, unknown>;
+};
+export type ClarificationResolutionRequest = {
+  clarificationId: string; questionId: string; optionId?: string; customValue?: string;
+  source?: "button" | "custom_input";
+};
+export type ClarificationResolution = {
+  clarificationId: string; values: Record<string, unknown>;
+  source: "button" | "custom_input" | "chat_text";
+  status: "pending" | "resolved" | "cancelled" | "expired";
+};
 export type StatusBlock = ChatBlockBase & {
   type: "status"; state: ResourceActionState; text: string;
 };
-export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | StatusBlock;
+export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | StatusBlock;
 export type ChatPresentation = { version: 1; blocks: ChatBlock[] };
 export type ChatActionRequest = {
   conversationId: string; messageId: string; blockId: string; itemId: string; actionId: string;

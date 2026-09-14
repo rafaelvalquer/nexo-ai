@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { resolveKnownFolderFromText } from "./known-folders.js";
 
 export type UserPathInput = {
   path?: unknown;
@@ -24,11 +25,8 @@ export function resolveUserPath(input: UserPathInput): string | undefined {
 }
 
 export function resolveKnownFolder(value: string): string | undefined {
-  const normalized = normalizeAlias(value);
-  if (["download", "downloads", "baixado", "baixados"].includes(normalized)) return path.join(os.homedir(), "Downloads");
-  if (["documento", "documentos", "document", "documents"].includes(normalized)) return path.join(os.homedir(), "Documents");
-  if (["desktop", "area de trabalho"].includes(normalized)) return path.join(os.homedir(), "Desktop");
-  return undefined;
+  const match = resolveKnownFolderFromText(value);
+  return match && match.confidence >= 0.95 ? match.path : undefined;
 }
 
 function resolveExplicit(value: string): string | undefined {
@@ -51,10 +49,6 @@ function normalizeSafeRelative(value: string): string | undefined {
   const normalized = path.normalize(value.trim());
   if (normalized === ".." || normalized.startsWith(`..${path.sep}`)) return undefined;
   return normalized;
-}
-
-function normalizeAlias(value: string) {
-  return value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
 }
 
 function stringValue(value: unknown) {

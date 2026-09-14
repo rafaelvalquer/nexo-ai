@@ -27,7 +27,8 @@ export const agentIntentV1Schema = z.object({
   requiresConfirmation: z.boolean(),
   confidence: z.number().min(0).max(1),
   missing: z.array(z.string()).optional(),
-  question: z.string().optional()
+  question: z.string().optional(),
+  suggestedValues: z.record(z.unknown()).optional()
 });
 
 export type AgentIntentV1 = z.infer<typeof agentIntentV1Schema>;
@@ -61,6 +62,7 @@ function normalizePayload(value: unknown): unknown {
   if (output.referencesPreviousResult === undefined) output.referencesPreviousResult = false;
   if (output.requiresDataLookup === undefined) output.requiresDataLookup = false;
   if (output.requiresConfirmation === undefined) output.requiresConfirmation = false;
+  if (output.suggestedValues !== undefined && !isRecord(output.suggestedValues)) delete output.suggestedValues;
   if (typeof output.domain === "string") output.domain = normalizeDomain(output.domain);
   if (typeof output.intent === "string") output.intent = normalizeIntent(output.intent);
   if (typeof output.confidence === "string") output.confidence = Number(output.confidence);

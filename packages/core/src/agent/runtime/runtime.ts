@@ -5,14 +5,17 @@ import { LocalMetricsService } from "../../observability/metrics.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
 import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
 import { IntentMemoryStore } from "../intent-memory/store.js";
+import type { PendingClarification } from "../clarification/types.js";
 import type { AgentRun, AgentRunStatus, PersistedAgentState } from "./state.js";
 
 type RunRow={id:string;status:AgentRunStatus;state_json:string;final_response:string|null;created_at:string;updated_at:string;conversation_id?:string|null;task_id?:string|null;agent_id?:string|null};
+type ClarificationRow={id:string;conversation_id:string;domain:PendingClarification["domain"];intent:string;operation:string;original_request:string;partial_entities_json:string;questions_json:string;intent_json:string;values_json:string;status:PendingClarification["status"];created_at:string;resolved_at:string|null;expires_at:string|null};
 export type AgentRuntimeContext={conversationId?:string;taskId?:string;agentId?:string};
 export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
   constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
+    this.ensureClarificationSchema();
     configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
   start(userRequest:string,steps:PlanStep[],context:AgentRuntimeContext={},metadata:Partial<Pick<PersistedAgentState,"intent"|"deferredAction"|"responseMode">>={}):AgentRun{const id=randomUUID(),now=new Date().toISOString(),state:PersistedAgentState={userRequest,steps,nextStep:0,results:[],iteration:0,...metadata};this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id) VALUES(?,?,?,?,?,?,?,?,?)",[id,userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??null,context.taskId??null,context.agentId??null]);return{id,status:"RUNNING",state,createdAt:now,updatedAt:now};}
@@ -27,6 +30,10 @@ export class AgentRuntime{
   getConversationActionContext(conversationId?:string):ConversationActionContextState|undefined{if(!conversationId)return undefined;const row=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`conversation-action:${conversationId}`]);if(!row)return undefined;try{return JSON.parse(row.value) as ConversationActionContextState;}catch{return undefined;}}
   saveConversationActionContext(conversationId:string|undefined,state:ConversationActionContextState){if(!conversationId)return;this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`conversation-action:${conversationId}`,JSON.stringify(state)]);}
   clearConversationActionContext(conversationId:string){this.db.run("DELETE FROM application_state WHERE key=?",[`conversation-action:${conversationId}`]);}
+  savePendingClarification(record:PendingClarification){this.ensureClarificationSchema();if(record.status==="pending")this.db.run("UPDATE pending_clarifications SET status='cancelled',resolved_at=? WHERE conversation_id=? AND status='pending' AND id<>?",[new Date().toISOString(),record.conversationId,record.id]);this.db.run("INSERT OR REPLACE INTO pending_clarifications(id,conversation_id,domain,intent,operation,original_request,partial_entities_json,questions_json,intent_json,values_json,status,created_at,resolved_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[record.id,record.conversationId,record.domain,record.intent,record.operation,record.originalRequest,JSON.stringify(record.partialEntities),JSON.stringify(record.questions),JSON.stringify(record.intentSnapshot),JSON.stringify(record.values),record.status,record.createdAt,record.resolvedAt??null,record.expiresAt??null]);}
+  getPendingClarification(conversationId:string){this.ensureClarificationSchema();const row=this.db.get<ClarificationRow>("SELECT * FROM pending_clarifications WHERE conversation_id=? AND status='pending' ORDER BY created_at DESC LIMIT 1",[conversationId]);return row&&this.toClarification(row);}
+  getClarification(id:string){this.ensureClarificationSchema();const row=this.db.get<ClarificationRow>("SELECT * FROM pending_clarifications WHERE id=?",[id]);return row&&this.toClarification(row);}
+  updateClarification(record:PendingClarification){this.savePendingClarification(record);return record;}
   clearIntentLearning(){this.intentMemory.clear();}
   intentLearningCount(){return this.intentMemory.count();}
   private intentLearningEnabled(){
@@ -34,5 +41,22 @@ export class AgentRuntime{
     if(!row)return true;
     try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}
   }
+  private ensureClarificationSchema(){this.db.run(`CREATE TABLE IF NOT EXISTS pending_clarifications (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    original_request TEXT NOT NULL,
+    partial_entities_json TEXT NOT NULL,
+    questions_json TEXT NOT NULL,
+    intent_json TEXT NOT NULL,
+    values_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    expires_at TEXT
+  )`);this.db.run("CREATE INDEX IF NOT EXISTS idx_pending_clarifications_conversation ON pending_clarifications(conversation_id,status,created_at)");}
+  private toClarification(row:ClarificationRow):PendingClarification{return{id:row.id,conversationId:row.conversation_id,domain:row.domain,intent:row.intent,operation:row.operation,originalRequest:row.original_request,partialEntities:JSON.parse(row.partial_entities_json),questions:JSON.parse(row.questions_json),status:row.status,createdAt:row.created_at,resolvedAt:row.resolved_at??undefined,expiresAt:row.expires_at??undefined,intentSnapshot:JSON.parse(row.intent_json),values:JSON.parse(row.values_json)};}
   private toRun(row:RunRow):AgentRun{return{id:row.id,status:row.status,state:JSON.parse(row.state_json),finalResponse:row.final_response??undefined,createdAt:row.created_at,updatedAt:row.updated_at};}
 }
