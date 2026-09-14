@@ -73,7 +73,8 @@ export class AutomationEngine {
   private watchChatRun(runId:string, taskId:string):void {
     const timer=setInterval(()=>{
       const row=this.db.get<{status:string;result_json:string|null;error:string|null}>("SELECT status,result_json,error FROM tasks WHERE id=?",[taskId]);
-      if(!row || !["completed","failed","cancelled"].includes(row.status))return;
+      if(!row){clearInterval(timer);void this.completeChatRun(runId,"failed",undefined,"A tarefa da conversa não foi encontrada.");return;}
+      if(!["completed","failed","cancelled"].includes(row.status))return;
       clearInterval(timer);
       let summary:string|undefined;
       if(row.result_json){try{const value=JSON.parse(row.result_json) as Record<string,unknown>;summary=typeof value.text==="string"?value.text:typeof value.summary==="string"?value.summary:undefined;}catch{}}

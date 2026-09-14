@@ -165,9 +165,12 @@ function legacyToV2(row: AutomationRow): AutomationV2 {
     : row.trigger_type === "app-start" ? { type: "app-start" }
     : { type: "manual" };
   const action: AutomationAction = { id: "legacy-command", type: "nexo.command", config: { command: row.command } };
+  const isUnreadEmailSummary = row.name === "Resumir e-mails não lidos";
   return {
     id: row.id, version: 2, name: row.name, enabled: Boolean(row.enabled), trigger, conditions: [], conditionOperator: "AND", actions: [action],
-    output: DEFAULT_AUTOMATION_OUTPUT, policy: DEFAULT_AUTOMATION_POLICY, createdAt: row.created_at, updatedAt: row.updated_at ?? row.created_at,
+    output: isUnreadEmailSummary ? { type: "chat", conversationMode: "automation" } : DEFAULT_AUTOMATION_OUTPUT,
+    prompt: isUnreadEmailSummary ? "Resuma meus e-mails não lidos e destaque os que exigem ação." : undefined,
+    policy: DEFAULT_AUTOMATION_POLICY, createdAt: row.created_at, updatedAt: row.updated_at ?? row.created_at,
     lastRunAt: row.last_run_at ?? undefined, lastRunStatus: asRunStatus(row.last_run_status), consecutiveFailures: Number(row.consecutive_failures ?? 0)
   };
 }
