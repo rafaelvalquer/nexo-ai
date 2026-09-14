@@ -1,6 +1,8 @@
+import type { EmailMailboxCategory } from "./preferences/types.js";
+
 export type EmailAddress = { email: string; name?: string };
 export type EmailMessage = { id:string; provider:"google"|"microsoft"; threadId?:string; from:EmailAddress; to:EmailAddress[]; cc?:EmailAddress[]; subject:string; receivedAt:string; snippet?:string; bodyText?:string; isUnread?:boolean; hasAttachments?:boolean };
-export type EmailSearchQuery = { connectionId:string; query?:string; unread?:boolean; maxResults?:number; pageToken?:string };
+export type EmailSearchQuery = { connectionId:string; query?:string; unread?:boolean; categories?:EmailMailboxCategory[]; maxResults?:number; pageToken?:string };
 export type EmailSearchResult = { messages: EmailMessage[]; nextPageToken?: string; total?: number };
 export type EmailMailboxStats = { totalMessages?:number; totalThreads?:number; inboxMessages?:number; unreadMessages?:number };
 export type EmailDraftInput = { connectionId:string; to:EmailAddress[]; subject:string; bodyText:string; cc?:EmailAddress[] };
