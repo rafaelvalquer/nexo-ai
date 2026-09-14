@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ComponentType } from "react";
+import { Component, lazy, Suspense, useEffect, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { useAppStore } from "./stores/app";
 import { Today } from "./pages/Today";
@@ -32,6 +32,13 @@ const pages: Record<string, ComponentType> = {
   "Escritório": Office
 };
 
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("Falha ao renderizar a página", error, info.componentStack); }
+  render() { if (this.state.error) return <section className="pageRenderError" role="alert"><h2>Não foi possível abrir esta tela</h2><p>{this.state.error.message}</p><button onClick={() => this.setState({ error: null })}>Tentar novamente</button></section>; return this.props.children; }
+}
+
 export function App() {
   const page = useAppStore(s => s.page);
   const syncAssistant = useAssistantStore(s => s.sync);
@@ -46,5 +53,5 @@ export function App() {
     return () => {unsubscribe();unsubscribeResources?.();window.clearInterval(timer);};
   }, [syncAssistant, handleTaskEvent]);
 
-  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Suspense fallback={<div className="page">Carregando Pixel Office…</div>}><Page /></Suspense></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;
+  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><PageErrorBoundary><Suspense fallback={<div className="page">Carregando tela…</div>}><Page /></Suspense></PageErrorBoundary></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;
 }
