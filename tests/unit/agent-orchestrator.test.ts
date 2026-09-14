@@ -9,6 +9,8 @@ import { materializeDeferredAction } from "../../packages/core/src/agent/orchest
 import { resolvePeriod } from "../../packages/core/src/agent/orchestrator/temporal-resolver.js";
 import { ApprovalService } from "../../packages/core/src/permissions/approvals.js";
 import { NexoDatabase } from "../../packages/core/src/database/db.js";
+import { parseStructuredJson } from "../../packages/core/src/llm/structured-response-parser.js";
+import { resolveUserPath } from "../../packages/core/src/filesystem/path-resolver.js";
 
 class FakeLLM implements LLMProvider {
   constructor(private outputs:string[]){}
@@ -23,7 +25,15 @@ const emailTools:any[]=[
   {name:"email_bulk_trash",description:"Lixeira em lote",domain:"email",operation:"trash",risk:"CRITICAL",mutatesState:true,requiresConfirmation:true,permissions:["email.modify"]},
   {name:"email_send_composed",description:"Envia",domain:"email",operation:"send",risk:"SENSITIVE",mutatesState:true,requiresConfirmation:true,permissions:["email.send"]}
 ];
-const calendarTools:any[]=[{name:"calendar_list",description:"Agenda",domain:"calendar",operation:"list_events",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["calendar.read"]}];
+const calendarTools:any[]=[
+  {name:"calendar_list",description:"Agenda",domain:"calendar",operation:"list_events",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["calendar.read"]},
+  {name:"calendar_find_free_time",description:"Horários livres",domain:"calendar",operation:"find_free_time",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["calendar.read"]}
+];
+const filesystemTools:any[]=[
+  {name:"list_files",description:"Lista",domain:"filesystem",operation:"list",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["filesystem.read"]},
+  {name:"file_info",description:"Info",domain:"filesystem",operation:"info",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["filesystem.read"]},
+  {name:"trash_file",description:"Lixeira",domain:"filesystem",operation:"trash",risk:"CRITICAL",mutatesState:true,requiresConfirmation:true,permissions:["filesystem.write"]}
+];
 
 describe("Ollama intent orchestrator",()=>{
   it("parses an email delete intent without executing a tool",async()=>{
@@ -41,6 +51,16 @@ describe("Ollama intent orchestrator",()=>{
     expect(intent).toMatchObject({domain:"calendar",intent:"list"});
   });
 
+  it("falls back safely for obvious email reads when the model returns invalid output twice",async()=>{
+    const intent=await new IntentOrchestrator(new FakeLLM(["texto", "ainda inválido"])).interpret("quais são os meus últimos e-mails?",emailTools);
+    expect(intent).toMatchObject({domain:"email",intent:"list",operation:"recent_messages"});
+  });
+
+  it("falls back safely for tomorrow calendar queries",async()=>{
+    const intent=await new IntentOrchestrator(new FakeLLM(["?", "?"])).interpret("qual a minha agenda para amanhã?",calendarTools);
+    expect(intent).toMatchObject({domain:"calendar",intent:"list",entities:{period:"tomorrow"}});
+  });
+
   it("freezes email ids during preflight instead of querying again after approval",()=>{
     const materialized=materializeDeferredAction({kind:"email.bulk",action:"trash",sender:"notifications@github.com"},{ok:true,summary:"2",data:{messages:[{id:"m1",from:{email:"notifications@github.com"},subject:"A"},{id:"m2",from:{email:"notifications@github.com"},subject:"B"},{id:"m3",from:{email:"other@example.com"},subject:"C"}]}});
     expect(materialized.step?.tool).toBe("email_bulk_trash");
@@ -48,9 +68,31 @@ describe("Ollama intent orchestrator",()=>{
     expect(materialized.step?.approval?.affectedCount).toBe(2);
   });
 
+  it("resolves Downloads before filesystem permission checks and preflights trash",async()=>{
+    const llm=new FakeLLM([JSON.stringify({schemaVersion:1,status:"ready",domain:"filesystem",intent:"delete",operation:"trash_file",entities:{folder:"downloads",file:"relatorioSolar20260911.csv"},referencesPreviousResult:false,requiresDataLookup:true,requiresConfirmation:true,confidence:.99})]);
+    const intent=await new IntentOrchestrator(llm).interpret("delete o arquivo relatorioSolar20260911.csv da pasta download",filesystemTools);
+    const plan=buildIntentPlan(intent,filesystemTools);
+    expect(plan.steps?.[0]).toMatchObject({tool:"file_info",input:{path:path.join(os.homedir(),"Downloads","relatorioSolar20260911.csv")}});
+    expect(plan.deferredAction).toMatchObject({kind:"filesystem.trash",path:path.join(os.homedir(),"Downloads","relatorioSolar20260911.csv")});
+    const materialized=materializeDeferredAction(plan.deferredAction!,{ok:true,summary:"Metadados",data:{size:2048,isDirectory:false}});
+    expect(materialized.step?.tool).toBe("trash_file");
+    expect(materialized.step?.approval?.consequence).toMatch(/lixeira/i);
+  });
+
   it("converts tomorrow to a deterministic one-day interval",()=>{
     const range=resolvePeriod("tomorrow",new Date(2026,8,13,20,0,0));
     expect(new Date(range.end).getTime()-new Date(range.start).getTime()).toBe(24*60*60*1000);
+  });
+});
+
+describe("structured parsing and paths",()=>{
+  it("extracts JSON even when the model adds text around it",()=>{
+    expect(parseStructuredJson('Aqui está: {"domain":"email","confidence":0.9} obrigado')).toEqual({domain:"email",confidence:.9});
+  });
+
+  it("resolves known user folders and rejects traversal",()=>{
+    expect(resolveUserPath({folder:"download",file:"teste.csv"})).toBe(path.join(os.homedir(),"Downloads","teste.csv"));
+    expect(resolveUserPath({folder:"download",file:"../segredo.txt"})).toBeUndefined();
   });
 });
 

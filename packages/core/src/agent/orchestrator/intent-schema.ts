@@ -1,35 +1,7 @@
-import { z } from "zod";
+export { intentDomainSchema, type IntentDomain } from "./schemas/domain-v1.js";
+export { intentNameSchema, agentIntentV1Schema as agentIntentSchema, type IntentName, type AgentIntentV1 as AgentIntent } from "./schemas/intent-v1.js";
 
-export const intentDomainSchema = z.enum(["email", "calendar", "filesystem", "browser", "system", "memory", "general"]);
-export const intentNameSchema = z.enum(["list", "search", "read", "summarize", "stats", "create", "send", "update", "delete", "move", "answer", "help"]);
-
-const referenceSchema = z.object({
-  source: z.literal("previous_result").default("previous_result"),
-  selection: z.object({
-    type: z.enum(["all", "first", "indices"]),
-    count: z.number().int().min(1).max(100).optional(),
-    indices: z.array(z.number().int().min(1)).max(100).optional()
-  }).default({ type: "all" })
-}).optional();
-
-export const agentIntentSchema = z.object({
-  status: z.enum(["ready", "needs_clarification"]).default("ready"),
-  domain: intentDomainSchema,
-  intent: intentNameSchema,
-  operation: z.string().min(1),
-  entities: z.record(z.unknown()).default({}),
-  referencesPreviousResult: z.boolean().default(false),
-  reference: referenceSchema,
-  requiresDataLookup: z.boolean().default(false),
-  requiresConfirmation: z.boolean().default(false),
-  confidence: z.number().min(0).max(1),
-  missing: z.array(z.string()).optional(),
-  question: z.string().optional()
-});
-
-export type AgentIntent = z.infer<typeof agentIntentSchema>;
-export type IntentDomain = z.infer<typeof intentDomainSchema>;
-export type IntentName = z.infer<typeof intentNameSchema>;
+import type { AgentIntentV1 } from "./schemas/intent-v1.js";
 
 export type ApprovalPlanMetadata = {
   domain?: string;
@@ -45,7 +17,7 @@ export type DeferredAction =
       kind: "email.bulk";
       action: "trash" | "archive" | "mark_read" | "mark_unread";
       sender?: string;
-      selection?: AgentIntent["reference"];
+      selection?: AgentIntentV1["reference"];
     }
   | {
       kind: "calendar.delete";
@@ -55,9 +27,14 @@ export type DeferredAction =
       kind: "calendar.update";
       query?: string;
       patch: Record<string, unknown>;
+    }
+  | {
+      kind: "filesystem.trash";
+      path: string;
     };
 
 export type OrchestrationContext = {
   conversationId?: string;
   previous?: import("../context/conversation-action-context.js").ConversationActionContextState;
+  learnedExamples?: Array<{ utterance: string; intent: AgentIntentV1; score?: number; source?: string }>;
 };

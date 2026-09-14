@@ -4,6 +4,7 @@ import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "./intent
 import type { AgentToolDescriptor } from "./tool-catalog.js";
 import { describeDomainTools } from "./tool-catalog.js";
 import { addMinutes, resolveDateTime, resolvePeriod } from "./temporal-resolver.js";
+import { resolveKnownFolder, resolveUserPath } from "../../filesystem/path-resolver.js";
 
 export type BuiltPlanStep = { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata };
 export type BuiltIntentPlan = {
@@ -20,6 +21,7 @@ export function buildIntentPlan(intent: AgentIntent, tools: AgentToolDescriptor[
   if (intent.intent === "help") return { direct: describeDomainTools(intent.domain, tools) };
   if (intent.domain === "email") return buildEmailPlan(intent, tools, previous);
   if (intent.domain === "calendar") return buildCalendarPlan(intent, tools, previous);
+  if (intent.domain === "filesystem") return buildFilesystemPlan(intent, tools);
   return { directStream: true };
 }
 
@@ -34,7 +36,7 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
   if (intent.intent === "stats") return readStep("email_stats", {}, "Consultando as estatísticas da sua conta…", tools);
 
   if (intent.intent === "read" && /latest|ultimo|último|most_recent/.test(intent.operation) && maxResults === 1) {
-    return readStep("email_latest", {}, "Buscando o e-mail mais recente…", tools);
+    return readStep("email_latest", {}, "Buscando o e-mail mais recente…", tools, "synthesize");
   }
 
   if (["read", "list", "search", "summarize"].includes(intent.intent)) {
@@ -80,13 +82,13 @@ function buildCalendarPlan(intent: AgentIntent, tools: AgentToolDescriptor[], pr
   const range = resolvePeriod(typeof period === "object" && period ? (period as any).kind ?? "today" : period, new Date(), entities.dayPart);
   const query = stringValue(entities.query ?? entities.title);
 
-  if (["list", "read", "search", "summarize"].includes(intent.intent)) {
-    return readStep("calendar_list", { start: range.start, end: range.end }, `Consultando sua agenda para ${range.label}…`, tools, "synthesize");
-  }
-
   if (/free|available|livre|availability/.test(intent.operation)) {
     const durationMinutes = numberValue(entities.durationMinutes ?? entities.duration, 30, 5, 1440);
     return readStep("calendar_find_free_time", { start: range.start, end: range.end, durationMinutes }, "Procurando horários livres…", tools, "synthesize");
+  }
+
+  if (["list", "read", "search", "summarize"].includes(intent.intent)) {
+    return readStep("calendar_list", { start: range.start, end: range.end }, `Consultando sua agenda para ${range.label}…`, tools, "synthesize");
   }
 
   if (intent.intent === "create") {
@@ -125,6 +127,38 @@ function buildCalendarPlan(intent: AgentIntent, tools: AgentToolDescriptor[], pr
   return { direct: "Não consegui mapear essa solicitação para uma operação segura de agenda." };
 }
 
+function buildFilesystemPlan(intent: AgentIntent, tools: AgentToolDescriptor[]): BuiltIntentPlan {
+  const entities = intent.entities as Record<string, unknown>;
+  const resolvedPath = resolveUserPath({ path: entities.path, folder: entities.folder, file: entities.file ?? entities.name });
+  const folderPath = resolveUserPath({ path: entities.path, folder: entities.folder }) ?? (stringValue(entities.folder) ? resolveKnownFolder(stringValue(entities.folder)!) : undefined);
+
+  if (intent.intent === "list") {
+    if (!folderPath) return { direct: "Qual pasta você quer listar? Você pode usar Downloads, Documentos ou Desktop." };
+    return readStep("list_files", { path: folderPath }, `Listando arquivos em ${folderPath}…`, tools, "synthesize");
+  }
+
+  if (intent.intent === "search") {
+    if (!folderPath) return { direct: "Em qual pasta devo pesquisar?" };
+    const query = stringValue(entities.query ?? entities.file ?? entities.name);
+    if (!query) return { direct: "Qual arquivo ou termo você quer pesquisar?" };
+    return readStep("search_files", { path: folderPath, query }, "Pesquisando os arquivos…", tools, "synthesize");
+  }
+
+  if (intent.intent === "read") {
+    if (!resolvedPath) return { direct: "Qual arquivo você quer ler e em qual pasta ele está?" };
+    return readStep("read_file", { path: resolvedPath }, `Lendo ${resolvedPath}…`, tools, "synthesize");
+  }
+
+  if (intent.intent === "delete") {
+    if (!resolvedPath) return { direct: "Qual arquivo você quer mover para a lixeira e em qual pasta ele está?" };
+    const inspect = readStepOnly("file_info", { path: resolvedPath }, "Confirmando o arquivo antes de preparar a remoção…", tools);
+    if (!inspect) return unavailable("file_info");
+    return { steps: [inspect], deferredAction: { kind: "filesystem.trash", path: resolvedPath }, responseMode: "deterministic" };
+  }
+
+  return { direct: "Não consegui mapear essa solicitação para uma operação segura de arquivos." };
+}
+
 function emailMutation(intent: AgentIntent): "trash" | "archive" | "mark_read" | "mark_unread" | undefined {
   const operation = intent.operation.toLowerCase();
   if (intent.intent === "delete" || /trash|delete|lixeira|apagar|remov/.test(operation)) return "trash";
@@ -136,7 +170,7 @@ function emailMutation(intent: AgentIntent): "trash" | "archive" | "mark_read" |
 
 function bulkEmailWrite(action: "trash" | "archive" | "mark_read" | "mark_unread", ids: string[], sender: string | undefined, tools: AgentToolDescriptor[]): BuiltIntentPlan {
   const tool = `email_bulk_${action === "trash" ? "trash" : action === "archive" ? "archive" : action}`;
-  const verbs = { trash: "mover para a lixeira", archive: "arquivar", mark_read: "marcar como lidos", mark_unread: "marcar como não lidos" } as const;
+  const verbs = { trash: "movidos para a lixeira", archive: "arquivados", mark_read: "marcados como lidos", mark_unread: "marcados como não lidos" } as const;
   const target = sender ? `${ids.length} e-mail(s) de ${sender}` : `${ids.length} e-mail(s)`;
   return writeStep(tool, { messageIds: ids }, `Preparando ${target}…`, tools, {
     domain: "email", actionType: action, affectedCount: ids.length,
