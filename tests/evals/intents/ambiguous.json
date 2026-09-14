@@ -1,0 +1,10 @@
+[
+  {"input":"apague aquilo","variants":["deleta aquilo","remove isso","joga fora aquilo","exclua isso"],"expected":{"domain":"general","intent":"answer","status":"needs_clarification"}},
+  {"input":"manda","variants":["envia","faz o envio","pode mandar","manda isso"],"expected":{"domain":"general","intent":"answer","status":"needs_clarification"}},
+  {"input":"muda a reunião","variants":["altera a reunião","remarca o compromisso","edita o evento","muda esse evento"],"expected":{"domain":"calendar","intent":"update","status":"needs_clarification"}},
+  {"input":"apague o arquivo","variants":["deleta o arquivo","remove esse arquivo","exclua arquivo","jogue o arquivo fora"],"expected":{"domain":"filesystem","intent":"delete","status":"needs_clarification"}},
+  {"input":"envie um email","variants":["manda um email","escreva um email","quero enviar email","dispare um e-mail"],"expected":{"domain":"email","intent":"send","status":"needs_clarification"}},
+  {"input":"crie uma reunião","variants":["agenda uma reunião","marque um compromisso","crie evento na agenda","quero uma reunião"],"expected":{"domain":"calendar","intent":"create","status":"needs_clarification"}},
+  {"input":"procure o arquivo","variants":["busque o arquivo","ache o documento","pesquise um arquivo","encontre esse arquivo"],"expected":{"domain":"filesystem","intent":"search","status":"needs_clarification"}},
+  {"input":"faça isso","variants":["faz isso","execute isso","continua com isso","pode fazer"],"expected":{"domain":"general","intent":"answer","status":"needs_clarification"}}
+]
