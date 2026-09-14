@@ -31,26 +31,30 @@ export async function inspectGoogleGrant(options: {
   let tokenInfo: Record<string, unknown> | undefined;
   let inspectionError: string | undefined;
 
-  try {
-    const query = new URLSearchParams({ access_token: options.accessToken });
-    const response = await fetch(`${GOOGLE_TOKENINFO_URL}?${query}`, { signal: AbortSignal.timeout(GOOGLE_TOKENINFO_TIMEOUT_MS) });
-    const body = await safeJson(response);
-    if (response.ok) tokenInfo = body;
-    else inspectionError = tokenInfoError(body, response.status);
-  } catch (error) {
-    inspectionError = error instanceof Error ? error.message : String(error);
+  // The authorization-code token response is authoritative when it reports scopes.
+  // tokeninfo is a fallback for providers/flows that omit scope, not a second mandatory network dependency.
+  if (!tokenResponseScopes.length) {
+    try {
+      const query = new URLSearchParams({ access_token: options.accessToken });
+      const response = await fetch(`${GOOGLE_TOKENINFO_URL}?${query}`, { signal: AbortSignal.timeout(GOOGLE_TOKENINFO_TIMEOUT_MS) });
+      const body = await safeJson(response);
+      if (response.ok) tokenInfo = body;
+      else inspectionError = tokenInfoError(body, response.status);
+    } catch (error) {
+      inspectionError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   const tokenInfoScopes = parseScopes(firstString(tokenInfo?.scope));
-  const scopes = tokenInfoScopes.length
-    ? tokenInfoScopes
-    : tokenResponseScopes.length
-      ? tokenResponseScopes
+  const scopes = tokenResponseScopes.length
+    ? tokenResponseScopes
+    : tokenInfoScopes.length
+      ? tokenInfoScopes
       : persistedScopes;
-  const scopeSource: GoogleScopeSource = tokenInfoScopes.length
-    ? "token-info"
-    : tokenResponseScopes.length
-      ? "token-response"
+  const scopeSource: GoogleScopeSource = tokenResponseScopes.length
+    ? "token-response"
+    : tokenInfoScopes.length
+      ? "token-info"
       : persistedScopes.length
         ? "persisted"
         : "unknown";

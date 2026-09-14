@@ -15,7 +15,8 @@ export class PermissionEngine {
     });
   }
 
-  requiresApproval(risk: RiskLevel) {
+  requiresApproval(risk: RiskLevel, mutatesState = false) {
+    if (mutatesState) return true;
     const autonomy = this.getSettings().autonomy;
     if (risk === "CRITICAL" || risk === "SENSITIVE") return true;
     if (risk === "SAFE_WRITE") return autonomy === "cautious";

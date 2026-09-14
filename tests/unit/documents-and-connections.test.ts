@@ -30,7 +30,11 @@ describe("connections", () => {
     process.env.NEXO_MICROSOFT_CLIENT_ID = "environment-client"; process.env.NEXO_MICROSOFT_TENANT = "environment-tenant";
     let opened = ""; const secrets = new MemorySecretStore();
     const host: OAuthHost = { openExternal: async url => { opened = url; }, waitForLoopbackCallback: async () => new URL("http://localhost/?code=code&state=state"), startLoopbackCallback: async ({ state }) => ({ redirectUri: "http://localhost:4567/oauth/callback", callback: Promise.resolve(new URL(`http://localhost:4567/oauth/callback?code=code&state=${state}`)) }) };
-    globalThis.fetch = (async (url: string | URL) => new Response(JSON.stringify(String(url).includes("/me") ? {mail:"person@example.com",displayName:"Person"} : {access_token:"secret-token"}), {status:200})) as typeof fetch;
+    globalThis.fetch = (async (url: string | URL) => {
+      const target = String(url);
+      if (target.includes("graph.microsoft.com/v1.0/me")) return new Response(JSON.stringify({mail:"person@example.com",displayName:"Person"}), {status:200});
+      return new Response(JSON.stringify({access_token:"secret-token",scope:"openid profile offline_access User.Read Calendars.Read"}), {status:200});
+    }) as typeof fetch;
     try {
       const service = new ConnectionService(db, secrets, host, () => ({ googleClientId: "", microsoftClientId: "saved-client", microsoftTenant: "common" }));
       await service.connect("microsoft", ["calendar.read"]);
@@ -41,14 +45,27 @@ describe("connections", () => {
     const oldClient = process.env.NEXO_GOOGLE_CLIENT_ID; const oldFetch = globalThis.fetch; process.env.NEXO_GOOGLE_CLIENT_ID = "public-client";
     const secrets = new MemorySecretStore(); let opened = "";
     const host: OAuthHost = { openExternal: async url => { opened = url; }, waitForLoopbackCallback: async () => new URL("http://127.0.0.1/?code=code&state=state"), startLoopbackCallback: async ({state}) => ({redirectUri:"http://127.0.0.1:4567",callback:Promise.resolve(new URL(`http://127.0.0.1:4567/?code=code&state=${state}`))}) };
-    globalThis.fetch = (async (url: string | URL) => new Response(JSON.stringify(String(url).includes("userinfo") ? {email:"person@example.com",name:"Person"} : {access_token:"secret-token",refresh_token:"refresh-token"}), {status:200})) as typeof fetch;
+    globalThis.fetch = (async (url: string | URL) => {
+      const target=String(url);
+      if(target.includes("openidconnect.googleapis.com/v1/userinfo"))return new Response(JSON.stringify({email:"person@example.com",name:"Person"}),{status:200});
+      if(target.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com"}),{status:200});
+      if(target.includes("oauth2.googleapis.com/token"))return new Response(JSON.stringify({access_token:"secret-token",refresh_token:"refresh-token",scope:"openid email profile https://www.googleapis.com/auth/gmail.readonly"}),{status:200});
+      throw new Error(`Unexpected URL: ${target}`);
+    }) as typeof fetch;
     try { const service = new ConnectionService(db,secrets,host); const account = await service.connect("google",["email.read"]); const row=db.get<Record<string,unknown>>("SELECT * FROM connections WHERE id=?",[account.id])!; expect(opened).toContain("code_challenge"); expect(row).not.toHaveProperty("access_token"); expect(await secrets.get(String(row.token_secret_key))).toContain("secret-token"); } finally { globalThis.fetch = oldFetch; if(oldClient===undefined) delete process.env.NEXO_GOOGLE_CLIENT_ID; else process.env.NEXO_GOOGLE_CLIENT_ID=oldClient; }
   });
   it("reauthorizes incrementally instead of asserting new scopes locally", async () => {
     const oldClient = process.env.NEXO_GOOGLE_CLIENT_ID; const oldFetch = globalThis.fetch; process.env.NEXO_GOOGLE_CLIENT_ID = "public-client";
     const secrets = new MemorySecretStore(); let opens = 0;
     const host: OAuthHost = { openExternal: async () => { opens++; }, waitForLoopbackCallback: async () => new URL("http://localhost/?code=code&state=state"), startLoopbackCallback: async ({ state }) => ({ redirectUri: "http://localhost:4567/oauth/callback", callback: Promise.resolve(new URL(`http://localhost:4567/oauth/callback?code=code&state=${state}`)) }) };
-    globalThis.fetch = (async (url: string | URL) => new Response(JSON.stringify(String(url).includes("userinfo") ? {email:"person@example.com",name:"Person"} : {access_token:"token",refresh_token:"refresh",expires_in:3600}), {status:200})) as typeof fetch;
+    globalThis.fetch = (async (url: string | URL) => {
+      const target=String(url);
+      if(target.includes("openidconnect.googleapis.com/v1/userinfo"))return new Response(JSON.stringify({email:"person@example.com",name:"Person"}),{status:200});
+      if(target.includes("gmail.googleapis.com/gmail/v1/users/me/profile"))return new Response(JSON.stringify({emailAddress:"person@example.com"}),{status:200});
+      if(target.includes("googleapis.com/calendar/v3/users/me/calendarList"))return new Response(JSON.stringify({items:[]}),{status:200});
+      if(target.includes("oauth2.googleapis.com/token"))return new Response(JSON.stringify({access_token:"token",refresh_token:"refresh",expires_in:3600,scope:"openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar"}),{status:200});
+      throw new Error(`Unexpected URL: ${target}`);
+    }) as typeof fetch;
     try {
       const service = new ConnectionService(db, secrets, host); const account = await service.connect("google", ["email.read"]); const expanded = await service.addCapabilities(account.id, ["calendar.write"]);
       expect(expanded.id).toBe(account.id); expect(expanded.capabilities).toEqual(["email.read", "calendar.write"]); expect(opens).toBe(2); expect(db.all("SELECT * FROM connections")).toHaveLength(1);
