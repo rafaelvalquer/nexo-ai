@@ -28,10 +28,7 @@ export class AgentPlanner{
     const semantic=mustUseSemanticOrchestrator(userText,previous,local);
     if(local&&!semantic)return{...local,origin:"fast"};
 
-    // Conversa comum continua no caminho de streaming rápido. Integrações e follow-ups
-    // operacionais nunca entram aqui: eles passam obrigatoriamente pelo IntentOrchestrator.
     if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};
-
     if(!semantic)return this.legacyToolPlan(userText,context,signal);
 
     const tools=availableTools??this.registry.listForAgent().map((tool:any)=>({name:tool.name,description:tool.description,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name,risk:tool.risk,mutatesState:tool.mutatesState??tool.risk!=="READ",requiresConfirmation:tool.requiresConfirmation??tool.risk!=="READ",permissions:tool.permissions,parameters:tool.parameters}));
@@ -88,8 +85,8 @@ export class AgentPlanner{
 }
 
 function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">|null){
-  if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite)\b/i.test(text))return true;
-  if(previous?.lastDomain&&(previous.lastDomain==="email"||previous.lastDomain==="calendar")&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere)\b/i.test(text))return true;
+  if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite|arquivos?|pastas?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho)\b|\.[a-z0-9]{2,8}\b/i.test(text))return true;
+  if(previous?.lastDomain&&["email","calendar","filesystem"].includes(previous.lastDomain)&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere|remova|leia)\b/i.test(text))return true;
   if(typeof local?.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;
   return false;
 }
