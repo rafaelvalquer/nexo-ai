@@ -2,12 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { Automation, AutomationExecutionContext, AutomationRunViewModel, AutomationV2, AutomationViewModel, CreateAutomationV2Input, UpdateAutomationV2Input } from "@nexo/shared";
 import { DEFAULT_AUTOMATION_OUTPUT, DEFAULT_AUTOMATION_POLICY } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
+import { AUTOMATION_ACTION_CATALOG } from "./actions/catalog.js";
 import { AutomationActionExecutor } from "./actions/executor.js";
 import { AutomationConditionEvaluator } from "./conditions/evaluator.js";
 import { parseNaturalSchedule } from "./natural-schedule.js";
+import { AUTOMATION_PRESETS } from "./presets/index.js";
 import { AutomationRepository } from "./repository.js";
 import { AutomationRunRepository } from "./runs/repository.js";
 import { AutomationScheduler } from "./scheduler.js";
+import { AUTOMATION_TRIGGER_CATALOG } from "./triggers/catalog.js";
 import { AutomationTriggerRegistry } from "./triggers/registry.js";
 
 export class AutomationEngine {
@@ -32,6 +35,9 @@ export class AutomationEngine {
 
   list(): AutomationViewModel[] { return this.repository.list().map(automation => this.toViewModel(automation)); }
   get(id: string): AutomationViewModel | undefined { const automation = this.repository.get(id); return automation ? this.toViewModel(automation) : undefined; }
+  presets() { return structuredClone(AUTOMATION_PRESETS); }
+  actionCatalog() { return structuredClone(AUTOMATION_ACTION_CATALOG); }
+  triggerCatalog() { return structuredClone(AUTOMATION_TRIGGER_CATALOG); }
   create(input: Omit<Automation,"id"|"lastRunAt"> | CreateAutomationV2Input): AutomationViewModel { const automation=this.repository.create(isV2Input(input)?input:legacyInputToV2(input));if(automation.enabled)this.install(automation);return this.get(automation.id)??this.toViewModel(automation); }
   createFromNatural(input:{name:string;when:string;command:string;enabled?:boolean}):AutomationViewModel{return this.create({name:input.name,enabled:input.enabled??true,trigger:{type:"schedule",mode:"cron",cron:parseNaturalSchedule(input.when)},conditions:[],conditionOperator:"AND",actions:[{id:"command",type:"nexo.command",config:{command:input.command}}],output:DEFAULT_AUTOMATION_OUTPUT,policy:DEFAULT_AUTOMATION_POLICY});}
   update(id:string,patch:UpdateAutomationV2Input):AutomationViewModel{this.uninstall(id);const automation=this.repository.update(id,patch);if(automation.enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
