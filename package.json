@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
+    "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
     "package:win": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && pnpm --filter @nexo/desktop package:win && node scripts/verify-installer.mjs",
     "test:installer": "node scripts/verify-installer.mjs",
     "setup": "node scripts/setup.mjs",
