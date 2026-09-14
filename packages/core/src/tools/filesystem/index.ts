@@ -36,7 +36,7 @@ export function filesystemTools(): ToolDefinition[] {
         const entries: Array<{name:string;type:"directory"|"file";path:string;size?:number;modifiedAt?:string;childCount?:number}> = [];
         for(let offset=0;offset<names.length;offset+=32) entries.push(...await Promise.all(names.slice(offset,offset+32).map(async entry=>{
           const full=path.join(p,entry.name),stat=await fs.lstat(full).catch(()=>undefined);
-          return {name:entry.name,type:entry.isDirectory()?"directory":"file",path:full,size:entry.isFile()?stat?.size:undefined,modifiedAt:stat?.mtime.toISOString(),childCount:entry.isDirectory()?(await fs.readdir(full).catch(()=>[])).length:undefined};
+          return {name:entry.name,type:entry.isDirectory()?("directory" as const):("file" as const),path:full,size:entry.isFile()?stat?.size:undefined,modifiedAt:stat?.mtime.toISOString(),childCount:entry.isDirectory()?(await fs.readdir(full).catch(()=>[])).length:undefined};
         })));
         const filtered=kind==="all"?entries:entries.filter(entry=>entry.type===kind);
         const direction=sortDirection==="desc"?-1:1;
