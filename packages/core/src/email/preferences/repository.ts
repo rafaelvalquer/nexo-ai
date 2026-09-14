@@ -11,7 +11,9 @@ type PreferenceRow = {
 };
 
 export class EmailSearchPreferenceRepository {
-  constructor(private readonly db: NexoDatabase) {}
+  constructor(private readonly db: NexoDatabase) {
+    this.ensureSchema();
+  }
 
   get(connectionId: string): EmailSearchPreference | undefined {
     const row = this.db.get<PreferenceRow>("SELECT * FROM email_search_preferences WHERE connection_id=?", [connectionId]);
@@ -42,5 +44,14 @@ export class EmailSearchPreferenceRepository {
 
   transaction<T>(work: () => T): T {
     return this.db.transaction(work);
+  }
+
+  private ensureSchema() {
+    this.db.run(`CREATE TABLE IF NOT EXISTS email_search_preferences (
+      connection_id TEXT PRIMARY KEY,
+      categories_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
   }
 }
