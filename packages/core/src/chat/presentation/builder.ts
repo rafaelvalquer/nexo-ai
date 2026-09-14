@@ -8,6 +8,7 @@ import { calendarAdapter } from "./adapters/calendar.js";
 import { emailStatsAdapter } from "./adapters/system.js";
 import { safeArraySummaryAdapter } from "./adapters/generic.js";
 import { clarificationAdapter } from "./adapters/clarification.js";
+import { emailComposeReviewAdapter } from "./adapters/email-compose.js";
 
 export function defaultPresentationRegistry() {
   return new PresentationRegistry()
@@ -16,6 +17,7 @@ export function defaultPresentationRegistry() {
     .register(["calendar_list", "calendar_search", "calendar_get"], calendarAdapter)
     .register(["email_stats"], emailStatsAdapter)
     .register(["__clarification__"], clarificationAdapter)
+    .register(["__email_compose_review__"], emailComposeReviewAdapter)
     .registerFallback(safeArraySummaryAdapter);
 }
 export class ChatPresentationBuilder {
@@ -24,7 +26,6 @@ export class ChatPresentationBuilder {
     const adapter=this.registry.get(toolName)??this.registry.getFallback();
     const projected = result.ok ? adapter?.(result, { toolName, input }) : undefined;
     if (projected) return projected;
-    // Unknown objects and invalid registered data stay text-only.
     return { presentation: { version: 1, blocks: [{ id: randomUUID(), version: 1, type: "text", content: result.summary }] }, bindings: [] };
   }
 }
