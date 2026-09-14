@@ -48,7 +48,13 @@ export class AgentPlanner{
     const explicitEmailIntent=deterministicEmailCategoryIntent(userText);
     if(explicitEmailIntent){const built=buildIntentPlan(explicitEmailIntent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:explicitEmailIntent};}
     const filesystemIntent=deterministicFilesystemIntent(userText);
-    if(filesystemIntent){const built=buildIntentPlan(filesystemIntent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};}
+    if(filesystemIntent){
+      const built=buildIntentPlan(filesystemIntent,tools,previous);
+      if(built.tool||built.steps?.length||built.direct)return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+      const fallback=fastRouter.route(userText);
+      if(fallback)return{...fallback,origin:"fast",intent:filesystemIntent};
+      return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+    }
     const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return{...local,origin:"fast"};if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
