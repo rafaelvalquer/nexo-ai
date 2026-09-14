@@ -3,7 +3,7 @@ import { Cron } from "croner";
 import type { AutomationTrigger, AutomationV2 } from "@nexo/shared";
 
 export type AutomationTriggerPayload = Record<string, unknown>;
-export type AutomationTriggerEmitter = (automation: AutomationV2, payload: AutomationTriggerPayload) => Promise<void> | void;
+export type AutomationTriggerEmitter = (automation: AutomationV2, payload: AutomationTriggerPayload) => Promise<unknown> | unknown;
 
 export class AutomationScheduler {
   private cronJobs = new Map<string, Cron>();
