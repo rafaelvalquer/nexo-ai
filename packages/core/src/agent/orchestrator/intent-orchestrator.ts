@@ -31,15 +31,17 @@ export class IntentOrchestrator {
     }
     if (!parsed) {
       return {
-        status: "ready",
+        status: "needs_clarification",
         domain: "general",
         intent: "answer",
-        operation: "chat",
+        operation: "intent_parse_failed",
         entities: {},
         referencesPreviousResult: false,
         requiresDataLookup: false,
         requiresConfirmation: false,
-        confidence: 0.5
+        confidence: 0,
+        missing: ["intent"],
+        question: "Não consegui interpretar essa solicitação com segurança. Pode reformular o pedido com um pouco mais de detalhe?"
       };
     }
 
