@@ -15,10 +15,12 @@ export function isFilesystemListRequest(text: string) {
 export function deterministicFilesystemIntent(text: string): AgentIntent | undefined {
   if (!isFilesystemListRequest(text)) return undefined;
   const match = resolveKnownFolderFromText(text);
+  const explicitPath = extractExplicitFolderPath(text);
   const recent = isRecentFilesRequest(text);
   const entities: Record<string, unknown> = {};
 
-  if (match && match.confidence >= 0.95) entities.folder = match.id;
+  if (explicitPath) entities.path = explicitPath;
+  else if (match && match.confidence >= 0.95) entities.folder = match.id;
   if (recent) Object.assign(entities, {
     kind: "file",
     sortBy: "modifiedAt",
@@ -26,7 +28,7 @@ export function deterministicFilesystemIntent(text: string): AgentIntent | undef
     limit: 20,
   });
 
-  const missingFolder = !entities.folder;
+  const missingFolder = !entities.folder && !entities.path;
   return {
     schemaVersion: 1,
     status: missingFolder ? "needs_clarification" : "ready",
@@ -37,7 +39,7 @@ export function deterministicFilesystemIntent(text: string): AgentIntent | undef
     referencesPreviousResult: false,
     requiresDataLookup: true,
     requiresConfirmation: false,
-    confidence: match?.confidence ?? 0.98,
+    confidence: explicitPath ? 1 : match?.confidence ?? 0.98,
     missing: missingFolder ? ["folder"] : undefined,
     question: missingFolder ? "Qual pasta você quer consultar?" : undefined,
     suggestedValues: missingFolder ? { folder: match?.id ?? "downloads" } : undefined,
@@ -49,10 +51,12 @@ export function enrichFilesystemIntent(intent: AgentIntent, text: string): Agent
 
   const entities = { ...intent.entities };
   const match = resolveKnownFolderFromText(text);
+  const explicitPath = extractExplicitFolderPath(text);
   const recent = isRecentFilesRequest(text);
   const isList = intent.intent === "list" || intent.operation === "list_files" || isFilesystemListRequest(text);
 
-  if (match && match.confidence >= 0.95) entities.folder = match.id;
+  if (explicitPath) entities.path = explicitPath;
+  else if (match && match.confidence >= 0.95) entities.folder = match.id;
   if (recent) Object.assign(entities, {
     kind: "file",
     sortBy: "modifiedAt",
@@ -81,6 +85,13 @@ export function enrichFilesystemIntent(intent: AgentIntent, text: string): Agent
       : intent.suggestedValues,
     requiresDataLookup: true,
     requiresConfirmation: false,
-    confidence: Math.max(intent.confidence, match?.confidence ?? 0),
+    confidence: Math.max(intent.confidence, explicitPath ? 1 : match?.confidence ?? 0),
   };
+}
+
+function extractExplicitFolderPath(text: string) {
+  const quoted = text.match(/\bpasta\s+["“']([^"”']+)["”']/i)?.[1]?.trim();
+  if (!quoted) return undefined;
+  if (/^[A-Za-z]:[\\/]/.test(quoted) || quoted.startsWith("/") || quoted.startsWith("\\\\")) return quoted;
+  return undefined;
 }

@@ -2,6 +2,7 @@ import type { ToolResult } from "@nexo/shared";
 import type { LLMMessage,LLMProvider } from "../llm/provider.js";
 import { AGENT_SYSTEM_PROMPT,stripCodeFence } from "../security/prompt.js";
 import { ToolRegistry } from "../tools/registry.js";
+import { responsePolicy } from "../chat/presentation/response-policy.js";
 import { FastIntentRouter } from "./intent-router.js";
 import type { ConversationActionContextState } from "./context/conversation-action-context.js";
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
@@ -20,7 +21,7 @@ import type { LocalMetricsService } from "../observability/metrics.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata};
 export type PlanOrigin="fast"|"llm";
-export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic";uiFlow?:"email_mailbox_preferences"};
+export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences"};
 
 const fastRouter=new FastIntentRouter();
 const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","memory_usage","disk_usage","system_info","process_list"]);
@@ -46,23 +47,23 @@ export class AgentPlanner{
     const preferenceIntent=deterministicEmailPreferenceIntent(userText);
     if(preferenceIntent)return{origin:"fast",intent:preferenceIntent,uiFlow:"email_mailbox_preferences"};
     const explicitEmailIntent=deterministicEmailCategoryIntent(userText);
-    if(explicitEmailIntent){const built=buildIntentPlan(explicitEmailIntent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:explicitEmailIntent};}
+    if(explicitEmailIntent){const built=buildIntentPlan(explicitEmailIntent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:explicitEmailIntent},explicitEmailIntent);}
     const filesystemIntent=deterministicFilesystemIntent(userText);
     if(filesystemIntent){
       const built=buildIntentPlan(filesystemIntent,tools,previous);
-      if(built.steps?.length||built.direct)return{...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+      if(built.steps?.length||built.direct&&!isUnavailableToolPlan(built.direct))return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
       const fallback=fastRouter.route(userText);
-      if(fallback)return{...fallback,origin:"fast",intent:filesystemIntent};
-      return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+      if(fallback)return withPresentationPolicy({...fallback,origin:"fast",intent:filesystemIntent},filesystemIntent);
+      return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
     }
-    const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return{...local,origin:"fast"};if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
+    const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const intent=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
-    const built=buildIntentPlan(intent,tools,previous);return{...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent};
+    const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
-  buildIntentPlan(intent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return{...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent};}
+  buildIntentPlan(intent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result),store=this.activeIntentMemory();
@@ -81,6 +82,14 @@ export class AgentPlanner{
   private activeIntentMemory(){return this.intentMemory??defaultIntentMemory;}private isIntentLearningEnabled(){return this.intentMemory?this.intentLearningEnabled():defaultIntentLearningEnabled();}private activeMetrics(){return this.metrics??defaultIntentMetrics;}private retrieverFor(store?:IntentMemoryStore){if(!store)return undefined;if(this.intentRetriever&&this.retrieverStore===store)return this.intentRetriever;this.intentRetriever=new IntentMemoryRetriever(store,text=>this.llm.embed(text));this.retrieverStore=store;return this.intentRetriever;}
   private recordIntentDiagnostic(diagnostic:IntentDiagnostic){const metrics=this.activeMetrics();metrics?.record("intent.requests",1,{domain:diagnostic.selectedDomain??diagnostic.domainHint??"unknown"});if(diagnostic.validationSuccess)metrics?.record("intent.structured_success",1,{domain:diagnostic.selectedDomain??"unknown"});if(diagnostic.fallbackUsed)metrics?.record("intent.fallback",1,{domain:diagnostic.finalIntent?.domain??"unknown"});if(diagnostic.retryCount)metrics?.record("intent.retry",diagnostic.retryCount,{domain:diagnostic.selectedDomain??"unknown"});if(!diagnostic.validationSuccess&&!diagnostic.fallbackUsed)metrics?.record("intent.schema_failure",1,{domain:diagnostic.selectedDomain??"unknown"});}
 }
+
+function withPresentationPolicy(plan:Plan,intent?:AgentIntent):Plan{
+  if(plan.deferredAction||plan.responseMode==="deterministic")return plan;
+  const toolNames=plan.steps?.map(step=>step.tool)??(plan.tool?[plan.tool]:[]);
+  if(!toolNames.length)return plan;
+  return responsePolicy(toolNames,intent).mode==="presentation"?{...plan,responseMode:"presentation"}:plan;
+}
+function isUnavailableToolPlan(direct:string){return /^A ferramenta necessária \(.+\) não está disponível com as conexões e permissões atuais\.$/.test(direct);}
 function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">|null){if(local?.uiFlow)return false;if(local?.tool&&DETERMINISTIC_SAFE_TOOLS.has(local.tool))return false;if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite|arquivos?|pastas?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho)\b|\.[a-z0-9]{2,8}\b/i.test(text))return true;if(previous?.lastDomain&&["email","calendar","filesystem"].includes(previous.lastDomain)&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere|remova|leia)\b/i.test(text))return true;if(typeof local?.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;return false;}
 function isLikelyConversation(text:string){const normalized=text.trim().toLowerCase();if(/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized))return true;const hasComputerAction=/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized);if(hasComputerAction)return false;if(/^\s*(oi|ol[aá]|bom dia|boa tarde|boa noite)\b/i.test(normalized))return true;if(/^\s*(quem|o que|oque|como|por que|porque|qual|quais|quando|onde|explique|resuma|conte|escreva|diga|pode me explicar)\b/i.test(normalized))return true;return !/\b(arquivo|pasta|navegador|aplicativo|programa|processo|disco|mem[oó]ria|download|desktop|documentos)\b/i.test(normalized);}
 function domainFromName(name:string){if(name.startsWith("email_"))return"email";if(name.startsWith("calendar_"))return"calendar";if(name.startsWith("browser_"))return"browser";if(name.startsWith("memory_"))return"memory";if(/file|folder/.test(name))return"filesystem";return"system";}

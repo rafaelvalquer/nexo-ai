@@ -136,6 +136,30 @@ CREATE TABLE IF NOT EXISTS chat_resource_actions (
   message_id TEXT NOT NULL,
   payload_json TEXT NOT NULL
 );
+`], [14, `
+CREATE TABLE IF NOT EXISTS email_search_preferences (
+  connection_id TEXT PRIMARY KEY,
+  categories_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pending_clarifications (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  original_request TEXT NOT NULL,
+  partial_entities_json TEXT NOT NULL,
+  questions_json TEXT NOT NULL,
+  intent_json TEXT NOT NULL,
+  values_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pending_clarifications_conversation ON pending_clarifications(conversation_id,status,created_at);
 `]];
 
 export class NexoDatabase {

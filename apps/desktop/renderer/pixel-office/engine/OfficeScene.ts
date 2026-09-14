@@ -79,11 +79,12 @@ export class OfficeScene extends Container {
     for (const desk of AGENT_DESKS) this.debugLayer.circle(desk.position.x, desk.position.y, 14).stroke({ color: desk.color, width: 2 });
   }
   getDebug() {
-    const agents = [...this.agents.values()].map(agent => agent.debug());
-    return { activeAgents: agents.filter(agent => agent.runId).length, queue: 0,
+    const entries = [...this.agents.values()];
+    const agents = entries.map(agent => agent.debug());
+    const activeAgents = entries.filter(agent => Boolean(agent.work.event && !isTerminalEvent(agent.work.event))).length;
+    return { activeAgents, queue: 0,
       navigationMs: Math.max(0, ...agents.map(agent => agent.navigationMs)),
       navigationFailures: agents.reduce((sum, agent) => sum + agent.navigationFailures, 0),
       agentDistance: agents.reduce((sum, agent) => sum + agent.distance, 0), agents };
   }
 }
-

@@ -1,5 +1,6 @@
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
 import type { AgentIntent } from "./intent-schema.js";
+import { extractExplicitEmailCategories,isMailboxPreferenceCommand } from "./email-intent-enricher.js";
 
 const base = (overrides: Partial<AgentIntent>): AgentIntent => ({
   schemaVersion: 1,
@@ -18,6 +19,10 @@ const base = (overrides: Partial<AgentIntent>): AgentIntent => ({
 export function resolveFallbackIntent(text: string, previous?: ConversationActionContextState): AgentIntent | undefined {
   const value = text.trim();
   const lower = value.toLowerCase();
+
+  if (isMailboxPreferenceCommand(value)) {
+    return base({ domain: "email", intent: "update", operation: "select_mailboxes", entities: {}, requiresDataLookup: false, requiresConfirmation: false, confidence: 1 });
+  }
 
   const email = /\b(e-?mails?|gmail|caixa\s+de\s+entrada)\b/i.test(value);
   if (email) return emailFallback(value, lower, previous);
@@ -42,34 +47,36 @@ export function resolveFallbackIntent(text: string, previous?: ConversationActio
 
 function emailFallback(text: string, lower: string, previous?: ConversationActionContextState): AgentIntent {
   const sender = text.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0];
+  const categories = extractExplicitEmailCategories(text);
+  const entitiesWithCategories = (entities: Record<string, unknown>) => categories.length ? { ...entities, categories } : entities;
   const referencesPreviousResult = Boolean(previous?.lastDomain === "email" && /\b(eles|elas|esses|essas|os\s+primeiros|os\s+anteriores|aqueles)\b/i.test(text));
 
   if (/\b(apague|delete|deleta|delete|remova|exclua|jogue\s+(?:eles\s+)?(?:na\s+)?lixeira)\b/i.test(text)) {
-    return base({ domain: "email", intent: "delete", operation: "bulk_trash", entities: sender ? { sender } : {}, referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: sender || referencesPreviousResult ? .97 : .76 });
+    return base({ domain: "email", intent: "delete", operation: "bulk_trash", entities: entitiesWithCategories(sender ? { sender } : {}), referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: sender || referencesPreviousResult ? .97 : .76 });
   }
   if (/\b(arquive|arquivar|archive)\b/i.test(text)) {
-    return base({ domain: "email", intent: "move", operation: "archive", entities: sender ? { sender } : {}, referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .94 });
+    return base({ domain: "email", intent: "move", operation: "archive", entities: entitiesWithCategories(sender ? { sender } : {}), referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .94 });
   }
   if (/\b(marque|marcar).*(n[aã]o\s+lido|unread)\b/i.test(text)) {
-    return base({ domain: "email", intent: "update", operation: "mark_unread", entities: sender ? { sender } : {}, referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .95 });
+    return base({ domain: "email", intent: "update", operation: "mark_unread", entities: entitiesWithCategories(sender ? { sender } : {}), referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .95 });
   }
   if (/\b(marque|marcar).*(lido|read)\b/i.test(text)) {
-    return base({ domain: "email", intent: "update", operation: "mark_read", entities: sender ? { sender } : {}, referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .95 });
+    return base({ domain: "email", intent: "update", operation: "mark_read", entities: entitiesWithCategories(sender ? { sender } : {}), referencesPreviousResult, requiresDataLookup: true, requiresConfirmation: true, confidence: .95 });
   }
   if (/\b(resum|resumo|resuma)\b/i.test(text)) {
-    return base({ domain: "email", intent: "summarize", operation: referencesPreviousResult ? "summarize_previous" : "summarize_messages", entities: { unread: /n[aã]o\s+lidos?|unread/i.test(text), maxResults: 20 }, referencesPreviousResult, requiresDataLookup: true, confidence: .98 });
+    return base({ domain: "email", intent: "summarize", operation: referencesPreviousResult ? "summarize_previous" : "summarize_messages", entities: entitiesWithCategories({ unread: /n[aã]o\s+lidos?|unread/i.test(text), maxResults: 20 }), referencesPreviousResult, requiresDataLookup: true, confidence: .98 });
   }
   if (/\b(quantos?|quantidade|total)\b/i.test(text)) {
-    return base({ domain: "email", intent: "stats", operation: "email_stats", entities: {}, requiresDataLookup: true, confidence: .99 });
+    return base({ domain: "email", intent: "stats", operation: "email_stats", entities: entitiesWithCategories({}), requiresDataLookup: true, confidence: .99 });
   }
   if (/\b([uú]ltim|recent|mais\s+novos?|mais\s+recentes?)\b/i.test(lower)) {
     const one = /\b([uú]ltimo|mais\s+recente)\s+e-?mail\b/i.test(text);
-    return base({ domain: "email", intent: one ? "read" : "list", operation: one ? "latest" : "recent_messages", entities: { maxResults: one ? 1 : 20 }, requiresDataLookup: true, confidence: .99 });
+    return base({ domain: "email", intent: one ? "read" : "list", operation: one ? "latest" : "recent_messages", entities: entitiesWithCategories({ maxResults: one ? 1 : 20 }), requiresDataLookup: true, confidence: .99 });
   }
   if (/\b(n[aã]o\s+lidos?|unread)\b/i.test(text)) {
-    return base({ domain: "email", intent: "search", operation: "search_messages", entities: { unread: true, maxResults: 20 }, requiresDataLookup: true, confidence: .98 });
+    return base({ domain: "email", intent: "search", operation: "search_messages", entities: entitiesWithCategories({ unread: true, maxResults: 20 }), requiresDataLookup: true, confidence: .98 });
   }
-  return base({ domain: "email", intent: "list", operation: "recent_messages", entities: { maxResults: 20 }, requiresDataLookup: true, confidence: .88 });
+  return base({ domain: "email", intent: "list", operation: "recent_messages", entities: entitiesWithCategories({ maxResults: 20 }), requiresDataLookup: true, confidence: .88 });
 }
 
 function calendarFallback(text: string, lower: string, previous?: ConversationActionContextState): AgentIntent {

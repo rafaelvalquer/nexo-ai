@@ -12,7 +12,7 @@ export type PersistedAgentState = {
   iteration: number;
   intent?: AgentIntent;
   deferredAction?: DeferredAction;
-  responseMode?: "synthesize" | "deterministic";
+  responseMode?: "synthesize" | "deterministic" | "presentation";
 };
 
 export type AgentRun = {
