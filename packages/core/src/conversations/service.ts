@@ -92,9 +92,19 @@ export class ConversationService {
       const presentation = parsePresentation(JSON.parse(row.payload_json));
       const bindings = resourceBindingsSchema.safeParse(JSON.parse(row.bindings_json));
       if (!presentation || !bindings.success) return undefined;
-      for(const block of presentation.blocks)if(block.type === "approval"){
-        const row=this.db.get<{status:typeof block.status;expires_at:string|null}>("SELECT status,expires_at FROM approvals WHERE id=?",[block.approvalId]);
-        if(row)block.status=row.status === "pending" && row.expires_at && Date.parse(row.expires_at)<=Date.now()?"expired":row.status;
+      for(const block of presentation.blocks){
+        if(block.type === "approval"){
+          const approval=this.db.get<{status:typeof block.status;expires_at:string|null}>("SELECT status,expires_at FROM approvals WHERE id=?",[block.approvalId]);
+          if(approval)block.status=approval.status === "pending" && approval.expires_at && Date.parse(approval.expires_at)<=Date.now()?"expired":approval.status;
+        }
+        if(block.type === "clarification"){
+          const clarification=this.db.get<{status:string;values_json:string;expires_at:string|null}>("SELECT status,values_json,expires_at FROM pending_clarifications WHERE id=?",[block.clarificationId]);
+          if(clarification){
+            const expired=clarification.status==="pending"&&clarification.expires_at&&Date.parse(clarification.expires_at)<=Date.now();
+            block.state=expired?"expired":clarification.status==="resolved"?"submitted":clarification.status==="cancelled"?"cancelled":clarification.status==="expired"?"expired":"pending";
+            try{const values=JSON.parse(clarification.values_json) as Record<string,unknown>;if(Object.keys(values).length)block.values=values;}catch{}
+          }
+        }
       }
       return { presentation, bindings: bindings.data };
     } catch { return undefined; }
