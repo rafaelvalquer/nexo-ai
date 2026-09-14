@@ -48,7 +48,7 @@ export type ClarificationOption = {
 };
 export type ClarificationQuestion = {
   id: string; field: string; prompt: string;
-  type: "single_choice" | "multi_choice" | "text" | "choice_or_text";
+  type: "single_choice" | "multi_choice" | "text" | "choice_or_text" | "email" | "textarea";
   options?: ClarificationOption[]; suggestedOptionId?: string; selectedOptionIds?: string[];
   allowCustomValue?: boolean; customPlaceholder?: string; required: boolean;
   helperText?: string; submitLabel?: string;
@@ -68,10 +68,41 @@ export type ClarificationResolution = {
   source: "button" | "custom_input" | "chat_text";
   status: "pending" | "resolved" | "cancelled" | "expired";
 };
+export type EmailComposeDraftStatus = "review" | "waiting_approval" | "sending" | "sent" | "cancelled";
+export type EmailComposeDraftSnapshot = {
+  id: string;
+  conversationId: string;
+  taskId?: string;
+  connectionId?: string;
+  to: string[];
+  subject: string;
+  bodyText: string;
+  version: number;
+  status: EmailComposeDraftStatus;
+  approvalId?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+};
+export type EmailComposeDraftPatch = { to?: string[]; subject?: string; bodyText?: string };
+export type EmailComposeDraftUpdateRequest = { draftId: string; expectedVersion: number; patch: EmailComposeDraftPatch };
+export type EmailComposeDraftSubmitRequest = { draftId: string; expectedVersion: number };
+export type EmailComposeDraftCancelRequest = { draftId: string; expectedVersion: number };
+export type EmailComposeReviewBlock = ChatBlockBase & {
+  type: "email_compose_review";
+  draftId: string;
+  approvalId?: string;
+  status: "review" | "sending" | "sent" | "cancelled" | "expired";
+  fields: { to: string[]; subject: string; bodyText: string };
+  error?: string;
+  sentAt?: string;
+  expiresAt?: string;
+};
 export type StatusBlock = ChatBlockBase & {
   type: "status"; state: ResourceActionState; text: string;
 };
-export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | StatusBlock;
+export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | EmailComposeReviewBlock | StatusBlock;
 export type ChatPresentation = { version: 1; blocks: ChatBlock[] };
 export type ChatActionRequest = {
   conversationId: string; messageId: string; blockId: string; itemId: string; actionId: string;
