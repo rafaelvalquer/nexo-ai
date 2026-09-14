@@ -53,5 +53,5 @@ export function App() {
     return () => {unsubscribe();unsubscribeResources?.();window.clearInterval(timer);};
   }, [syncAssistant, handleTaskEvent]);
 
-  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><PageErrorBoundary><Suspense fallback={<div className="page">Carregando tela…</div>}><Page /></Suspense></PageErrorBoundary></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;
+  return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><PageErrorBoundary key={page}><Suspense fallback={<div className="page">Carregando tela…</div>}><Page /></Suspense></PageErrorBoundary></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;
 }
