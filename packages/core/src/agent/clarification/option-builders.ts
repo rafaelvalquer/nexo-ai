@@ -18,6 +18,8 @@ export function buildEmailMailboxQuestion(provider: ConnectionProvider, selected
 }
 
 export function buildClarificationQuestion(field: string, intent: AgentIntent): ClarificationQuestion {
+  if(field==="to")return{id:"to",field:"to",prompt:"Qual é o endereço de e-mail do destinatário?",type:"email",allowCustomValue:true,customPlaceholder:"nome@exemplo.com",required:true,submitLabel:"Continuar"};
+  if(field==="body")return{id:"body",field:"body",prompt:"Qual mensagem você quer enviar?",type:"textarea",allowCustomValue:true,customPlaceholder:"Digite a mensagem...",required:true,submitLabel:"Continuar"};
   if (field === "folder") {
     const suggested = typeof intent.suggestedValues?.folder === "string" ? intent.suggestedValues.folder : "downloads";
     const suggestedOptionId = ["downloads", "documents", "desktop"].includes(suggested) ? suggested : "downloads";
