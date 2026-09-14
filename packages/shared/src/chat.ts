@@ -103,7 +103,7 @@ export type EmailComposeReviewBlock = ChatBlockBase & {
 export type StatusBlock = ChatBlockBase & {
   type: "status"; state: ResourceActionState; text: string;
 };
-export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | EmailComposeReviewBlock | StatusBlock;
+export type ChatBlock = TextBlock | ResourceCollectionBlock | ApprovalBlock | ClarificationBlock | EmailComposeReviewBlock | StatusBlock | BrowserRunBlock;
 export type ChatPresentation = { version: 1; blocks: ChatBlock[] };
 export type ChatActionRequest = {
   conversationId: string; messageId: string; blockId: string; itemId: string; actionId: string;
