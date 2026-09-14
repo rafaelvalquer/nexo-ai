@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ToolResult,VisualExecutionContext,ConnectionCapability,ClarificationResolutionRequest,ChatPresentation } from "@nexo/shared";
+import type { ToolResult,VisualExecutionContext,ConnectionCapability,ClarificationResolutionRequest,ChatPresentation,ConnectionProvider } from "@nexo/shared";
 import { AgentPlanner,type PlanStep,type Plan } from "./planner.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { PermissionEngine } from "../permissions/policy.js";
@@ -19,8 +19,12 @@ import { buildConfirmation,confirmationText } from "./orchestrator/confirmation-
 import { ClarificationRepository } from "./clarification/repository.js";
 import { ClarificationResolver } from "./clarification/resolver.js";
 import { ClarificationService } from "./clarification/service.js";
-import type { PendingClarification } from "./clarification/types.js";
+import type { ClarificationResume,PendingClarification } from "./clarification/types.js";
 import { ChatPresentationSession } from "../chat/presentation/session.js";
+import { defaultMailboxCategories,mailboxCategoryListLabel,normalizeMailboxCategories } from "../email/preferences/category-resolver.js";
+import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "../email/preferences/types.js";
+
+const EMAIL_DISCOVERY_TOOLS=new Set(["email_search","email_latest","email_stats"]);
 
 export type AgentReply={text:string;result?:ToolResult;results?:ToolResult[];approvalId?:string;conversationId?:string;presentation?:ChatPresentation};
 export type AgentRunHooks={onToolResult?:(toolName:string,input:Record<string,unknown>,result:ToolResult)=>void;onStatus?:(message:string)=>void;onToken?:(token:string)=>void;onReplaceText?:(text:string)=>void;signal?:AbortSignal;onToolStarted?:(toolName:string,label:string)=>void;onToolCompleted?:(toolName:string,ok:boolean)=>void;onApprovalRequested?:(approvalId:string,toolName:string)=>void;visualContext?:VisualExecutionContext};
@@ -34,13 +38,32 @@ export class AgentEngine{
     const conversationId=hooks.visualContext?.conversationId;
     const previous=this.runtime?.getConversationActionContext(conversationId);
     if(conversationId&&this.clarifications){
-      const pendingAttempt=this.clarifications.tryResolveText(conversationId,userText);
+      const current=this.clarifications.pending(conversationId);
+      const preferenceFlow=this.isEmailPreferenceClarification(current);
+      let pendingAttempt;
+      if(preferenceFlow&&this.runtime){
+        pendingAttempt=this.runtime.emailPreferences.transaction(()=>{
+          const attempt=this.clarifications!.tryResolveText(conversationId,userText);
+          if(attempt.kind==="resolved")this.persistEmailPreference(attempt.value);
+          return attempt;
+        });
+      }else pendingAttempt=this.clarifications.tryResolveText(conversationId,userText);
       if(pendingAttempt.kind==="pending"){
-        if(pendingAttempt.pending.status!=="pending"){const text=pendingAttempt.message??"Esclarecimento cancelado.";hooks.onReplaceText?.(text);hooks.onStatus?.("Esclarecimento encerrado.");return{text,conversationId};}
+        if(pendingAttempt.pending.status!=="pending"){
+          const text=this.isEmailPreferenceClarification(pendingAttempt.pending)?this.emailPreferenceCancellationText(pendingAttempt.pending):pendingAttempt.message??"Esclarecimento cancelado.";
+          if(this.isEmailPreferenceClarification(pendingAttempt.pending))this.metrics?.record("email.mailbox_selector.cancelled",1,{provider:String(pendingAttempt.pending.partialEntities.__emailProvider??"unknown")});
+          hooks.onReplaceText?.(text);hooks.onStatus?.("Esclarecimento encerrado.");return{text,conversationId};
+        }
         return this.clarificationReply(pendingAttempt.pending,hooks,pendingAttempt.message);
       }
       if(pendingAttempt.kind==="resolved"){
+        if(this.isEmailPreferenceClarification(pendingAttempt.value.pending)){
+          this.recordEmailPreferenceSaved(pendingAttempt.value);
+          if(this.emailPreferenceMode(pendingAttempt.value.pending)==="update")return this.emailPreferenceUpdatedReply(pendingAttempt.value,hooks);
+        }
         const plan=this.planner.buildIntentPlan(pendingAttempt.value.intent,previous,this.toolCatalog.list());
+        const mailboxReply=this.prepareEmailMailboxPlan(pendingAttempt.value.originalRequest,plan,conversationId,hooks);
+        if(mailboxReply)return mailboxReply;
         return this.executePlan(pendingAttempt.value.originalRequest,plan,hooks,context);
       }
     }
@@ -50,6 +73,7 @@ export class AgentEngine{
     catch(error){const text=this.formatOllamaError(error,"interpretar este pedido");hooks.onReplaceText?.(text);hooks.onStatus?.("Não foi possível concluir a interpretação.");return{text};}
 
     if(plan.intent?.status==="needs_clarification"&&conversationId&&this.clarifications){const pending=this.clarifications.create(conversationId,userText,plan.intent);return this.clarificationReply(pending,hooks);}
+    const mailboxReply=this.prepareEmailMailboxPlan(userText,plan,conversationId,hooks);if(mailboxReply)return mailboxReply;
     if(plan.directStream){hooks.onStatus?.("Conversa identificada. Preparando a IA local…");hooks.onReplaceText?.("");try{hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.planner.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text};}}
     if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);hooks.onStatus?.("Resposta concluída.");return{text:plan.direct};}
 
@@ -61,18 +85,33 @@ export class AgentEngine{
     const existing=this.clarifications.get(request.clarificationId);if(!existing)throw new Error("Esclarecimento não encontrado.");
     const session=new ChatPresentationSession();
     const capturedHooks:AgentRunHooks={...hooks,onToolResult:(name,input,result)=>{session.add(name,input,result);hooks.onToolResult?.(name,input,result);}};
-    const attempt=this.clarifications.resolve(request);
+    let attempt;
+    if(this.isEmailPreferenceClarification(existing)&&this.runtime){
+      attempt=this.runtime.emailPreferences.transaction(()=>{
+        const resolved=this.clarifications!.resolve(request);
+        if(resolved.kind==="resolved")this.persistEmailPreference(resolved.value);
+        return resolved;
+      });
+    }else attempt=this.clarifications.resolve(request);
     if(attempt.kind==="none")throw new Error("Esse esclarecimento não está mais pendente.");
     let reply:AgentReply;
     if(attempt.kind==="pending")reply=await this.clarificationReply(attempt.pending,capturedHooks,attempt.message);
-    else{const previous=this.runtime?.getConversationActionContext(existing.conversationId),plan=this.planner.buildIntentPlan(attempt.value.intent,previous,this.toolCatalog.list());reply=await this.executePlan(attempt.value.originalRequest,plan,capturedHooks,context);}
+    else if(this.isEmailPreferenceClarification(attempt.value.pending)&&this.emailPreferenceMode(attempt.value.pending)==="update"){
+      this.recordEmailPreferenceSaved(attempt.value);
+      reply=this.emailPreferenceUpdatedReply(attempt.value,capturedHooks);
+    }else{
+      if(this.isEmailPreferenceClarification(attempt.value.pending))this.recordEmailPreferenceSaved(attempt.value);
+      const previous=this.runtime?.getConversationActionContext(existing.conversationId),plan=this.planner.buildIntentPlan(attempt.value.intent,previous,this.toolCatalog.list());
+      const mailboxReply=this.prepareEmailMailboxPlan(attempt.value.originalRequest,plan,existing.conversationId,capturedHooks);
+      reply=mailboxReply??await this.executePlan(attempt.value.originalRequest,plan,capturedHooks,context);
+    }
     const approval=reply.approvalId?this.approvals.list().find(item=>item.id===reply.approvalId):undefined;
     const presentation=session.finish(reply.text,approval)?.presentation;
     return{...reply,conversationId:existing.conversationId,presentation};
   }
 
   getPendingClarification(conversationId:string){const pending=this.clarifications?.pending(conversationId);return pending?this.clarifications?.block(pending):undefined;}
-  cancelClarification(id:string){const existing=this.clarifications?.get(id);const cancelled=this.clarifications?.cancel(id);return cancelled&&existing?{conversationId:existing.conversationId,block:this.clarifications?.block(cancelled)}:undefined;}
+  cancelClarification(id:string){const existing=this.clarifications?.get(id);const cancelled=this.clarifications?.cancel(id);if(!cancelled||!existing)return undefined;if(this.isEmailPreferenceClarification(existing)){this.metrics?.record("email.mailbox_selector.cancelled",1,{provider:String(existing.partialEntities.__emailProvider??"unknown")});return{conversationId:existing.conversationId,block:this.clarifications?.block(cancelled),text:this.emailPreferenceCancellationText(existing)};}return{conversationId:existing.conversationId,block:this.clarifications?.block(cancelled)};}
 
   /** Core action registry entry point. Uses the same policy, checkpoints and approvals as chat. */
   async runPlan(userText: string, steps: PlanStep[], hooks: AgentRunHooks = {}): Promise<AgentReply> {
@@ -84,6 +123,89 @@ export class AgentEngine{
     const block=this.clarifications.block(pending),text=message??block.title,result:ToolResult={ok:true,summary:text,data:block};
     hooks.onToolResult?.("__clarification__",{},result);hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando resposta.");return{text,result,conversationId:pending.conversationId};
   }
+
+  private prepareEmailMailboxPlan(userText:string,plan:Plan,conversationId:string|undefined,hooks:AgentRunHooks):AgentReply|undefined{
+    if(!plan.uiFlow&&!this.emailDiscoverySteps(plan).length)return undefined;
+    const resolved=this.resolveEmailReadAccount(this.firstEmailInput(plan));
+    if(resolved.error){hooks.onReplaceText?.(resolved.error);return{text:resolved.error};}
+    const account=resolved.account;if(!account)return undefined;
+
+    if(plan.uiFlow==="email_mailbox_preferences"){
+      if(!conversationId||!this.clarifications){const text="Abra esta solicitação em um chat para selecionar as caixas de e-mail.";hooks.onReplaceText?.(text);return{text};}
+      const stored=this.runtime?.emailPreferences.get(account.id);
+      const selected=normalizeMailboxCategories(account.provider,stored?.categories);
+      const pending=this.clarifications.createEmailMailboxPreference(conversationId,userText,plan.intent!,account.id,account.provider,selected.length?selected:defaultMailboxCategories(account.provider),"update");
+      this.metrics?.record("email.mailbox_selector.shown",1,{provider:account.provider,mode:"update"});
+      return this.clarificationReplySync(pending,hooks);
+    }
+
+    const explicit=this.explicitEmailCategories(plan);
+    if(explicit.length){
+      if(account.provider!=="google"){
+        const text="As categorias Principal, Promoções, Social, Atualizações e Fóruns são específicas do Gmail. Para a conta Microsoft, o Nexo pesquisa a Caixa de entrada.";
+        hooks.onReplaceText?.(text);return{text};
+      }
+      this.applyCategoriesToPlan(plan,account.id,explicit);
+      this.metrics?.record("email.search.categories_count",explicit.length,{provider:account.provider,source:"explicit"});
+      return undefined;
+    }
+
+    const stored=this.runtime?.emailPreferences.get(account.id);
+    const categories=normalizeMailboxCategories(account.provider,stored?.categories);
+    if(categories.length){
+      this.applyCategoriesToPlan(plan,account.id,categories);
+      this.metrics?.record("email.search.categories_count",categories.length,{provider:account.provider,source:"preference"});
+      return undefined;
+    }
+
+    if(!conversationId||!this.clarifications){
+      const text="Antes de pesquisar seus e-mails, escolha no chat quais caixas devem ser consideradas por padrão.";
+      hooks.onReplaceText?.(text);return{text};
+    }
+    if(!plan.intent)return undefined;
+    const selected=defaultMailboxCategories(account.provider);
+    const pending=this.clarifications.createEmailMailboxPreference(conversationId,userText,plan.intent,account.id,account.provider,selected,"initial");
+    this.metrics?.record("email.mailbox_selector.shown",1,{provider:account.provider,mode:"initial"});
+    return this.clarificationReplySync(pending,hooks);
+  }
+
+  private clarificationReplySync(pending:PendingClarification,hooks:AgentRunHooks):AgentReply{
+    if(!this.clarifications)return{text:pending.questions[0]?.prompt??"Preciso de mais informações."};
+    const block=this.clarifications.block(pending),text=block.title,result:ToolResult={ok:true,summary:text,data:block};
+    hooks.onToolResult?.("__clarification__",{},result);hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando resposta.");return{text,result,conversationId:pending.conversationId};
+  }
+
+  private emailDiscoverySteps(plan:Plan){return(plan.steps??(plan.tool?[{tool:plan.tool,input:plan.input??{}}]:[])).filter(step=>EMAIL_DISCOVERY_TOOLS.has(step.tool));}
+  private firstEmailInput(plan:Plan){return this.emailDiscoverySteps(plan)[0]?.input??{};}
+  private resolveEmailReadAccount(input:Record<string,unknown>){
+    if(!this.connections)return{account:undefined as ReturnType<ConnectionService["get"]>|undefined};
+    if(typeof input.connectionId==="string"){
+      const account=this.connections.get(input.connectionId);if(account)return{account};
+    }
+    const resolution=this.connections.resolveForCapability("email.read");
+    if(resolution.status==="ready")return{account:resolution.account};
+    if(resolution.status==="not_connected")return{error:"Nenhuma conta Google ou Microsoft está conectada. Abra Conexões e autorize uma conta antes de usar e-mail."};
+    if(resolution.status==="missing_capability")return{error:`Sua conta ${resolution.account.accountEmail??resolution.account.provider} está conectada, mas a permissão para ler e-mails não está ativa.`};
+    if(resolution.status==="expired")return{error:`A autorização da conta ${resolution.account.accountEmail??resolution.account.provider} expirou e não pôde ser renovada automaticamente.`};
+    return{error:resolution.account.reauthorizationReason??"A conta precisa ser autorizada novamente."};
+  }
+  private explicitEmailCategories(plan:Plan):EmailMailboxCategory[]{const raw=(plan.intent?.entities as Record<string,unknown>|undefined)?.categories;if(!Array.isArray(raw))return[];const allowed=new Set<EmailMailboxCategory>(["primary","promotions","social","updates","forums"]);return[...new Set(raw.filter((value):value is EmailMailboxCategory=>typeof value==="string"&&allowed.has(value as EmailMailboxCategory)))];}
+  private applyCategoriesToPlan(plan:Plan,connectionId:string,categories:EmailMailboxPreferenceCategory[]){for(const step of this.emailDiscoverySteps(plan)){step.input.connectionId=connectionId;if(categories[0]!=="inbox")step.input.categories=categories;else delete step.input.categories;}if(plan.tool&&EMAIL_DISCOVERY_TOOLS.has(plan.tool)){plan.input={...(plan.input??{}),connectionId};if(categories[0]!=="inbox")plan.input.categories=categories;else delete plan.input.categories;}}
+  private isEmailPreferenceClarification(pending?:PendingClarification){return Boolean(pending?.domain==="email"&&pending.partialEntities.__emailPreferenceFlow===true);}
+  private emailPreferenceMode(pending:PendingClarification){return pending.partialEntities.__emailPreferenceMode==="update"?"update":"initial";}
+  private persistEmailPreference(value:ClarificationResume){
+    if(!this.runtime||!this.isEmailPreferenceClarification(value.pending))return;
+    const connectionId=String(value.pending.partialEntities.connectionId??"");
+    const provider=String(value.pending.partialEntities.__emailProvider??"") as ConnectionProvider;
+    const raw=value.resolution.values.emailCategories;
+    const categories=normalizeMailboxCategories(provider,raw);
+    if(!connectionId||!categories.length)throw new Error("Selecione pelo menos uma caixa.");
+    this.runtime.emailPreferences.save(connectionId,categories);
+    this.audit.record("email.preferences.updated","SAFE_WRITE","success",{connectionId,categoryCount:categories.length,categories});
+  }
+  private recordEmailPreferenceSaved(value:ClarificationResume){const provider=String(value.pending.partialEntities.__emailProvider??"unknown"),mode=this.emailPreferenceMode(value.pending),raw=value.resolution.values.emailCategories,count=Array.isArray(raw)?raw.length:0;this.metrics?.record(mode==="initial"?"email.mailbox_selector.saved":"email.mailbox_preference.updated",1,{provider,categoryCount:count});}
+  private emailPreferenceUpdatedReply(value:ClarificationResume,hooks:AgentRunHooks):AgentReply{const raw=value.resolution.values.emailCategories,categories=normalizeMailboxCategories(String(value.pending.partialEntities.__emailProvider??"") as ConnectionProvider,raw),text=`Preferência atualizada.\n\nAs próximas consultas considerarão: ${mailboxCategoryListLabel(categories)}.`;hooks.onReplaceText?.(text);hooks.onStatus?.("Preferência atualizada.");return{text,conversationId:value.pending.conversationId};}
+  private emailPreferenceCancellationText(pending:PendingClarification){return this.emailPreferenceMode(pending)==="update"?"Alteração cancelada. A preferência anterior foi mantida.":'A consulta de e-mails foi cancelada.\nVocê pode definir as caixas quando quiser dizendo "selecionar caixas de e-mails".';}
 
   private async executePlan(userText: string, plan: Plan, hooks: AgentRunHooks, context: LLMMessage[]): Promise<AgentReply> {
     const conversationId = hooks.visualContext?.conversationId;
