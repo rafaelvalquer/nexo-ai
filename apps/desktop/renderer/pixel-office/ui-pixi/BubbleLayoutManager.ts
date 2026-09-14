@@ -4,6 +4,13 @@ type Rect = { x: number; y: number; width: number; height: number };
 const overlaps = (a: Rect, b: Rect) => !(a.x + a.width + 8 <= b.x || b.x + b.width + 8 <= a.x || a.y + a.height + 8 <= b.y || b.y + b.height + 8 <= a.y);
 export class BubbleLayoutManager {
   layout(items: BubbleAnchor[], viewportWidth: number, viewportHeight: number): BubblePlacement[] {
+    // Use the margins around the fitted map on narrow screens, keeping all
+    // four characters visible instead of stacking cards over their sprites.
+    if (viewportWidth < 700) return [...items].sort((a, b) => a.id.localeCompare(b.id)).map((item, index) => ({
+      id: item.id,
+      x: index % 2 === 0 ? 12 : Math.max(12, viewportWidth - item.width - 12),
+      y: index < 2 ? 100 : Math.max(100 + item.height + 12, viewportHeight - item.height - 80)
+    }));
     const placed: Rect[] = [], result: BubblePlacement[] = [];
     for (const item of [...items].sort((a, b) => a.y - b.y || a.x - b.x)) {
       const maxX = Math.max(8, viewportWidth - item.width - 8);

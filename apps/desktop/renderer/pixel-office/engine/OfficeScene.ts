@@ -33,7 +33,7 @@ export class OfficeScene extends Container {
       const label = new Text({ text: desk.name.toUpperCase(), style: { fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: "700", fill: desk.color } });
       label.anchor.set(.5);
       light.addChild(label);
-      light.position.set(desk.position.x, desk.furniture.y + desk.furniture.height + 48);
+      light.position.set(desk.position.x + 146, desk.position.y - 20);
       light.eventMode = "static";
       light.cursor = "pointer";
       light.on("pointertap", () => onAgent(agent.id, agent.conversationId));

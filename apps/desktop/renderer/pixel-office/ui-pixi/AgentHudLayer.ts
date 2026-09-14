@@ -10,7 +10,7 @@ export class AgentHudLayer extends Container {
   constructor() { super(); this.addChild(this.connectors); }
   updateAgents(agents: Iterable<OfficeAgent>, width: number, height: number, _delta: number, _reduced = false) {
     const list = [...agents];
-    const scale = width < 700 ? .8 : 1;
+    const scale = Math.min(1, (width - 32) / 480);
     const anchors = list.map(agent => {
       const bubble = this.ensure(agent.id);
       bubble.updateContent(agent.hudSnapshot());

@@ -31,6 +31,8 @@ export class AgentWorkState {
     }
     this.event = {
       ...event,
+      conversationId: event.conversationId ?? (previous?.runId === event.runId ? previous.conversationId : undefined),
+      taskId: event.taskId ?? (previous?.runId === event.runId ? previous.taskId : undefined),
       metadata: previous?.runId === event.runId
         ? { ...previous.metadata, ...event.metadata }
         : event.metadata
