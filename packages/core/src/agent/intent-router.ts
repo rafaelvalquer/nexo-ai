@@ -68,6 +68,10 @@ export class FastIntentRouter {
       ].join("\n") };
     }
 
+    if (/\b(selecionar|alterar|mudar|configurar|escolher)\b/i.test(text) && /\b(caixas?|abas?).*(e-?mails?|gmail)|\b(e-?mails?|gmail).*(caixas?|abas?)\b/i.test(text)) {
+      return { uiFlow: "email_mailbox_preferences" };
+    }
+
     const mentionsEmail=/\b(e-?mails?|gmail|caixa\s+de\s+entrada|mensagens?\s+recebidas?)\b/i.test(text);
     if (mentionsEmail && /\b([uú]ltim[oa]|mais\s+recente|recentemente\s+recebido)\b/i.test(text)) {
       return { tool:"email_latest", input:{}, explanation:"Buscando o e-mail mais recente da caixa de entrada…" };
