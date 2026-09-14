@@ -1,5 +1,6 @@
 import type { PlanStep } from "../planner.js";
 import type { ToolResult } from "@nexo/shared";
+import type { AgentIntent, DeferredAction } from "../orchestrator/intent-schema.js";
 
 export type AgentRunStatus = "RUNNING" | "WAITING_APPROVAL" | "COMPLETED" | "FAILED" | "CANCELLED";
 
@@ -9,6 +10,9 @@ export type PersistedAgentState = {
   nextStep: number;
   results: ToolResult[];
   iteration: number;
+  intent?: AgentIntent;
+  deferredAction?: DeferredAction;
+  responseMode?: "synthesize" | "deterministic";
 };
 
 export type AgentRun = {
