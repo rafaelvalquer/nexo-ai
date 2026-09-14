@@ -37,11 +37,14 @@ export class ClarificationResolver {
 
   private resolveMultiChoice(question: ClarificationQuestion, input: ClarificationAnswerInput, source: "button" | "custom_input" | "chat_text", raw?: string): ClarificationAnswer {
     const options = question.options ?? [];
+    const normalizedRaw = raw ? normalize(raw) : "";
     const selectedIds = input.optionIds?.length
       ? input.optionIds
-      : raw
-        ? options.filter(option => matchesOption(raw, option.id, option.label, option.value)).map(option => option.id)
-        : [];
+      : normalizedRaw && /\b(todas?|todos?|all)\b/.test(normalizedRaw)
+        ? options.map(option => option.id)
+        : raw
+          ? options.filter(option => matchesOption(raw, option.id, option.label, option.value)).map(option => option.id)
+          : [];
     const unique = [...new Set(selectedIds)];
     if (!unique.length) return { resolved: false, message: "Selecione pelo menos uma caixa." };
     const selected = unique.map(id => options.find(option => option.id === id)).filter(Boolean);
