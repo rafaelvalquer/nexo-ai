@@ -137,13 +137,12 @@ export class IntentOrchestrator {
     ];
 
     if (this.llm.planStructured) {
-      const parsed = await this.llm.planStructured<AgentIntent>({
+      return this.llm.planStructured<AgentIntent>({
         messages,
         schema: jsonSchemaForIntentDomain(domain),
         schemaName: `${domain}-intent-v1`,
         parse: value => parseAgentIntentV1(value, domain)
       }, signal);
-      return parsed;
     }
 
     let lastError: unknown;
@@ -174,7 +173,12 @@ function buildIntentPrompt(domain: IntentDomain, tools: AgentToolDescriptor[], c
     emailResults: context.previous.emails?.slice(0, 20).map((item, index) => ({ index: index + 1, from: item.from, subject: item.subject, receivedAt: item.receivedAt })),
     calendarResults: context.previous.events?.slice(0, 20).map((item, index) => ({ index: index + 1, title: item.title, start: item.start, end: item.end }))
   } : null;
-  const examples = examplesForDomain(domain, 5).map(example => ({ user: example.utterance, output: example.intent }));
+  const learned = (context.learnedExamples ?? [])
+    .filter(example => example.intent.domain === domain)
+    .slice(0, 5)
+    .map(example => ({ user: example.utterance, output: example.intent, source: example.source ?? "local-learning", score: example.score }));
+  const curated = examplesForDomain(domain, 5).map(example => ({ user: example.utterance, output: example.intent, source: "curated" }));
+  const examples = [...learned, ...curated].slice(0, 8);
   const compactTools = tools.map(tool => ({
     name: tool.name,
     description: tool.description,
@@ -195,7 +199,7 @@ function buildIntentPrompt(domain: IntentDomain, tools: AgentToolDescriptor[], c
     "Se faltar informação essencial, use status='needs_clarification', missing e question.",
     "Use schemaVersion=1 e confidence numérico entre 0 e 1.",
     `Ferramentas disponíveis somente neste domínio: ${JSON.stringify(compactTools)}`,
-    `Exemplos confiáveis: ${JSON.stringify(examples)}`,
+    `Exemplos confiáveis, priorizando correções/aprovações locais: ${JSON.stringify(examples)}`,
     `Contexto operacional anterior, sem segredos: ${JSON.stringify(previous)}`,
     "Retorne somente a estrutura solicitada pelo schema."
   ].join("\n\n");
