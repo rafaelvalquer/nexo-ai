@@ -6,11 +6,15 @@ import { FastIntentRouter } from "./intent-router.js";
 import type { ConversationActionContextState } from "./context/conversation-action-context.js";
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
 import { materializeDeferredAction } from "./orchestrator/action-preflight.js";
-import { IntentOrchestrator } from "./orchestrator/intent-orchestrator.js";
+import { IntentOrchestrator,type IntentDiagnostic } from "./orchestrator/intent-orchestrator.js";
 import { buildIntentPlan } from "./orchestrator/plan-builder.js";
 import { ResponseSynthesizer } from "./orchestrator/response-synthesizer.js";
 import type { AgentIntent,ApprovalPlanMetadata,DeferredAction } from "./orchestrator/intent-schema.js";
 import type { AgentToolDescriptor } from "./orchestrator/tool-catalog.js";
+import { resolveDomainHint } from "./orchestrator/domain-resolver.js";
+import { IntentMemoryStore } from "./intent-memory/store.js";
+import { IntentMemoryRetriever } from "./intent-memory/retriever.js";
+import type { LocalMetricsService } from "../observability/metrics.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata};
 export type PlanOrigin="fast"|"llm";
@@ -21,7 +25,18 @@ const fastRouter=new FastIntentRouter();
 export class AgentPlanner{
   private readonly orchestrator:IntentOrchestrator;
   private readonly synthesizer:ResponseSynthesizer;
-  constructor(private llm:LLMProvider,private registry:ToolRegistry){this.orchestrator=new IntentOrchestrator(llm);this.synthesizer=new ResponseSynthesizer(llm);}
+  private readonly intentRetriever?:IntentMemoryRetriever;
+  constructor(
+    private llm:LLMProvider,
+    private registry:ToolRegistry,
+    private intentMemory?:IntentMemoryStore,
+    private intentLearningEnabled:()=>boolean=()=>true,
+    private metrics?:LocalMetricsService
+  ){
+    this.orchestrator=new IntentOrchestrator(llm,diagnostic=>this.recordIntentDiagnostic(diagnostic));
+    this.synthesizer=new ResponseSynthesizer(llm);
+    this.intentRetriever=intentMemory?new IntentMemoryRetriever(intentMemory,text=>llm.embed(text)):undefined;
+  }
 
   async plan(userText:string,context:LLMMessage[]=[],signal?:AbortSignal,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Promise<Plan>{
     const local=fastRouter.route(userText);
@@ -32,14 +47,28 @@ export class AgentPlanner{
     if(!semantic)return this.legacyToolPlan(userText,context,signal);
 
     const tools=availableTools??this.registry.listForAgent().map((tool:any)=>({name:tool.name,description:tool.description,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name,risk:tool.risk,mutatesState:tool.mutatesState??tool.risk!=="READ",requiresConfirmation:tool.requiresConfirmation??tool.risk!=="READ",permissions:tool.permissions,parameters:tool.parameters}));
-    const intent=await this.orchestrator.interpret(userText,tools,{previous},context,signal);
+    const hint=resolveDomainHint(userText);
+    const learned=this.intentRetriever&&this.intentLearningEnabled()?await this.intentRetriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
+    const intent=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const built=buildIntentPlan(intent,tools,previous);
     return{...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent};
   }
 
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
 
-  observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){return observeConversationActionContext(previous,userRequest,plan.intent,step,result);}
+  observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
+    const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result);
+    if(result.ok&&plan.intent?.status==="ready"&&this.intentMemory&&this.intentLearningEnabled()){
+      const tool=this.registry.get(step.tool);
+      const mutation=tool?.mutatesState??tool?.risk!=="READ";
+      this.intentMemory.remember(userRequest,plan.intent,mutation?"confirmed_execution":"successful_execution");
+      if(previous?.lastQuery&&/^\s*(n[aã]o\b|quis\s+dizer\b|corrigindo\b)/i.test(userRequest)){
+        this.intentMemory.remember(previous.lastQuery,plan.intent,"user_correction");
+        this.metrics?.record("intent.user_correction",1,{domain:plan.intent.domain});
+      }
+    }
+    return next;
+  }
 
   async synthesize(userText:string,results:ToolResult[],signal?:AbortSignal){return this.synthesizer.synthesize(userText,results,signal);}
 
@@ -81,6 +110,14 @@ export class AgentPlanner{
       if(typeof parsed?.direct==="string")return{direct:parsed.direct,origin:"llm"};
     }catch{}
     return{direct:raw,origin:"llm"};
+  }
+
+  private recordIntentDiagnostic(diagnostic:IntentDiagnostic){
+    this.metrics?.record("intent.requests",1,{domain:diagnostic.selectedDomain??diagnostic.domainHint??"unknown"});
+    if(diagnostic.validationSuccess)this.metrics?.record("intent.structured_success",1,{domain:diagnostic.selectedDomain??"unknown"});
+    if(diagnostic.fallbackUsed)this.metrics?.record("intent.fallback",1,{domain:diagnostic.finalIntent?.domain??"unknown"});
+    if(diagnostic.retryCount)this.metrics?.record("intent.retry",diagnostic.retryCount,{domain:diagnostic.selectedDomain??"unknown"});
+    if(!diagnostic.validationSuccess&&!diagnostic.fallbackUsed)this.metrics?.record("intent.schema_failure",1,{domain:diagnostic.selectedDomain??"unknown"});
   }
 }
 
