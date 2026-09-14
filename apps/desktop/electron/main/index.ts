@@ -6,7 +6,7 @@ import { NexoCore, startCoreServer } from "@nexo/core";
 import { registerIpc } from "../ipc/register.js";
 import { registerClarificationIpc } from "../ipc/clarification.js";
 import { registerAutomationV2Ipc } from "../ipc/automation-v2.js";
-import { registerBrowserAgentIpc } from "../browser-agent-ipc.js";
+import { registerEmailDraftIpc } from "../ipc/email-draft.js";
 import { ElectronSecretStore } from "../oauth/secret-store.js";
 import { DesktopOAuthHost } from "../oauth/desktop-oauth-host.js";
 import { createDesktopStoragePaths,migrateLegacySecrets } from "../storage/storage-paths.js";
@@ -47,6 +47,7 @@ app.whenReady().then(async()=>{
   await core.connections.restoreConnections();
   registerIpc(core,{chooseFolder:async()=>{const r=await dialog.showOpenDialog({properties:["openDirectory"]});return r.canceled?null:r.filePaths[0]},chooseDocument:async()=>{const r=await dialog.showOpenDialog({properties:["openFile"],filters:[{name:"Documentos",extensions:["pdf","docx","txt","md"]}]});return r.canceled?null:r.filePaths[0]},saveDocument:async(name:string)=>{const r=await dialog.showSaveDialog({defaultPath:name});return r.canceled?null:r.filePath??null},openPath:(p:string)=>shell.openPath(p),openExternal:(u:string)=>shell.openExternal(u),trashItem:(p:string)=>shell.trashItem(p)});
   registerClarificationIpc(core);
+  registerEmailDraftIpc(core);
   registerAutomationV2Ipc(core);
   browserAgentRuntime=registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")});
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));

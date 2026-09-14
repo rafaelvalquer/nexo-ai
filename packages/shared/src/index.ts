@@ -18,9 +18,9 @@ export type ChatMessage = {
   id:string; conversationId?:string; role:"user"|"assistant"|"system"; content:string; createdAt:string; taskId?:string; documentIds?:string[];
 };
 export type ConversationSummary={id:string;title:string;createdAt:string;updatedAt:string};
-export type ChatSessionStatus="idle"|"running"|"waiting_approval"|"completed"|"failed";
+export type ChatSessionStatus="idle"|"running"|"waiting_review"|"waiting_approval"|"completed"|"failed";
 
-export type BackgroundTaskStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
+export type BackgroundTaskStatus = "queued" | "running" | "waiting_review" | "waiting_approval" | "completed" | "failed" | "cancelled";
 
 export type AgentVisualEventType = "agent.online"|"agent.offline"|"run.created"|"run.classifying"|"run.planning"|"tool.started"|"tool.progress"|"tool.completed"|"approval.requested"|"approval.resolved"|"response.streaming"|"run.completed"|"run.failed"|"run.cancelled";
 export type AgentOperationalState = "idle"|"interpreting"|"planning"|"walking"|"executing-tool"|"awaiting-approval"|"responding"|"success"|"error"|"offline"|"cancelled";
@@ -33,7 +33,7 @@ export type AgentVisualSnapshot = { current?:AgentVisualEvent; recent:AgentVisua
 export type OfficeRunState={runId:string;agentId:string;conversationId?:string;state:AgentOperationalState;stationId:OfficeStationId;label:string;taskId?:string;startedAt?:string};
 
 export type BackgroundTask = {
-  presentation?: ChatPresentation; pendingApprovalId?: string;
+  presentation?: ChatPresentation; pendingApprovalId?: string; pendingReviewDraftId?:string;
   id:string;type:string;status:BackgroundTaskStatus;input:Record<string,unknown>;result?:unknown;error?:string;createdAt:string;startedAt?:string;finishedAt?:string;
   progressText?:string;statusMessage?:string;statusHistory?:string[];conversationId?:string;agentId?:string;runId?:string;
 };

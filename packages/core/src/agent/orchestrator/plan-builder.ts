@@ -5,14 +5,17 @@ import type { AgentToolDescriptor } from "./tool-catalog.js";
 import { describeDomainTools } from "./tool-catalog.js";
 import { addMinutes, resolveDateTime, resolvePeriod } from "./temporal-resolver.js";
 import { resolveKnownFolder, resolveUserPath } from "../../filesystem/path-resolver.js";
+import { defaultEmailSubject,normalizeBody,normalizeRecipientsFromEntities } from "../../email/compose/normalizer.js";
 
 export type BuiltPlanStep = { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata };
+export type EmailComposePlanDraft={to:string[];subject:string;bodyText:string;connectionId?:string};
 export type BuiltIntentPlan = {
   steps?: BuiltPlanStep[];
   direct?: string;
   directStream?: boolean;
   deferredAction?: DeferredAction;
   responseMode?: "synthesize" | "deterministic";
+  emailDraft?:EmailComposePlanDraft;
 };
 
 export function buildIntentPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previous?: ConversationActionContextState): BuiltIntentPlan {
@@ -48,17 +51,12 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
   }
 
   if (intent.intent === "send" || /send|compose/.test(intent.operation)) {
-    const recipients = stringArray(entities.to ?? entities.recipients ?? entities.recipient);
-    const body = stringValue(entities.body ?? entities.message ?? entities.text);
-    let subject = stringValue(entities.subject);
-    if (!recipients.length) return { direct: "Qual é o endereço de e-mail do destinatário?" };
-    if (!body) return { direct: `Qual mensagem você quer enviar para ${recipients.join(", ")}?` };
-    if (!subject) subject = body.length <= 80 ? body.trim().replace(/^./, char => char.toUpperCase()) : "Mensagem do Nexo";
-    const input = { to: recipients.map(email => ({ email })), subject, bodyText: body };
-    return writeStep("email_send_composed", input, "Preparando o e-mail para sua confirmação…", tools, {
-      domain: "email", actionType: "send", preview: `Para: ${recipients.join(", ")}\nAssunto: ${subject}\n\n${body}`,
-      affectedCount: recipients.length, consequence: "O e-mail será enviado em seu nome.", expiresInMs: 10 * 60_000
-    });
+    if(intent.status!=="ready")throw new Error("Intent de envio de e-mail chegou ao planner sem estar pronto.");
+    const recipients=normalizeRecipientsFromEntities(entities),body=normalizeBody(entities);
+    if(!recipients.length||!body)throw new Error("Intent READY de envio de e-mail não possui destinatário e mensagem válidos.");
+    const resolvedSubject=typeof entities.subject==="string"?entities.subject:defaultEmailSubject(body);
+    const connectionId=stringValue(entities.connectionId);
+    return{emailDraft:{to:recipients,subject:resolvedSubject,bodyText:body,...(connectionId?{connectionId}:{})},responseMode:"deterministic"};
   }
 
   if (["delete", "update", "move"].includes(intent.intent)) {
@@ -224,7 +222,6 @@ function writeStep(tool: string, input: Record<string, unknown>, explanation: st
 function unavailable(tool: string): BuiltIntentPlan { return { direct: `A ferramenta necessária (${tool}) não está disponível com as conexões e permissões atuais.` }; }
 function hasTool(tools: AgentToolDescriptor[], name: string) { return tools.some(tool => tool.name === name); }
 function stringValue(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
-function stringArray(value: unknown): string[] { if (Array.isArray(value)) return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean); const single = stringValue(value); return single ? [single] : []; }
 function boolValue(value: unknown) { return typeof value === "boolean" ? value : undefined; }
 function numberValue(value: unknown, fallback: number, min: number, max: number) { const parsed = Number(value); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, Math.round(parsed))) : fallback; }
 function cleanUndefined(input: Record<string, unknown>) { return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)); }

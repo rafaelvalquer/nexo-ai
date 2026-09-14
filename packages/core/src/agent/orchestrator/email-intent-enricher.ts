@@ -1,5 +1,7 @@
 import type { AgentIntent } from "./intent-schema.js";
 import type { EmailMailboxCategory } from "../../email/preferences/types.js";
+import { extractEmailAddresses,extractSimpleEmailBody } from "../../email/compose/extractor.js";
+import { canonicalizeEmailComposeEntities,hasRecipients,normalizeBody } from "../../email/compose/normalizer.js";
 
 const CATEGORY_PATTERNS: Array<[EmailMailboxCategory, RegExp]> = [
   ["primary", /\b(principal|primary)\b/i],
@@ -52,9 +54,19 @@ export function enrichEmailIntent(intent: AgentIntent, text: string): AgentInten
   if (isMailboxPreferenceCommand(text)) {
     return { ...intent, status: "ready", intent: "update", operation: "select_mailboxes", entities: {}, requiresDataLookup: false, requiresConfirmation: false, missing: undefined, question: undefined };
   }
+  let entities={...intent.entities} as Record<string,unknown>;
+  if(intent.intent==="send"||/send|compose/.test(intent.operation)){
+    entities=canonicalizeEmailComposeEntities(entities);
+    if(!hasRecipients(entities)){
+      const emails=extractEmailAddresses(text);if(emails.length)entities.to=emails;
+    }
+    if(!normalizeBody(entities)){
+      const body=extractSimpleEmailBody(text);if(body)entities.body=body;
+    }
+  }
   const categories = extractExplicitEmailCategories(text);
-  if (!categories.length) return intent;
-  return { ...intent, entities: { ...intent.entities, categories } };
+  if (categories.length) entities={...entities,categories};
+  return { ...intent, entities };
 }
 
 function baseIntent(overrides: Partial<AgentIntent>): AgentIntent {

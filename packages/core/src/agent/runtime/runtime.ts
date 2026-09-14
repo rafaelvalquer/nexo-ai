@@ -4,6 +4,8 @@ import type { NexoDatabase } from "../../database/db.js";
 import { LocalMetricsService } from "../../observability/metrics.js";
 import { EmailSearchPreferenceRepository } from "../../email/preferences/repository.js";
 import { EmailSearchPreferenceService } from "../../email/preferences/service.js";
+import { EmailComposeDraftRepository } from "../../email/compose/draft-repository.js";
+import { EmailComposeDraftService } from "../../email/compose/draft-service.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
 import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
 import { IntentMemoryStore } from "../intent-memory/store.js";
@@ -16,9 +18,11 @@ export type AgentRuntimeContext={conversationId?:string;taskId?:string;agentId?:
 export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
   readonly emailPreferences:EmailSearchPreferenceService;
+  readonly emailDrafts:EmailComposeDraftService;
   constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
     this.emailPreferences=new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(db));
+    this.emailDrafts=new EmailComposeDraftService(new EmailComposeDraftRepository(db));
     this.ensureClarificationSchema();
     configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
@@ -40,11 +44,7 @@ export class AgentRuntime{
   updateClarification(record:PendingClarification){this.savePendingClarification(record);return record;}
   clearIntentLearning(){this.intentMemory.clear();}
   intentLearningCount(){return this.intentMemory.count();}
-  private intentLearningEnabled(){
-    const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");
-    if(!row)return true;
-    try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}
-  }
+  private intentLearningEnabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return true;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}}
   private ensureClarificationSchema(){this.db.run(`CREATE TABLE IF NOT EXISTS pending_clarifications (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
