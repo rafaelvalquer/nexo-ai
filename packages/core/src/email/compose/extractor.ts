@@ -21,5 +21,10 @@ export function extractSimpleEmailBody(text:string):string|undefined{
 }
 
 function cleanExplicitBody(value:string){
-  return value.trim().replace(/^(["'“”‘’])(.+)\1$/,"$2").replace(/[.?!]+$/u,match=>match.length===1?"":match).trim();
+  const raw=value.trim();
+  const quotePairs:Array<[string,string]>=[["\"","\""],["'","'"],["“","”"],["‘","’"]];
+  for(const[open,close]of quotePairs){
+    if(raw.length>open.length+close.length&&raw.startsWith(open)&&raw.endsWith(close))return raw.slice(open.length,raw.length-close.length).trim();
+  }
+  return raw;
 }
