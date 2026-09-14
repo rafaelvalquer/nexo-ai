@@ -7,7 +7,7 @@ import type { ConversationActionContextState } from "./context/conversation-acti
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
 import { materializeDeferredAction } from "./orchestrator/action-preflight.js";
 import { IntentOrchestrator } from "./orchestrator/intent-orchestrator.js";
-import { buildIntentPlan,type BuiltPlanStep } from "./orchestrator/plan-builder.js";
+import { buildIntentPlan } from "./orchestrator/plan-builder.js";
 import { ResponseSynthesizer } from "./orchestrator/response-synthesizer.js";
 import type { AgentIntent,ApprovalPlanMetadata,DeferredAction } from "./orchestrator/intent-schema.js";
 import type { AgentToolDescriptor } from "./orchestrator/tool-catalog.js";
@@ -25,7 +25,14 @@ export class AgentPlanner{
 
   async plan(userText:string,context:LLMMessage[]=[],signal?:AbortSignal,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Promise<Plan>{
     const local=fastRouter.route(userText);
-    if(local&&!mustUseSemanticOrchestrator(userText,previous,local))return{...local,origin:"fast"};
+    const semantic=mustUseSemanticOrchestrator(userText,previous,local);
+    if(local&&!semantic)return{...local,origin:"fast"};
+
+    // Conversa comum continua no caminho de streaming rápido. Integrações e follow-ups
+    // operacionais nunca entram aqui: eles passam obrigatoriamente pelo IntentOrchestrator.
+    if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};
+
+    if(!semantic)return this.legacyToolPlan(userText,context,signal);
 
     const tools=availableTools??this.registry.listForAgent().map((tool:any)=>({name:tool.name,description:tool.description,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name,risk:tool.risk,mutatesState:tool.mutatesState??tool.risk!=="READ",requiresConfirmation:tool.requiresConfirmation??tool.risk!=="READ",permissions:tool.permissions,parameters:tool.parameters}));
     const intent=await this.orchestrator.interpret(userText,tools,{previous},context,signal);
@@ -61,12 +68,39 @@ export class AgentPlanner{
     try{const parsed=JSON.parse(cleaned)as any;if(typeof parsed?.direct==="string")return{direct:parsed.direct,origin:"llm"};if(parsed?.tool&&this.registry.get(parsed.tool)?.risk==="READ")return{tool:parsed.tool,input:parsed.input??{},explanation:parsed.explanation,origin:"llm"};}catch{}
     return{direct:"",origin:"llm"};
   }
+
+  private async legacyToolPlan(userText:string,context:LLMMessage[],signal?:AbortSignal):Promise<Plan>{
+    const toolList=this.registry.list().map(tool=>`${tool.name}: ${tool.description} [${tool.risk}]`).join("\n");
+    const prompt=`${AGENT_SYSTEM_PROMPT}\n\nFerramentas disponíveis:\n${toolList}\n\nPara conversa sem ação no computador, retorne JSON {\"direct\":\"resposta\"}. Para ações, selecione somente ferramentas disponíveis.`;
+    const raw=await this.llm.plan([{role:"system",content:prompt},...context,{role:"user",content:userText}],signal);
+    const cleaned=stripCodeFence(raw);
+    try{
+      const parsed=JSON.parse(cleaned)as any;
+      if(parsed?.tool&&this.registry.get(parsed.tool))return{tool:parsed.tool,input:parsed.input??{},explanation:parsed.explanation,origin:"llm"};
+      if(Array.isArray(parsed?.steps)){
+        const validSteps=parsed.steps.filter((step:any)=>step?.tool&&this.registry.get(step.tool));
+        if(validSteps.length)return{steps:validSteps,origin:"llm"};
+      }
+      if(typeof parsed?.direct==="string")return{direct:parsed.direct,origin:"llm"};
+    }catch{}
+    return{direct:raw,origin:"llm"};
+  }
 }
 
-function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">){
+function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">|null){
   if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite)\b/i.test(text))return true;
   if(previous?.lastDomain&&(previous.lastDomain==="email"||previous.lastDomain==="calendar")&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere)\b/i.test(text))return true;
-  if(typeof local.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;
+  if(typeof local?.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;
   return false;
+}
+
+function isLikelyConversation(text:string){
+  const normalized=text.trim().toLowerCase();
+  if(/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized))return true;
+  const hasComputerAction=/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized);
+  if(hasComputerAction)return false;
+  if(/^\s*(oi|ol[aá]|bom dia|boa tarde|boa noite)\b/i.test(normalized))return true;
+  if(/^\s*(quem|o que|oque|como|por que|porque|qual|quais|quando|onde|explique|resuma|conte|escreva|diga|pode me explicar)\b/i.test(normalized))return true;
+  return !/\b(arquivo|pasta|navegador|aplicativo|programa|processo|disco|mem[oó]ria|download|desktop|documentos)\b/i.test(normalized);
 }
 function domainFromName(name:string){if(name.startsWith("email_"))return"email";if(name.startsWith("calendar_"))return"calendar";if(name.startsWith("browser_"))return"browser";if(name.startsWith("memory_"))return"memory";if(/file|folder/.test(name))return"filesystem";return"system";}
