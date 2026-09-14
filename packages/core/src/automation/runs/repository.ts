@@ -33,11 +33,18 @@ export class AutomationRunRepository {
     return id;
   }
 
+  waitStep(id: string, approvalId: string): void { this.db.run("UPDATE automation_run_steps SET status='waiting_approval',approval_id=? WHERE id=?",[approvalId,id]); }
+
   finishStep(id: string, status: AutomationRunStatus, details: { summary?: string; error?: string; approvalId?: string } = {}): void {
     const row = this.db.get<{ started_at: string }>("SELECT started_at FROM automation_run_steps WHERE id=?", [id]);
     const finishedAt = new Date().toISOString();
     const durationMs = row ? Math.max(0, Date.parse(finishedAt) - Date.parse(row.started_at)) : undefined;
-    this.db.run("UPDATE automation_run_steps SET status=?,finished_at=?,duration_ms=?,summary=?,error=?,approval_id=? WHERE id=?", [status, finishedAt, durationMs ?? null, details.summary ?? null, details.error ?? null, details.approvalId ?? null, id]);
+    this.db.run("UPDATE automation_run_steps SET status=?,finished_at=?,duration_ms=?,summary=?,error=?,approval_id=COALESCE(?,approval_id) WHERE id=?", [status, finishedAt, durationMs ?? null, details.summary ?? null, details.error ?? null, details.approvalId ?? null, id]);
+  }
+
+  finishStepByApproval(approvalId: string, status: AutomationRunStatus, details: { summary?: string; error?: string } = {}): void {
+    const step=this.db.get<{id:string}>("SELECT id FROM automation_run_steps WHERE approval_id=? ORDER BY started_at DESC LIMIT 1",[approvalId]);
+    if(step)this.finishStep(step.id,status,{...details,approvalId});
   }
 
   list(automationId: string, limit = 50): AutomationRunViewModel[] {
@@ -55,6 +62,8 @@ export class AutomationRunRepository {
     if (!row || !row.context_json) return undefined;
     return { run: this.mapRun(row, true), context: JSON.parse(row.context_json) as AutomationExecutionContext, nextActionIndex: Number(row.next_action_index ?? 0) };
   }
+
+  pendingApprovalIds(): string[] { return this.db.all<{approval_id:string}>("SELECT approval_id FROM automation_runs WHERE status='waiting_approval' AND approval_id IS NOT NULL").map(row=>row.approval_id); }
 
   private mapRun(row: RunRow, includeSteps: boolean): AutomationRunViewModel {
     const run: AutomationRunViewModel = { id: row.id, automationId: row.automation_id, triggerType: row.trigger_type, status: asStatus(row.status), startedAt: row.started_at, finishedAt: row.finished_at ?? undefined, durationMs: row.duration_ms ?? undefined, summary: row.summary ?? undefined, error: row.error ?? undefined, taskId: row.task_id ?? undefined, approvalId: row.approval_id ?? undefined };

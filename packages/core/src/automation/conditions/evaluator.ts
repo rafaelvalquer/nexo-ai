@@ -25,7 +25,15 @@ export class AutomationConditionEvaluator {
 }
 
 export function resolveField(field: string, context: AutomationExecutionContext): unknown {
-  const normalized = field.startsWith("$") ? field.slice(1) : `trigger.data.${field}`;
+  let normalized: string;
+  if (!field.startsWith("$")) normalized = `trigger.data.${field}`;
+  else {
+    normalized = field.slice(1);
+    if (normalized === "trigger") normalized = "trigger.data";
+    else if (normalized.startsWith("trigger.") && !normalized.startsWith("trigger.data.")) normalized = `trigger.data.${normalized.slice("trigger.".length)}`;
+    else if (normalized === "actions") normalized = "actionResults";
+    else if (normalized.startsWith("actions.")) normalized = `actionResults.${normalized.slice("actions.".length)}`;
+  }
   const parts = normalized.split(".").filter(Boolean);
   let current: unknown = context;
   for (const part of parts) {
