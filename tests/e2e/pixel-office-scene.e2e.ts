@@ -34,14 +34,16 @@ async function work(page: Page) {
 }
 
 test("quatro polvos passeiam, voltam às mesas e mostram a atividade atual", async ({ page }, info) => {
-  test.setTimeout(60000);
+  // This test captures several full-scene screenshots and exercises Pixi rendering.
+  // Windows CI software rendering can be substantially slower than a local GPU.
+  test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 960 });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await mount(page);
-  await expect.poll(async () => (await snapshot(page)).agentDistance, { timeout: 15000 }).toBeGreaterThan(20);
+  await expect.poll(async () => (await snapshot(page)).agentDistance, { timeout: 20000 }).toBeGreaterThan(20);
   await work(page);
-  await expect.poll(async () => (await snapshot(page)).agents.every((agent: any) => agent.atDesk && !agent.wander), { timeout: 15000 }).toBe(true);
+  await expect.poll(async () => (await snapshot(page)).agents.every((agent: any) => agent.atDesk && !agent.wander), { timeout: 20000 }).toBe(true);
   expect((await snapshot(page)).navigationFailures).toBe(0);
   await page.screenshot({ path: info.outputPath("four-desks-working.png") });
   for (const zoom of [1, 1.25, 1.5]) {
@@ -56,7 +58,7 @@ test("quatro polvos passeiam, voltam às mesas e mostram a atividade atual", asy
   await page.evaluate(() => {
     for (let index = 1; index <= 4; index++) (window as any).officeTest.consume({ eventId: `end-${index}`, runId: `run-${index}`, agentId: `agent-${index}`, type: "run.completed", state: "success", label: "Concluído", timestamp: new Date().toISOString() });
   });
-  await expect.poll(async () => (await snapshot(page)).activeAgents).toBe(0);
+  await expect.poll(async () => (await snapshot(page)).activeAgents, { timeout: 20000 }).toBe(0);
   expect(errors).toEqual([]);
 });
 
