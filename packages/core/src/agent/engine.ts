@@ -26,7 +26,7 @@ import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "../ema
 
 const EMAIL_DISCOVERY_TOOLS=new Set(["email_search","email_latest","email_stats"]);
 
-export type AgentReply={text:string;result?:ToolResult;results?:ToolResult[];approvalId?:string;conversationId?:string;presentation?:ChatPresentation};
+export type AgentReply={text:string;result?:ToolResult;results?:ToolResult[];approvalId?:string;conversationId?:string;presentation?:ChatPresentation;responseMode?:"synthesize"|"deterministic"|"presentation"};
 export type AgentRunHooks={onToolResult?:(toolName:string,input:Record<string,unknown>,result:ToolResult)=>void;onStatus?:(message:string)=>void;onToken?:(token:string)=>void;onReplaceText?:(text:string)=>void;signal?:AbortSignal;onToolStarted?:(toolName:string,label:string)=>void;onToolCompleted?:(toolName:string,ok:boolean)=>void;onApprovalRequested?:(approvalId:string,toolName:string)=>void;visualContext?:VisualExecutionContext};
 
 export class AgentEngine{
@@ -259,7 +259,7 @@ export class AgentEngine{
     let finalReply:AgentReply=fallback;
     const shouldSynthesize=plan.responseMode==="synthesize"&&done.length>0;
     if(shouldSynthesize){try{hooks.onStatus?.("Sintetizando os resultados com a IA local…");finalReply={...fallback,text:await this.planner.synthesize(userText,done.map(x=>x.result),hooks.signal)};}catch{}}
-    hooks.onReplaceText?.(finalReply.text);hooks.onStatus?.("Tarefa concluída.");this.metrics?.record("agent.tool_calls",done.length,{origin:plan.origin??"unknown"});this.metrics?.record("agent.iterations",steps.length,{origin:plan.origin??"unknown"});if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",finalReply.text);return finalReply;
+    hooks.onReplaceText?.(finalReply.text);hooks.onStatus?.("Tarefa concluída.");this.metrics?.record("agent.tool_calls",done.length,{origin:plan.origin??"unknown"});this.metrics?.record("agent.iterations",steps.length,{origin:plan.origin??"unknown"});if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",finalReply.text);return {...finalReply,responseMode:plan.responseMode};
   }
 
   async resumeApproval(checkpointId:string,hooks:AgentRunHooks={}):Promise<AgentReply>{

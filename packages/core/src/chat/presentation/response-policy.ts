@@ -1,0 +1,34 @@
+import type { AgentIntent } from "../../agent/orchestrator/intent-schema.js";
+
+export type ResponseMode = "deterministic" | "synthesize" | "presentation";
+
+const PRESENTATION_ONLY_TOOLS = new Set([
+  "list_files",
+  "search_files",
+  "largest_files",
+  "email_search",
+  "email_latest",
+  "email_get_many",
+  "calendar_list",
+  "calendar_search"
+]);
+
+export function responsePolicy(
+  toolNames: string[],
+  intent?: AgentIntent
+): {
+  mode: ResponseMode;
+  appendText: boolean;
+} {
+  if (toolNames.length > 0 && toolNames.every(name => PRESENTATION_ONLY_TOOLS.has(name))) {
+    return {
+      mode: "presentation",
+      appendText: false
+    };
+  }
+
+  return {
+    mode: "synthesize",
+    appendText: true
+  };
+}

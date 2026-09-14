@@ -50,7 +50,7 @@ export class AgentPlanner{
     const filesystemIntent=deterministicFilesystemIntent(userText);
     if(filesystemIntent){
       const built=buildIntentPlan(filesystemIntent,tools,previous);
-      if(built.tool||built.steps?.length||built.direct)return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
+      if(built.steps?.length||built.direct)return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
       const fallback=fastRouter.route(userText);
       if(fallback)return{...fallback,origin:"fast",intent:filesystemIntent};
       return{...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent};
