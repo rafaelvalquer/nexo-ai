@@ -14,21 +14,25 @@ export function materializeDeferredAction(action: DeferredAction, result: ToolRe
 }
 
 function materializeEmail(action: Extract<DeferredAction, { kind: "email.bulk" }>, data: unknown): MaterializedAction {
-  const messages = Array.isArray((data as any)?.messages) ? (data as any).messages as any[] : [];
+  const messages = Array.isArray((data as any)?.messages) ? (data as any).messages as any[] : Array.isArray(data) ? data : [];
   let selected = messages.filter(message => message?.id);
+  if (action.messageId) selected = selected.filter(message => message.id === action.messageId);
+  if (action.subject) selected = selected.filter(message => String(message.subject ?? "").trim().toLocaleLowerCase() === action.subject!.trim().toLocaleLowerCase());
   if (action.sender) {
     const sender = action.sender.toLowerCase();
-    selected = selected.filter(message => String(message.from?.email ?? message.from?.name ?? "").toLowerCase().includes(sender));
+    selected = selected.filter(message => sender.includes("@") ? String(message.from?.email ?? "").toLowerCase() === sender : String(message.from?.name ?? message.from?.email ?? "").toLowerCase().includes(sender));
   }
+  if (action.receivedAt) { const date = Date.parse(action.receivedAt); selected = selected.filter(message => Number.isFinite(date) && Math.floor(Date.parse(message.receivedAt)/60000) === Math.floor(date/60000)); }
   if (!selected.length) return { direct: "Nenhum e-mail encontrado corresponde exatamente ao filtro informado. Nenhuma alteração foi executada." };
+  if (selected.length > 1 && !action.allowMultiple) return { direct: `Encontrei ${selected.length} e-mails que correspondem ao pedido. Escolha nos cards qual deles deseja alterar. Nenhuma alteração foi executada.` };
   const ids = selected.map(message => String(message.id));
-  const tool = `email_bulk_${action.action === "trash" ? "trash" : action.action === "archive" ? "archive" : action.action}`;
+  const tool = `${ids.length === 1 ? "email_" : "email_bulk_"}${action.action}`;
   const verb = action.action === "trash" ? "movidos para a lixeira" : action.action === "archive" ? "arquivados" : action.action === "mark_read" ? "marcados como lidos" : "marcados como não lidos";
   const preview = selected.slice(0, 8).map((message, index) => `${index + 1}. ${message.subject ?? "(sem assunto)"} — ${message.from?.email ?? message.from?.name ?? "remetente desconhecido"}`).join("\n");
   return {
     step: {
       tool,
-      input: { messageIds: ids },
+      input: ids.length === 1 ? { messageId: ids[0] } : { messageIds: ids },
       explanation: `Aguardando confirmação para alterar ${ids.length} e-mail(s)…`,
       approval: {
         domain: "email",

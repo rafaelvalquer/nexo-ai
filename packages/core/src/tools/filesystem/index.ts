@@ -27,8 +27,12 @@ export function filesystemTools(): ToolDefinition[] {
       inputSchema: z.object({ path: z.string() }),
       async execute({path:p}) {
         const names = await fs.readdir(p, { withFileTypes:true });
-        const rows = names
-          .map(x=>({name:x.name,type:x.isDirectory()?"directory":"file",path:path.join(p,x.name)}))
+        const entries: Array<{name:string;type:string;path:string;size?:number;modifiedAt?:string;childCount?:number}> = [];
+        for(let offset=0;offset<names.length;offset+=32) entries.push(...await Promise.all(names.slice(offset,offset+32).map(async entry=>{
+          const full=path.join(p,entry.name),stat=await fs.lstat(full).catch(()=>undefined);
+          return {name:entry.name,type:entry.isDirectory()?"directory":"file",path:full,size:entry.isFile()?stat?.size:undefined,modifiedAt:stat?.mtime.toISOString(),childCount:entry.isDirectory()?(await fs.readdir(full).catch(()=>[])).length:undefined};
+        })));
+        const rows = entries
           .sort((a,b)=>a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1);
         const visible = rows.slice(0,100);
         const lines = visible.map(row => `${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.name}`);

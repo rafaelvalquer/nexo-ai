@@ -39,6 +39,8 @@ export class ConversationRepository {
     this.db.transaction(() => {
       const messageIds = this.db.all<{id:string}>("SELECT id FROM messages WHERE conversation_id=?", [id]).map(row => row.id);
       for (const messageId of messageIds) {
+        this.db.run("DELETE FROM message_presentations WHERE message_id=?", [messageId]);
+        this.db.run("DELETE FROM chat_resource_actions WHERE message_id=?", [messageId]);
         this.db.run("DELETE FROM message_attachments WHERE message_id=?", [messageId]);
         this.db.run("DELETE FROM application_state WHERE key=?", [`message_task:${messageId}`]);
       }

@@ -41,8 +41,9 @@ export function App() {
   useEffect(() => {
     void syncAssistant();
     const unsubscribe=window.nexo.onTaskEvent(handleTaskEvent);
+    const unsubscribeResources=window.nexo.onChatResourceUpdated?.(event=>useAssistantStore.getState().handleResourceEvent(event));
     const timer = window.setInterval(() => void syncAssistant(), 5000);
-    return () => {unsubscribe();window.clearInterval(timer);};
+    return () => {unsubscribe();unsubscribeResources?.();window.clearInterval(timer);};
   }, [syncAssistant, handleTaskEvent]);
 
   return <div className="app"><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><Suspense fallback={<div className="page">Carregando Pixel Office…</div>}><Page /></Suspense></main><CommandPalette /><Onboarding /><OllamaModelInstaller /></div>;

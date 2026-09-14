@@ -1,3 +1,5 @@
+import type { ChatBlock, ChatPresentation } from "./chat.js";
+export * from "./chat.js";
 export type RiskLevel = "READ" | "SAFE_WRITE" | "SENSITIVE" | "CRITICAL";
 
 export type ToolRequest = { name: string; input: Record<string, unknown> };
@@ -11,6 +13,7 @@ export type Approval = {
 };
 
 export type ChatMessage = {
+  blocks?: ChatBlock[];
   id:string; conversationId?:string; role:"user"|"assistant"|"system"; content:string; createdAt:string; taskId?:string; documentIds?:string[];
 };
 export type ConversationSummary={id:string;title:string;createdAt:string;updatedAt:string};
@@ -29,6 +32,7 @@ export type AgentVisualSnapshot = { current?:AgentVisualEvent; recent:AgentVisua
 export type OfficeRunState={runId:string;agentId:string;conversationId?:string;state:AgentOperationalState;stationId:OfficeStationId;label:string;taskId?:string;startedAt?:string};
 
 export type BackgroundTask = {
+  presentation?: ChatPresentation; pendingApprovalId?: string;
   id:string;type:string;status:BackgroundTaskStatus;input:Record<string,unknown>;result?:unknown;error?:string;createdAt:string;startedAt?:string;finishedAt?:string;
   progressText?:string;statusMessage?:string;statusHistory?:string[];conversationId?:string;agentId?:string;runId?:string;
 };

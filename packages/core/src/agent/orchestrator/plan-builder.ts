@@ -29,7 +29,8 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
   const entities = intent.entities as Record<string, unknown>;
   const previousIds = intent.referencesPreviousResult ? selectedPreviousEmailIds(previous, intent.reference) : [];
   const sender = stringValue(entities.sender ?? entities.from);
-  const query = stringValue(entities.query) ?? (sender ? `from:${sender}` : undefined);
+  const subject = stringValue(entities.subject);
+  const query = stringValue(entities.query) ?? ([sender ? `from:${sender}` : "", subject ? `subject:"${subject.replace(/"/g, "")}"` : ""].filter(Boolean).join(" ") || undefined);
   const unread = boolValue(entities.unread);
   const maxResults = numberValue(entities.maxResults ?? entities.limit, 20, 1, 50);
 
@@ -66,11 +67,13 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
     if (previousIds.length) {
       const selected = filterPreviousEmailIds(previousIds, previous, sender);
       if (!selected.length) return { direct: "Nenhum e-mail do resultado anterior corresponde ao filtro informado." };
-      return bulkEmailWrite(action, selected, sender, tools);
+      const lookup=readStepOnly("email_get_many", {messageIds:selected.slice(0,30)}, "Verificando os e-mails selecionados…", tools);
+      if(!lookup)return unavailable("email_get_many");
+      return {steps:[lookup],deferredAction:{kind:"email.bulk",action,sender,subject,receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true||Boolean(intent.reference?.selection.type==="indices"&&intent.reference.selection.indices?.length)},responseMode:"deterministic"};
     }
     const search = readStepOnly("email_search", { query, unread, maxResults: Math.max(maxResults, 20) }, "Localizando exatamente os e-mails que podem ser alterados…", tools);
     if (!search) return unavailable("email_search");
-    return { steps: [search], deferredAction: { kind: "email.bulk", action, sender }, responseMode: "deterministic" };
+    return { steps: [search], deferredAction: { kind: "email.bulk", action, sender, subject, receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true }, responseMode: "deterministic" };
   }
 
   return { direct: "Não consegui mapear essa solicitação para uma operação segura de e-mail." };

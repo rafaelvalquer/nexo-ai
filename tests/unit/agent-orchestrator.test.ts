@@ -88,7 +88,7 @@ describe("Ollama intent orchestrator",()=>{
   });
 
   it("freezes email ids during preflight instead of querying again after approval",()=>{
-    const materialized=materializeDeferredAction({kind:"email.bulk",action:"trash",sender:"notifications@github.com"},{ok:true,summary:"2",data:{messages:[{id:"m1",from:{email:"notifications@github.com"},subject:"A"},{id:"m2",from:{email:"notifications@github.com"},subject:"B"},{id:"m3",from:{email:"other@example.com"},subject:"C"}]}});
+    const materialized=materializeDeferredAction({kind:"email.bulk",action:"trash",sender:"notifications@github.com",allowMultiple:true},{ok:true,summary:"2",data:{messages:[{id:"m1",from:{email:"notifications@github.com"},subject:"A"},{id:"m2",from:{email:"notifications@github.com"},subject:"B"},{id:"m3",from:{email:"other@example.com"},subject:"C"}]}});
     expect(materialized.step?.tool).toBe("email_bulk_trash");
     expect(materialized.step?.input).toEqual({messageIds:["m1","m2"]});
     expect(materialized.step?.approval?.affectedCount).toBe(2);

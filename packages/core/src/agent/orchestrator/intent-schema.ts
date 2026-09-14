@@ -17,6 +17,10 @@ export type DeferredAction =
       kind: "email.bulk";
       action: "trash" | "archive" | "mark_read" | "mark_unread";
       sender?: string;
+      subject?: string;
+      receivedAt?: string;
+      messageId?: string;
+      allowMultiple?: boolean;
       selection?: AgentIntentV1["reference"];
     }
   | {

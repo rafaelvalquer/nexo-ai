@@ -7,6 +7,8 @@ export class RetentionService {
   purge(days:number) {
     const normalized=Math.max(1,Math.min(3650,Math.floor(days)||30)); const cutoff=new Date(Date.now()-normalized*86_400_000).toISOString();
     return this.db.transaction(() => {
+      this.db.run("DELETE FROM message_presentations WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)",[cutoff]);
+      this.db.run("DELETE FROM chat_resource_actions WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)",[cutoff]);
       this.db.run("DELETE FROM messages WHERE created_at < ?",[cutoff]);
       this.db.run("DELETE FROM audit_logs WHERE created_at < ?",[cutoff]);
       this.db.run("DELETE FROM local_metrics WHERE created_at < ?",[cutoff]);

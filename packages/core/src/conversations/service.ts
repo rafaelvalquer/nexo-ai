@@ -1,6 +1,8 @@
 import { v4 as uuid } from "uuid";
 import type { NexoDatabase } from "../database/db.js";
 import { ConversationRepository } from "./repository.js";
+import type { ChatBlock } from "@nexo/shared";
+import { parsePresentation, resourceBindingsSchema, type PresentationRecord } from "../chat/presentation/types.js";
 
 export const LEGACY_MAIN_CONVERSATION = "assistant-main";
 
@@ -16,6 +18,7 @@ export type ConversationMessage = {
   conversationId: string;
   role: "user" | "assistant" | "system";
   content: string;
+  blocks?: ChatBlock[];
   createdAt: string;
   taskId?: string;
   documentIds?: string[];
@@ -55,15 +58,46 @@ export class ConversationService {
   renameConversation(id: string, title: string) { this.ensureConversation(id); return this.toSummary(this.repo.rename(id,this.safeTitle(title))!); }
   deleteConversation(id: string) { this.ensureConversation(id); this.repo.delete(id); this.ensureInitialConversation(); return {ok:true}; }
 
-  addMessage(conversationId: string, role: ConversationMessage["role"], content: string, taskId?: string, documentIds: string[] = []) {
+  addMessage(conversationId: string, role: ConversationMessage["role"], content: string, taskId?: string, documentIds: string[] = [], presentation?: PresentationRecord) {
     this.ensureConversation(conversationId);
     const id=uuid(),createdAt=new Date().toISOString();
-    this.db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",[id,conversationId,role,content,createdAt]);
+    this.db.transaction(() => {
+      this.db.run("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES(?,?,?,?,?)",[id,conversationId,role,content,createdAt]);
+      if (presentation) this.savePresentation(id, presentation);
+    });
     if(taskId)this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`message_task:${id}`,taskId]);
     if(documentIds.length)this.attachDocuments(conversationId,id,documentIds);
     this.repo.touch(conversationId);
     if(role==="user")this.autoTitle(conversationId,content);
-    return {id,conversationId,role,content,createdAt,taskId,documentIds:[...new Set(documentIds)]} satisfies ConversationMessage;
+    return {id,conversationId,role,content,createdAt,taskId,documentIds:[...new Set(documentIds)],blocks:presentation?.presentation.blocks} satisfies ConversationMessage;
+  }
+
+  savePresentation(messageId: string, record: PresentationRecord) {
+    if (!this.db.get("SELECT id FROM messages WHERE id=?", [messageId])) throw new Error("Mensagem não encontrada.");
+    const presentation = parsePresentation(record.presentation);
+    const bindings = resourceBindingsSchema.safeParse(record.bindings);
+    if (!presentation || !bindings.success) throw new Error("Apresentação de mensagem inválida.");
+    this.db.run("INSERT OR REPLACE INTO message_presentations(message_id,version,payload_json,bindings_json,created_at) VALUES(?,?,?,?,?)", [messageId, 1, JSON.stringify(presentation), JSON.stringify(bindings.data), new Date().toISOString()]);
+  }
+
+  presentationForMessage(messageId: string) {
+    return this.presentationRecordForMessage(messageId)?.presentation;
+  }
+
+  /** Internal action resolution uses this method; IPC returns only presentationForMessage. */
+  presentationRecordForMessage(messageId: string): PresentationRecord | undefined {
+    const row = this.db.get<{version:number;payload_json:string;bindings_json:string}>("SELECT version,payload_json,bindings_json FROM message_presentations WHERE message_id=?", [messageId]);
+    if (!row || row.version !== 1) return undefined;
+    try {
+      const presentation = parsePresentation(JSON.parse(row.payload_json));
+      const bindings = resourceBindingsSchema.safeParse(JSON.parse(row.bindings_json));
+      if (!presentation || !bindings.success) return undefined;
+      for(const block of presentation.blocks)if(block.type === "approval"){
+        const row=this.db.get<{status:typeof block.status;expires_at:string|null}>("SELECT status,expires_at FROM approvals WHERE id=?",[block.approvalId]);
+        if(row)block.status=row.status === "pending" && row.expires_at && Date.parse(row.expires_at)<=Date.now()?"expired":row.status;
+      }
+      return { presentation, bindings: bindings.data };
+    } catch { return undefined; }
   }
 
   attachDocuments(conversationId: string, messageId: string, documentIds: string[]) {
@@ -83,7 +117,7 @@ export class ConversationService {
   getMessages(conversationId: string, limit=200): ConversationMessage[] {
     this.ensureConversation(conversationId);
     const rows=this.db.all<MessageRow>("SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC LIMIT ?",[conversationId,limit]);
-    return rows.map(row=>{const task=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`message_task:${row.id}`]);return{id:row.id,conversationId:row.conversation_id,role:row.role,content:row.content,createdAt:row.created_at,taskId:task?.value,documentIds:this.attachmentsForMessage(row.id)};});
+    return rows.map(row=>{const task=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`message_task:${row.id}`]);return{id:row.id,conversationId:row.conversation_id,role:row.role,content:row.content,createdAt:row.created_at,taskId:task?.value,documentIds:this.attachmentsForMessage(row.id),blocks:this.presentationForMessage(row.id)?.blocks};});
   }
 
   private autoTitle(id:string,content:string){const row=this.repo.get(id);if(!row)return;const title=(row.title??"").trim();if(title&&!["Novo chat","Assistente"].includes(title))return;const compact=content.replace(/\s+/g," ").trim();if(!compact)return;this.repo.rename(id,compact.length>42?compact.slice(0,39)+"…":compact);}

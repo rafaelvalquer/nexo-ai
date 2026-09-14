@@ -219,6 +219,13 @@ function applyConfidencePolicy(intent: AgentIntent): AgentIntent {
 }
 
 function enforceReferencePolicy(intent: AgentIntent, userText: string): AgentIntent {
+  if(intent.domain === "email" && ["delete","update","move"].includes(intent.intent)){
+    const quoted=userText.match(/["“]([^"”]+)["”]/)?.[1];
+    const date=userText.match(/\b(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})\b/);
+    const receivedAt=date?new Date(Number(date[3]),Number(date[2])-1,Number(date[1]),Number(date[4]),Number(date[5])).toISOString():undefined;
+    const normalized=userText.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+    intent={...intent,entities:{...intent.entities,...(quoted?{subject:quoted}:{}),...(receivedAt?{receivedAt}:{}),allowMultiple:/\b(todos|todas|esses|estes|essas|estas|all|selected)\b/.test(normalized)}};
+  }
   if (!intent.referencesPreviousResult || explicitlyReferencesPreviousResult(userText)) return intent;
   return { ...intent, referencesPreviousResult: false, reference: undefined };
 }

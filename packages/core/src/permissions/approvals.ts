@@ -39,10 +39,20 @@ export class ApprovalService {
 
   linkVisualContext(id:string,context:{visualRunId:string;taskId?:string}){this.db.run("UPDATE approvals SET visual_run_id=?,task_id=? WHERE id=?",[context.visualRunId,context.taskId??null,id]);}
 
+  assertCheckpointApproved(checkpointId:string) {
+    const approval=this.db.get<{status:string;tool_name:string;input_json:string;fingerprint:string;expires_at:string|null}>("SELECT status,tool_name,input_json,fingerprint,expires_at FROM approvals WHERE checkpoint_id=?",[checkpointId]);
+    const checkpoint=this.db.get<{state_json:string;status:string}>("SELECT state_json,status FROM agent_checkpoints WHERE id=?",[checkpointId]);
+    if(!approval||approval.status!=="approved"||checkpoint?.status!=="WAITING_APPROVAL")throw new Error("Checkpoint não possui aprovação válida ou já foi executado.");
+    if(approval.expires_at&&Date.parse(approval.expires_at)<=Date.now())throw new Error("A aprovação expirou antes da execução.");
+    const state=JSON.parse(checkpoint.state_json) as {nextStep:number;steps:{tool:string;input:Record<string,unknown>}[]};
+    const step=state.steps[state.nextStep];
+    if(!step||step.tool!==approval.tool_name||fingerprintFor(step.tool,step.input)!==approval.fingerprint||fingerprintFor(approval.tool_name,JSON.parse(approval.input_json))!==approval.fingerprint)throw new Error("O plano mudou desde a aprovação. Gere uma nova prévia.");
+  }
+
   private map(row:any):Approval{return{id:row.id,toolName:row.tool_name,input:JSON.parse(row.input_json),risk:row.risk,reason:row.reason,status:row.status,createdAt:row.created_at,agentRunId:row.agent_run_id??undefined,checkpointId:row.checkpoint_id??undefined,visualRunId:row.visual_run_id??undefined,taskId:row.task_id??undefined,domain:row.domain??undefined,actionType:row.action_type??undefined,preview:row.preview??undefined,affectedCount:row.affected_count??undefined,consequence:row.consequence??undefined,fingerprint:row.fingerprint??undefined,expiresAt:row.expires_at??undefined};}
   private expirePending(){this.db.run("UPDATE approvals SET status='expired' WHERE status='pending' AND expires_at IS NOT NULL AND expires_at<=?",[new Date().toISOString()]);}
   private ensureColumns(){const columns=new Set(this.db.all<{name:string}>("PRAGMA table_info(approvals)").map(column=>String(column.name)));const additions:[string,string][]=[["action_type","TEXT"],["domain","TEXT"],["preview","TEXT"],["affected_count","INTEGER"],["consequence","TEXT"],["fingerprint","TEXT"],["expires_at","TEXT"]];for(const[name,type]of additions)if(!columns.has(name))this.db.run(`ALTER TABLE approvals ADD COLUMN ${name} ${type}`);}
 }
 
-export function fingerprintFor(toolName:string,input:Record<string,unknown>){return createHash("sha256").update(`${toolName}\n${canonicalJson(input)}`).digest("hex");}
+export function fingerprintFor(toolName:string,input:Record<string,unknown>){return createHash("sha256").update(`${toolName}\n${canonicalJson(JSON.parse(JSON.stringify(input)))}`).digest("hex");}
 function canonicalJson(value:unknown):string{if(value===null||typeof value!=="object")return JSON.stringify(value);if(Array.isArray(value))return`[${value.map(canonicalJson).join(",")}]`;const object=value as Record<string,unknown>;return`{${Object.keys(object).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;}

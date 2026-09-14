@@ -122,6 +122,20 @@ CREATE TABLE IF NOT EXISTS intent_examples (
 );
 CREATE INDEX IF NOT EXISTS idx_intent_examples_domain ON intent_examples(domain, last_used_at);
 CREATE INDEX IF NOT EXISTS idx_intent_examples_normalized ON intent_examples(normalized_utterance);
+`], [12, `
+CREATE TABLE IF NOT EXISTS message_presentations (
+  message_id TEXT PRIMARY KEY,
+  version INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  bindings_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
+`], [13, `
+CREATE TABLE IF NOT EXISTS chat_resource_actions (
+  approval_id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
 `]];
 
 export class NexoDatabase {
