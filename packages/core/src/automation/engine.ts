@@ -8,6 +8,7 @@ import { parseNaturalSchedule } from "./natural-schedule.js";
 import { AutomationRepository } from "./repository.js";
 import { AutomationRunRepository } from "./runs/repository.js";
 import { AutomationScheduler } from "./scheduler.js";
+import { AutomationTriggerRegistry } from "./triggers/registry.js";
 
 export class AutomationEngine {
   private repository: AutomationRepository;
@@ -15,6 +16,7 @@ export class AutomationEngine {
   private conditions = new AutomationConditionEvaluator();
   private actions: AutomationActionExecutor;
   private scheduler: AutomationScheduler;
+  private smartTriggers: AutomationTriggerRegistry;
   private runningAutomationIds = new Set<string>();
   private queuedTriggerPayload = new Map<string, Record<string, unknown>>();
   private approvalPollers = new Map<string, ReturnType<typeof setInterval>>();
@@ -23,17 +25,19 @@ export class AutomationEngine {
     this.repository = new AutomationRepository(db);
     this.runs = new AutomationRunRepository(db);
     this.actions = new AutomationActionExecutor(executeCommand);
-    this.scheduler = new AutomationScheduler((automation, payload) => this.run(automation, payload));
+    const emit=(automation:AutomationV2,payload:Record<string,unknown>)=>this.run(automation,payload);
+    this.scheduler = new AutomationScheduler(emit);
+    this.smartTriggers = new AutomationTriggerRegistry(this.repository,emit);
   }
 
   list(): AutomationViewModel[] { return this.repository.list().map(automation => this.toViewModel(automation)); }
   get(id: string): AutomationViewModel | undefined { const automation = this.repository.get(id); return automation ? this.toViewModel(automation) : undefined; }
   create(input: Omit<Automation,"id"|"lastRunAt"> | CreateAutomationV2Input): AutomationViewModel { const automation=this.repository.create(isV2Input(input)?input:legacyInputToV2(input));if(automation.enabled)this.install(automation);return this.get(automation.id)??this.toViewModel(automation); }
   createFromNatural(input:{name:string;when:string;command:string;enabled?:boolean}):AutomationViewModel{return this.create({name:input.name,enabled:input.enabled??true,trigger:{type:"schedule",mode:"cron",cron:parseNaturalSchedule(input.when)},conditions:[],conditionOperator:"AND",actions:[{id:"command",type:"nexo.command",config:{command:input.command}}],output:DEFAULT_AUTOMATION_OUTPUT,policy:DEFAULT_AUTOMATION_POLICY});}
-  update(id:string,patch:UpdateAutomationV2Input):AutomationViewModel{this.scheduler.uninstall(id);const automation=this.repository.update(id,patch);if(automation.enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
+  update(id:string,patch:UpdateAutomationV2Input):AutomationViewModel{this.uninstall(id);const automation=this.repository.update(id,patch);if(automation.enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
   duplicate(id:string):AutomationViewModel{return this.toViewModel(this.repository.duplicate(id));}
-  setEnabled(id:string,enabled:boolean):AutomationViewModel{this.scheduler.uninstall(id);const automation=this.repository.setEnabled(id,enabled);if(enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
-  remove(id:string):void{this.scheduler.uninstall(id);this.repository.remove(id);}
+  setEnabled(id:string,enabled:boolean):AutomationViewModel{this.uninstall(id);const automation=this.repository.setEnabled(id,enabled);if(enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
+  remove(id:string):void{this.uninstall(id);this.repository.remove(id);}
   listRuns(id:string,limit=50):AutomationRunViewModel[]{return this.runs.list(id,limit);}
   getRun(id:string):AutomationRunViewModel|undefined{return this.runs.get(id);}
 
@@ -41,9 +45,10 @@ export class AutomationEngine {
   async test(id:string):Promise<AutomationRunViewModel|undefined>{const automation=this.repository.get(id);if(!automation)throw new Error("Automação não encontrada.");return this.run(automation,{source:"test",dryRun:true},true);}
 
   start():void{for(const automation of this.repository.list())if(automation.enabled)this.install(automation);for(const approvalId of this.runs.pendingApprovalIds())this.watchApproval(approvalId);}
-  stop():void{this.scheduler.stopAll();for(const timer of this.approvalPollers.values())clearInterval(timer);this.approvalPollers.clear();}
+  stop():void{this.scheduler.stopAll();this.smartTriggers.stopAll();for(const timer of this.approvalPollers.values())clearInterval(timer);this.approvalPollers.clear();}
 
-  private install(automation:AutomationV2):void{const nextRunAt=this.scheduler.nextRun(automation);this.repository.updateRunState(automation.id,{nextRunAt});this.scheduler.install(automation);}
+  private install(automation:AutomationV2):void{const nextRunAt=this.scheduler.nextRun(automation);this.repository.updateRunState(automation.id,{nextRunAt});this.scheduler.install(automation);this.smartTriggers.install(automation);}
+  private uninstall(id:string):void{this.scheduler.uninstall(id);this.smartTriggers.uninstall(id);}
 
   private async run(automation:AutomationV2,payload:Record<string,unknown>,ignoreEnabled=false):Promise<AutomationRunViewModel|undefined>{
     const fresh=this.repository.get(automation.id)??automation;if(!ignoreEnabled&&!fresh.enabled)return undefined;
@@ -66,7 +71,7 @@ export class AutomationEngine {
         }catch(error){const message=error instanceof Error?error.message:String(error);this.runs.finishStep(stepId,"failed",{error:message});if(!action.continueOnError)throw error;context.actionResults[action.id]={ok:false,error:message};}
       }
       this.runs.finish(context.runId,"success",{summary:"Automação concluída."});this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"success",consecutiveFailures:0,nextRunAt:this.scheduler.nextRun(automation)});return this.runs.get(context.runId);
-    }catch(error){const message=error instanceof Error?error.message:String(error);this.runs.finish(context.runId,"failed",{error:message});const failures=automation.consecutiveFailures+1;const shouldPause=failures>=5&&automation.policy.onRepeatedFailure==="pause";this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"failed",consecutiveFailures:failures,nextRunAt:shouldPause?undefined:this.scheduler.nextRun(automation)});if(shouldPause){this.scheduler.uninstall(automation.id);this.repository.setEnabled(automation.id,false);}return this.runs.get(context.runId);}
+    }catch(error){const message=error instanceof Error?error.message:String(error);this.runs.finish(context.runId,"failed",{error:message});const failures=automation.consecutiveFailures+1;const shouldPause=failures>=5&&automation.policy.onRepeatedFailure==="pause";this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"failed",consecutiveFailures:failures,nextRunAt:shouldPause?undefined:this.scheduler.nextRun(automation)});if(shouldPause){this.uninstall(automation.id);this.repository.setEnabled(automation.id,false);}return this.runs.get(context.runId);}
   }
 
   private watchApproval(approvalId:string):void{
@@ -74,10 +79,10 @@ export class AutomationEngine {
     const check=async()=>{const row=this.db.get<{status:string;task_id:string|null;task_status:string|null;result_json:string|null;error:string|null}>("SELECT a.status,a.task_id,t.status AS task_status,t.result_json,t.error FROM approvals a LEFT JOIN tasks t ON t.id=a.task_id WHERE a.id=?",[approvalId]);if(!row)return this.stopApprovalPoller(approvalId);if(row.status==="pending")return;
       if(row.status==="rejected"||row.status==="expired"){const pending=this.runs.pendingByApproval(approvalId);if(pending){this.runs.finishStepByApproval(approvalId,"cancelled",{summary:"Aprovação não concedida."});this.runs.finish(pending.run.id,"cancelled",{summary:"Aprovação não concedida.",approvalId});this.repository.updateRunState(pending.run.automationId,{lastRunAt:new Date().toISOString(),lastRunStatus:"cancelled"});}this.stopApprovalPoller(approvalId);return;}
       if(row.status==="approved"&&row.task_id&&row.task_status!=="completed"&&row.task_status!=="failed"&&row.task_status!=="cancelled")return;
-      const pending=this.runs.pendingByApproval(approvalId);if(!pending){this.stopApprovalPoller(approvalId);return;}const automation=this.repository.get(pending.run.automationId);if(!automation){this.stopApprovalPoller(approvalId);return;}
-      if(row.task_status==="failed"||row.task_status==="cancelled"){this.runs.finishStepByApproval(approvalId,"failed",{error:row.error??"A ação aprovada não foi concluída."});this.runs.finish(pending.run.id,"failed",{error:row.error??"A ação aprovada não foi concluída.",approvalId});this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"failed",consecutiveFailures:automation.consecutiveFailures+1});this.stopApprovalPoller(approvalId);return;}
-      const previousAction=automation.actions[Math.max(0,pending.nextActionIndex-1)];const result=parseJson(row.result_json)??{ok:true,summary:"Ação aprovada e concluída."};if(previousAction)pending.context.actionResults[previousAction.id]=result;this.runs.finishStepByApproval(approvalId,"success",{summary:summaryFor(result)});this.runs.updateContext(pending.run.id,pending.context,pending.nextActionIndex);this.stopApprovalPoller(approvalId);
-      if(this.runningAutomationIds.has(automation.id)){setTimeout(()=>this.resumeAfterApproval(automation,pending.context,pending.nextActionIndex),250);return;}await this.resumeAfterApproval(automation,pending.context,pending.nextActionIndex);
+      const pending=this.runs.pendingByApproval(approvalId);if(!pending){this.stopApprovalPoller(approvalId);return;}const current=this.repository.get(pending.run.automationId);if(!current){this.stopApprovalPoller(approvalId);return;}
+      if(row.task_status==="failed"||row.task_status==="cancelled"){this.runs.finishStepByApproval(approvalId,"failed",{error:row.error??"A ação aprovada não foi concluída."});this.runs.finish(pending.run.id,"failed",{error:row.error??"A ação aprovada não foi concluída.",approvalId});this.repository.updateRunState(current.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"failed",consecutiveFailures:current.consecutiveFailures+1});this.stopApprovalPoller(approvalId);return;}
+      const previousAction=current.actions[Math.max(0,pending.nextActionIndex-1)];const result=parseJson(row.result_json)??{ok:true,summary:"Ação aprovada e concluída."};if(previousAction)pending.context.actionResults[previousAction.id]=result;this.runs.finishStepByApproval(approvalId,"success",{summary:summaryFor(result)});this.runs.updateContext(pending.run.id,pending.context,pending.nextActionIndex);this.stopApprovalPoller(approvalId);
+      if(this.runningAutomationIds.has(current.id)){setTimeout(()=>void this.resumeAfterApproval(current,pending.context,pending.nextActionIndex),250);return;}await this.resumeAfterApproval(current,pending.context,pending.nextActionIndex);
     };
     const timer=setInterval(()=>void check(),1500);timer.unref?.();this.approvalPollers.set(approvalId,timer);void check();
   }
