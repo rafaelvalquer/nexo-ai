@@ -177,4 +177,5 @@ export const DEFAULT_AUTOMATION_POLICY: AutomationPolicy = {
   onRepeatedFailure: "pause"
 };
 
-export const DEFAULT_AUTOMATION_OUTPUT: AutomationOutput = { type: "notification" };
+/** Every automation run is presented as a dedicated Assistant conversation. */
+export const DEFAULT_AUTOMATION_OUTPUT: AutomationOutput = { type: "chat", conversationMode: "automation" };

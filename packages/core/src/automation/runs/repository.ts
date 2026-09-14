@@ -76,7 +76,7 @@ export class AutomationRunRepository {
   }
 
   private ensureSchema(): void {
-    this.db.run("CREATE TABLE IF NOT EXISTS automation_runs(id TEXT PRIMARY KEY,automation_id TEXT NOT NULL,trigger_type TEXT NOT NULL,trigger_payload_json TEXT,status TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,duration_ms INTEGER,summary TEXT,error TEXT,task_id TEXT,approval_id TEXT,context_json TEXT,next_action_index INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(automation_id) REFERENCES automations(id))");
+    this.db.run("CREATE TABLE IF NOT EXISTS automation_runs(id TEXT PRIMARY KEY,automation_id TEXT NOT NULL,trigger_type TEXT NOT NULL,trigger_payload_json TEXT,status TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,duration_ms INTEGER,summary TEXT,error TEXT,conversation_id TEXT,task_id TEXT,approval_id TEXT,context_json TEXT,next_action_index INTEGER NOT NULL DEFAULT 0,FOREIGN KEY(automation_id) REFERENCES automations(id))");
     this.db.run("CREATE TABLE IF NOT EXISTS automation_run_steps(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,ordinal INTEGER NOT NULL,action_id TEXT NOT NULL,action_type TEXT NOT NULL,status TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,duration_ms INTEGER,summary TEXT,error TEXT,approval_id TEXT,FOREIGN KEY(run_id) REFERENCES automation_runs(id))");
   }
 }
