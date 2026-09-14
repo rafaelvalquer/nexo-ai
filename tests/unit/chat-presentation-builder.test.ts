@@ -50,4 +50,41 @@ describe("Core presentation projections", () => {
     expect(record.presentation.blocks[0]).toMatchObject({type: "resource_collection", domain: "generic"});
     expect(JSON.stringify(record.presentation)).not.toContain("secret");
   });
+  it("keeps Browser Agent and Email Compose Review presentation adapters registered together", () => {
+    const browser = builder.fromToolResult("browser_agent_run", {
+      ok: true,
+      summary: "Browser iniciado",
+      data: {
+        command: "started",
+        run: {
+          id: "run-1",
+          taskId: "task-1",
+          conversationId: "conversation-1",
+          request: "Pesquisar documentação",
+          status: "running",
+          mode: "research",
+          allowedDomains: [],
+          stepCount: 0,
+          startedAt: "2026-09-14T10:00:00Z"
+        }
+      }
+    });
+    expect(browser.presentation.blocks[0]).toMatchObject({type: "browser_run", runId: "run-1", status: "running"});
+    expect(parsePresentation(browser.presentation)).toEqual(browser.presentation);
+
+    const compose = builder.fromToolResult("__email_compose_review__", {
+      ok: true,
+      summary: "Revise o e-mail antes de enviar.",
+      data: {
+        id: "email-compose:draft-1",
+        version: 1,
+        type: "email_compose_review",
+        draftId: "draft-1",
+        status: "review",
+        fields: {to: ["destinatario@example.com"], subject: "Assunto", bodyText: "Mensagem"}
+      }
+    });
+    expect(compose.presentation.blocks[0]).toMatchObject({type: "email_compose_review", draftId: "draft-1", status: "review"});
+    expect(parsePresentation(compose.presentation)).toEqual(compose.presentation);
+  });
 });
