@@ -12,7 +12,7 @@ import { NexoDatabase } from "../../packages/core/src/database/db.js";
 
 class FakeLLM implements LLMProvider {
   constructor(private outputs:string[]){}
-  health=async()=>({ok:true}); models=async()=>[]; pullModel=async()=>({ok:true,model:"fake"});
+  health=async()=>({ok:true,detail:"ok"}); models=async()=>[];
   chat=async()=>"ok"; stream=async(_messages:LLMMessage[],onToken:(t:string)=>void)=>{onToken("ok");return"ok";}; summarize=async()=>"ok"; embed=async()=>[];
   plan=async()=>this.outputs.shift()??"{}";
 }
