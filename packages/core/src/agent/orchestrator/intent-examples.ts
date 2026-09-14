@@ -16,6 +16,8 @@ const intent = (domain: IntentDomain, name: AgentIntent["intent"], operation: st
 });
 
 const EXAMPLES: IntentExample[] = [
+  { utterance: "selecionar caixas de e-mails", intent: { ...intent("email", "update", "select_mailboxes"), requiresDataLookup: false } },
+  { utterance: "mostre meus emails de Promoções", intent: intent("email", "list", "search_messages", { categories: ["promotions"], maxResults: 20 }) },
   { utterance: "quais são meus últimos emails?", intent: intent("email", "list", "recent_messages", { maxResults: 20 }) },
   { utterance: "ve meus email recente", intent: intent("email", "list", "recent_messages", { maxResults: 20 }) },
   { utterance: "faça um resumo dos emails não lidos", intent: intent("email", "summarize", "summarize_messages", { unread: true, maxResults: 20 }) },
