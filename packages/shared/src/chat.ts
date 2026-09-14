@@ -49,8 +49,9 @@ export type ClarificationOption = {
 export type ClarificationQuestion = {
   id: string; field: string; prompt: string;
   type: "single_choice" | "multi_choice" | "text" | "choice_or_text";
-  options?: ClarificationOption[]; suggestedOptionId?: string;
+  options?: ClarificationOption[]; suggestedOptionId?: string; selectedOptionIds?: string[];
   allowCustomValue?: boolean; customPlaceholder?: string; required: boolean;
+  helperText?: string; submitLabel?: string;
 };
 export type ClarificationBlock = ChatBlockBase & {
   type: "clarification"; clarificationId: string; title: string;
@@ -59,7 +60,7 @@ export type ClarificationBlock = ChatBlockBase & {
   values?: Record<string, unknown>;
 };
 export type ClarificationResolutionRequest = {
-  clarificationId: string; questionId: string; optionId?: string; customValue?: string;
+  clarificationId: string; questionId: string; optionId?: string; optionIds?: string[]; customValue?: string;
   source?: "button" | "custom_input";
 };
 export type ClarificationResolution = {

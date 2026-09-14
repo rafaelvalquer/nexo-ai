@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { ClarificationBlock,ClarificationResolution,ClarificationResolutionRequest } from "@nexo/shared";
+import type { ClarificationBlock,ClarificationResolution,ClarificationResolutionRequest,ConnectionProvider } from "@nexo/shared";
 import type { AgentIntent } from "../orchestrator/intent-schema.js";
-import { buildClarificationQuestion } from "./option-builders.js";
+import { buildClarificationQuestion,buildEmailMailboxQuestion } from "./option-builders.js";
 import { ClarificationRepository } from "./repository.js";
 import { ClarificationResolver,type ClarificationAnswer } from "./resolver.js";
 import type { ClarificationAttempt,ClarificationResume,PendingClarification } from "./types.js";
+import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
 
 const KNOWN_FOLDERS = new Set(["downloads", "documents", "desktop"]);
 
@@ -29,6 +30,47 @@ export class ClarificationService {
       createdAt,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       intentSnapshot: structuredClone(intent),
+      values: {},
+    };
+    return this.repository.save(record);
+  }
+
+  createEmailMailboxPreference(
+    conversationId: string,
+    originalRequest: string,
+    intent: AgentIntent,
+    connectionId: string,
+    provider: ConnectionProvider,
+    selected: EmailMailboxPreferenceCategory[],
+    mode: "initial" | "update",
+  ) {
+    const createdAt = new Date().toISOString();
+    const snapshot: AgentIntent = {
+      ...structuredClone(intent),
+      status: "needs_clarification",
+      entities: { ...intent.entities, connectionId },
+      missing: ["emailCategories"],
+      question: "Quais caixas de e-mail devo considerar?",
+    };
+    const record: PendingClarification = {
+      id: randomUUID(),
+      conversationId,
+      domain: "email",
+      intent: intent.intent,
+      operation: intent.operation,
+      originalRequest,
+      partialEntities: {
+        ...intent.entities,
+        connectionId,
+        __emailPreferenceFlow: true,
+        __emailPreferenceMode: mode,
+        __emailProvider: provider,
+      },
+      questions: [buildEmailMailboxQuestion(provider, selected, mode)],
+      status: "pending",
+      createdAt,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      intentSnapshot: snapshot,
       values: {},
     };
     return this.repository.save(record);
@@ -73,7 +115,7 @@ export class ClarificationService {
     if (!pending || pending.status !== "pending") return { kind: "none" };
     const question = pending.questions.find((item) => item.id === request.questionId) ?? pending.questions[0];
     if (!question) return { kind: "none" };
-    const answer = this.resolver.resolve(question, { optionId: request.optionId, customValue: request.customValue });
+    const answer = this.resolver.resolve(question, { optionId: request.optionId, optionIds: request.optionIds, customValue: request.customValue });
     return this.applyAnswer(pending, question.id, answer);
   }
 

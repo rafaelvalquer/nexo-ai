@@ -13,9 +13,12 @@ function validateRequest(value: unknown): ClarificationResolutionRequest {
   const clarificationId = requireString(data.clarificationId, "Esclarecimento");
   const questionId = requireString(data.questionId, "Pergunta");
   const optionId = typeof data.optionId === "string" && data.optionId.trim() ? data.optionId.trim() : undefined;
+  const optionIds = Array.isArray(data.optionIds)
+    ? [...new Set(data.optionIds.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map(item => item.trim()))]
+    : undefined;
   const customValue = typeof data.customValue === "string" && data.customValue.trim() ? data.customValue.trim() : undefined;
-  if (!optionId && !customValue) throw new Error("Selecione uma opção ou informe um valor.");
-  return { clarificationId, questionId, optionId, customValue, source: customValue ? "custom_input" : "button" };
+  if (!optionId && !optionIds?.length && !customValue) throw new Error("Selecione pelo menos uma opção ou informe um valor.");
+  return { clarificationId, questionId, optionId, optionIds, customValue, source: customValue ? "custom_input" : "button" };
 }
 
 export function registerClarificationIpc(core: NexoCore) {
@@ -23,9 +26,13 @@ export function registerClarificationIpc(core: NexoCore) {
     core.agent.getPendingClarification(requireString(conversationId, "ID da conversa")),
   );
 
-  ipcMain.handle("nexo:clarification:cancel", (_, clarificationId) =>
-    core.agent.cancelClarification(requireString(clarificationId, "ID do esclarecimento")),
-  );
+  ipcMain.handle("nexo:clarification:cancel", (_, clarificationId) => {
+    const result = core.agent.cancelClarification(requireString(clarificationId, "ID do esclarecimento"));
+    if (result?.conversationId && result.text && !core.getSettings().privateMode) {
+      core.conversations.addMessage(result.conversationId, "assistant", result.text);
+    }
+    return result;
+  });
 
   ipcMain.handle("nexo:clarification:resolve", async (_, request) => {
     const reply = await core.agent.resolveClarification(validateRequest(request));

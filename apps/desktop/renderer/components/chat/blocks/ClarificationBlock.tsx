@@ -3,6 +3,8 @@ import type { ClarificationBlock as ClarificationModel, ClarificationOption } fr
 import { useAssistantStore } from "../../../stores/assistant";
 import { ChoiceGroup } from "./ChoiceGroup";
 import { CustomChoiceInput } from "./CustomChoiceInput";
+import { MultiChoiceQuestion } from "./MultiChoiceQuestion";
+import { ClarificationActions } from "./ClarificationActions";
 import "./clarification.css";
 
 export function ClarificationBlock({ block, conversationId }: {
@@ -11,7 +13,9 @@ export function ClarificationBlock({ block, conversationId }: {
 }) {
   const question = block.questions[0];
   const defaultSelection = useMemo(() => question?.suggestedOptionId, [question?.suggestedOptionId]);
+  const defaultSelections = useMemo(() => question?.selectedOptionIds ?? [], [question?.selectedOptionIds]);
   const [selectedId, setSelectedId] = useState<string | undefined>(defaultSelection);
+  const [selectedIds, setSelectedIds] = useState<string[]>(defaultSelections);
   const [customValue, setCustomValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,11 +41,20 @@ export function ClarificationBlock({ block, conversationId }: {
     setError("");
   }
 
+  function changeMultiple(ids: string[]) {
+    setSelectedIds(ids);
+    setError(ids.length ? "" : "Selecione pelo menos uma caixa.");
+  }
+
   async function submit() {
     if (busy || !pending) return;
     const custom = customValue.trim();
-    if (!selectedId && !custom) {
-      setError("Selecione uma opção ou informe outra pasta.");
+    if (question.type === "multi_choice" && !selectedIds.length) {
+      setError("Selecione pelo menos uma caixa.");
+      return;
+    }
+    if (question.type !== "multi_choice" && !selectedId && !custom) {
+      setError("Selecione uma opção ou informe um valor.");
       return;
     }
     setBusy(true);
@@ -50,7 +63,8 @@ export function ClarificationBlock({ block, conversationId }: {
       await window.nexo.resolveClarification({
         clarificationId: block.clarificationId,
         questionId: question.id,
-        optionId: custom ? undefined : selectedId,
+        optionId: question.type === "multi_choice" || custom ? undefined : selectedId,
+        optionIds: question.type === "multi_choice" ? selectedIds : undefined,
         customValue: custom || undefined,
         source: custom ? "custom_input" : "button",
       });
@@ -78,17 +92,28 @@ export function ClarificationBlock({ block, conversationId }: {
   }
 
   const resolved = block.values?.[question.field];
+  const resolvedIds = question.type === "multi_choice" && Array.isArray(resolved)
+    ? (question.options ?? []).filter(option => resolved.includes(option.value)).map(option => option.id)
+    : [];
+  const canSubmit = question.type === "multi_choice" ? selectedIds.length > 0 : Boolean(selectedId || customValue.trim());
+
   return <section className="clarificationBlock" aria-label="Esclarecimento necessário">
     <h3>{block.title}</h3>
     {pending ? <div className="clarificationQuestion">
       <p className="clarificationPrompt">{question.prompt}</p>
-      {question.options?.length ? <ChoiceGroup options={question.options} selectedId={selectedId} disabled={busy} onSelect={select} /> : null}
-      {question.allowCustomValue ? <CustomChoiceInput value={customValue} placeholder={question.customPlaceholder} disabled={busy} onChange={changeCustom} /> : null}
-      <div className="clarificationActions">
-        <button type="button" disabled={busy} onClick={() => void cancel()}>Cancelar</button>
-        <button type="button" disabled={busy} onClick={() => void submit()}>{busy ? "Processando…" : "Continuar"}</button>
-      </div>
-    </div> : block.state === "submitted" ? <p className="clarificationResolved">✓ {formatValue(resolved)}</p> : <p className="clarificationCancelled">{block.state === "expired" ? "Pergunta expirada." : "Pergunta cancelada."}</p>}
+      {question.type === "multi_choice"
+        ? <MultiChoiceQuestion question={question} selectedIds={selectedIds} disabled={busy} onChange={changeMultiple} />
+        : question.options?.length
+          ? <ChoiceGroup options={question.options} selectedId={selectedId} disabled={busy} onSelect={select} />
+          : null}
+      {question.type !== "multi_choice" && question.allowCustomValue ? <CustomChoiceInput value={customValue} placeholder={question.customPlaceholder} disabled={busy} onChange={changeCustom} /> : null}
+      <ClarificationActions busy={busy} canSubmit={canSubmit} submitLabel={question.submitLabel} onCancel={() => void cancel()} onSubmit={() => void submit()} />
+    </div> : block.state === "submitted" ? <div className="clarificationSubmitted">
+      <p className="clarificationResolved">✓ Configuração salva</p>
+      {question.type === "multi_choice"
+        ? <MultiChoiceQuestion question={question} selectedIds={resolvedIds} disabled onChange={() => undefined} />
+        : <p className="clarificationResolvedValue">{formatValue(resolved)}</p>}
+    </div> : <p className="clarificationCancelled">{block.state === "expired" ? "Pergunta expirada." : "Pergunta cancelada."}</p>}
     {error ? <p className="clarificationError" role="alert">{error}</p> : null}
   </section>;
 }

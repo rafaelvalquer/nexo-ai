@@ -1,5 +1,7 @@
 import type { ConnectionService } from "../connections/service.js";
 import type { EmailDraft, EmailDraftInput, EmailMessage, EmailSearchQuery, EmailSearchResult, EmailModifyAction, EmailAttachment, EmailMailboxStats } from "./types.js";
+import type { EmailMailboxCategory } from "./preferences/types.js";
+import { buildGmailSearchQuery } from "./google/query-builder.js";
 import { GoogleApiClient } from "../google/api-client.js";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -15,20 +17,22 @@ export class EmailService {
     return searchMicrosoft(token,input,signal);
   }
 
-  async latest(connectionId:string,signal?:AbortSignal):Promise<EmailMessage|null>{
-    const result=await this.search({connectionId,query:"in:inbox",maxResults:1},signal);
+  async latest(connectionId:string,categories?:EmailMailboxCategory[],signal?:AbortSignal):Promise<EmailMessage|null>{
+    const result=await this.search({connectionId,categories,maxResults:1},signal);
     return result.messages[0]??null;
   }
 
-  async stats(connectionId:string,signal?:AbortSignal):Promise<EmailMailboxStats>{
+  async stats(connectionId:string,categories?:EmailMailboxCategory[],signal?:AbortSignal):Promise<EmailMailboxStats>{
     const account=this.requireAccount(connectionId);
     if(account.provider==="google"){
+      const inboxQuery=buildGmailSearchQuery({categories});
+      const unreadQuery=buildGmailSearchQuery({categories,unread:true});
       const [profile,inbox,unread]=await Promise.all([
         this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/profile",{},signal),
-        this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX",{},signal),
-        this.google.json<any>(connectionId,"email.read","https://gmail.googleapis.com/gmail/v1/users/me/labels/UNREAD",{},signal)
+        gmailCount(this.google,connectionId,inboxQuery,signal),
+        gmailCount(this.google,connectionId,unreadQuery,signal)
       ]);
-      return{totalMessages:numberOrUndefined(profile.messagesTotal),totalThreads:numberOrUndefined(profile.threadsTotal),inboxMessages:numberOrUndefined(inbox.messagesTotal),unreadMessages:numberOrUndefined(unread.messagesTotal??unread.messagesUnread)};
+      return{totalMessages:numberOrUndefined(profile.messagesTotal),totalThreads:numberOrUndefined(profile.threadsTotal),inboxMessages:inbox,unreadMessages:unread};
     }
     const token=await this.connections.accessToken(connectionId,"email.read");
     const response=await fetch("https://graph.microsoft.com/v1.0/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount",{headers:{Authorization:`Bearer ${token}`},signal});
@@ -127,7 +131,8 @@ export class EmailService {
 }
 
 async function searchGoogle(client:GoogleApiClient,input:EmailSearchQuery,signal?:AbortSignal):Promise<EmailSearchResult>{
-  const query=new URLSearchParams({maxResults:String(Math.min(input.maxResults??20,50)),q:[input.unread?"is:unread":"",input.query??""].filter(Boolean).join(" ")});
+  const q=buildGmailSearchQuery({categories:input.categories,unread:input.unread,query:input.query});
+  const query=new URLSearchParams({maxResults:String(Math.min(input.maxResults??20,50)),q});
   if(input.pageToken)query.set("pageToken",input.pageToken);
   const listedData=await client.json<any>(input.connectionId,"email.read",`https://gmail.googleapis.com/gmail/v1/users/me/messages?${query}`,{},signal);
   const messages=listedData.messages??[];
@@ -139,11 +144,17 @@ async function searchGoogle(client:GoogleApiClient,input:EmailSearchQuery,signal
   return{messages:hydrated,nextPageToken:listedData.nextPageToken,total:listedData.resultSizeEstimate};
 }
 
+async function gmailCount(client:GoogleApiClient,connectionId:string,q:string,signal?:AbortSignal):Promise<number|undefined>{
+  const query=new URLSearchParams({maxResults:"1",q});
+  const data=await client.json<any>(connectionId,"email.read",`https://gmail.googleapis.com/gmail/v1/users/me/messages?${query}`,{},signal);
+  return numberOrUndefined(data.resultSizeEstimate);
+}
+
 async function searchMicrosoft(token:string,input:EmailSearchQuery,signal?:AbortSignal):Promise<EmailSearchResult>{
   const params=new URLSearchParams({"$top":String(Math.min(input.maxResults??20,50)),"$select":"id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,hasAttachments","$orderby":"receivedDateTime desc"});
   if(input.unread)params.set("$filter","isRead eq false");
   if(input.query?.trim())params.set("$search",`\"${input.query.trim().replace(/\"/g,"")}\"`);
-  const url=input.pageToken?trustedGraphNextLink(input.pageToken):`https://graph.microsoft.com/v1.0/me/messages?${params}`;
+  const url=input.pageToken?trustedGraphNextLink(input.pageToken):`https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?${params}`;
   const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`,...(input.query?.trim()?{ConsistencyLevel:"eventual"}:{})},signal});
   if(!response.ok)throw new Error(`Não foi possível consultar o Microsoft Graph (HTTP ${response.status}).`);
   const data=await response.json() as any;
@@ -171,7 +182,7 @@ async function modifyMicrosoft(token:string,id:string,action:EmailModifyAction,v
   return fetch(`${base}/move`,{method:"POST",headers,body:JSON.stringify({destinationId}),signal});
 }
 
-function trustedGraphNextLink(value:string){const url=new URL(value);if(url.origin!=="https://graph.microsoft.com"||!url.pathname.startsWith("/v1.0/me/messages"))throw new Error("Página de e-mail inválida.");return url.toString();}
+function trustedGraphNextLink(value:string){const url=new URL(value);if(url.origin!=="https://graph.microsoft.com"||!url.pathname.startsWith("/v1.0/me/mailFolders/inbox/messages"))throw new Error("Página de e-mail inválida.");return url.toString();}
 function normalizeGoogleMessage(item:any):EmailMessage{const headers=Object.fromEntries((item.payload?.headers??[]).map((h:any)=>[String(h.name).toLowerCase(),h.value]));return{id:item.id,provider:"google",threadId:item.threadId,from:{email:headers.from??""},to:[{email:headers.to??""}],cc:headers.cc?[{email:headers.cc}]:undefined,subject:headers.subject??"(sem assunto)",receivedAt:new Date(Number(item.internalDate)).toISOString(),snippet:item.snippet,bodyText:decodeGmailBody(item.payload),isUnread:(item.labelIds??[]).includes("UNREAD"),hasAttachments:(item.payload?.parts??[]).some((part:any)=>Boolean(part.filename))};}
 function normalizeMicrosoftMessage(item:any):EmailMessage{return{id:item.id,provider:"microsoft",threadId:item.conversationId,from:{email:item.from?.emailAddress?.address??"",name:item.from?.emailAddress?.name},to:(item.toRecipients??[]).map((x:any)=>({email:x.emailAddress.address,name:x.emailAddress.name})),cc:(item.ccRecipients??[]).map((x:any)=>({email:x.emailAddress.address,name:x.emailAddress.name})),subject:item.subject??"(sem assunto)",receivedAt:item.receivedDateTime,snippet:item.bodyPreview,bodyText:item.body?.content,isUnread:!item.isRead,hasAttachments:item.hasAttachments};}
 function decodeGmailBody(payload:any):string|undefined{const parts=flattenParts(payload),part=parts.find((item:any)=>item.mimeType?.startsWith("text/plain")&&item.body?.data);return part?.body?.data?Buffer.from(part.body.data,"base64url").toString("utf8"):undefined;}
