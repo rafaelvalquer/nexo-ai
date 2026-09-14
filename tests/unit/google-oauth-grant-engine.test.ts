@@ -40,7 +40,7 @@ function mockGoogle(options:{tokenScope?:string;tokenInfoScope?:string;issuedTo?
 describe("Google OAuth grant engine",()=>{
   it("normalizes broad requested capabilities to the minimum useful scopes and validates all grants",async()=>{
     let authorization="";
-    mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY} ${CALENDAR}`});
+    mockGoogle({tokenScope:`openid email profile ${GMAIL_MODIFY} ${CALENDAR}`});
     const value=await service(url=>{authorization=url;});
     const account=await value.connect("google",["email.read","email.send","email.modify","calendar.read","calendar.write"]);
     const authUrl=new URL(authorization),scope=authUrl.searchParams.get("scope")??"";
@@ -51,14 +51,14 @@ describe("Google OAuth grant engine",()=>{
     expect(account.capabilityGrants?.every(grant=>grant.validated)).toBe(true);
   });
 
-  it("uses tokeninfo when the token response omits scope",async()=>{
+  it("runs Gmail probes when the token response omits scope",async()=>{
     mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY}`});
     const value=await service();const account=await value.connect("google",["email.read","email.modify"]);
-    expect(account.status).toBe("connected");expect(account.scopeSource).toBe("token-info");expect(account.grantedScopes).toContain(GMAIL_MODIFY);
+    expect(account.status).toBe("connected");expect(account.scopeSource).toBe("unknown");expect(account.grantedScopes).toEqual([]);
   });
 
   it("models the reported gmail.send-only scenario as degraded instead of falsely connected",async()=>{
-    mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_SEND}`});
+    mockGoogle({tokenScope:`openid email profile ${GMAIL_SEND}`});
     const value=await service();const account=await value.connect("google",["email.read","email.send","email.modify","calendar.read","calendar.write"]);
     expect(account.status).toBe("degraded");expect(account.capabilities).toEqual(["email.send"]);
     expect(account.capabilityGrants?.find(grant=>grant.capability==="email.send")?.status).toBe("validated");
@@ -66,7 +66,7 @@ describe("Google OAuth grant engine",()=>{
   });
 
   it("distinguishes scope granted from an API that still refuses the request",async()=>{
-    mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY}`,gmailStatus:403});
+    mockGoogle({tokenScope:`openid email profile ${GMAIL_MODIFY}`,gmailStatus:403});
     const value=await service();const account=await value.connect("google",["email.read","email.send","email.modify"]);
     expect(account.status).toBe("degraded");expect(account.capabilities).toEqual(["email.send"]);
     const read=account.capabilityGrants?.find(grant=>grant.capability==="email.read");
@@ -74,18 +74,17 @@ describe("Google OAuth grant engine",()=>{
     expect(read?.providerMessage).toMatch(/mesmo projeto Google Cloud/i);
   });
 
-  it("rejects a token emitted for another OAuth client",async()=>{
+  it("does not consult tokeninfo when scope is omitted",async()=>{
     mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY}`,issuedTo:"another-client.apps.googleusercontent.com"});
-    const value=await service();
-    await expect(value.connect("google",["email.read"])).rejects.toThrow(/Client ID diferente/i);
-    expect(db.all("SELECT * FROM connections")).toEqual([]);
-    expect([...secrets.values.keys()].filter(key=>key.startsWith("connection:"))).toEqual([]);
+    const value=await service();const account=await value.connect("google",["email.read"]);
+    expect(account.scopeSource).toBe("unknown");expect(account.capabilities).toEqual(["email.read"]);
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([input])=>String(input).includes("tokeninfo"))).toBe(false);
   });
 
   it("preserves the old connection when a replacement authorization grants no requested capability",async()=>{
-    mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY}`});
+    mockGoogle({tokenScope:`openid email profile ${GMAIL_MODIFY}`});
     const value=await service();const original=await value.connect("google",["email.read"]);
-    mockGoogle({tokenInfoScope:"openid email profile"});
+    mockGoogle({tokenScope:"openid email profile"});
     await expect(value.setRequestedCapabilities(original.id,["email.read","calendar.read"])).rejects.toThrow(/não substituiu/i);
     const preserved=value.get(original.id);
     expect(preserved?.capabilities).toContain("email.read");expect(preserved?.status).toBe("connected");

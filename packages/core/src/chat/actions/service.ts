@@ -51,11 +51,16 @@ export class ChatActionService {
       if(!reply.result?.ok)throw new Error(reply.text);
       const projected=this.builder.fromToolResult("email_search",reply.result,input),next=projected.presentation.blocks[0];
       if(next.type!=="resource_collection")throw new Error("Página inválida.");
-      const known=new Set(block.items.flatMap(item=>item.resource.kind==="email"?[item.resource.messageId]:[]));
+      // Other cards can finish an action while the provider fetch is pending.
+      // Merge into the latest persisted message instead of overwriting those updates.
+      const current=this.conversations.presentationRecordForMessage(messageId);
+      const currentBlock=current?.presentation.blocks.find(value=>value.id===blockId);
+      if(!current||currentBlock?.type!=="resource_collection")throw new Error("A coleção foi removida durante o carregamento.");
+      const known=new Set(currentBlock.items.flatMap(item=>item.resource.kind==="email"?[item.resource.messageId]:[]));
       const added=next.items.filter(item=>item.resource.kind==="email"&&!known.has(item.resource.messageId));
-      block.items.push(...added);block.total=next.total;block.pagination=next.pagination;
-      record.bindings.push(...projected.bindings.filter(binding=>added.some(item=>item.id===binding.itemId)).map(binding=>({...binding,blockId})));
-      this.conversations.savePresentation(messageId,record);return block;
+      currentBlock.items.push(...added);currentBlock.total=next.total;currentBlock.pagination=next.pagination;
+      current.bindings.push(...projected.bindings.filter(binding=>added.some(item=>item.id===binding.itemId)).map(binding=>({...binding,blockId})));
+      this.conversations.savePresentation(messageId,current);return currentBlock;
     }finally{this.busy.delete(key);}
   }
 
@@ -126,9 +131,9 @@ export class ChatActionService {
       if (resource.kind === "file" || resource.kind === "folder") {
         this.permissions.assertPath(resource.path);
         this.permissions.assertPath(await fs.realpath(resource.path));
-        if (request.actionId === "file.copy_path" || request.actionId === "file.open_folder") {
+        if (request.actionId === "file.copy_path" || request.actionId === "file.open_folder" || request.actionId === "file.open") {
           const item=this.update(request,"idle","");
-          return {item,...(request.actionId === "file.copy_path" ? {copyText:resource.path} : {openPath:resource.kind === "folder" ? resource.path : path.dirname(resource.path)})};
+          return {item,...(request.actionId === "file.copy_path" ? {copyText:resource.path} : {openPath:request.actionId === "file.open" || resource.kind === "folder" ? resource.path : path.dirname(resource.path)})};
         }
         if (request.actionId === "file.preview" && !/\.(txt|md|csv|json|log)$/i.test(resource.path)) {
           const info=await this.engine.runPlan("Verificar arquivo",[{tool:"file_info",input:{path:resource.path}}]);
@@ -149,6 +154,7 @@ export class ChatActionService {
         return {item:this.update(request,"idle",""),openUrl:url};
       }
       const plan=this.registry.resolve(request.actionId)({request,...resolved});
+      await this.validateFilePlan(plan);
       let preflightFingerprint:string|undefined;
       if (plan.preflight) {
         const preflight=await this.engine.runPlan("Verificar recurso selecionado",[plan.preflight]);
@@ -219,6 +225,7 @@ export class ChatActionService {
     for(const item of items)this.busy.add(item.id);
     try {
       if(approved && pending.plan.preflight){
+        await this.validateFilePlan(pending.plan);
         const preflight=await this.engine.runPlan("Revalidar recurso",[pending.plan.preflight]);
         if(!preflight.result?.ok || fingerprintFor("resource",{data:preflight.result.data})!==pending.preflightFingerprint) throw new Error("O recurso mudou desde a prévia. Cancele e gere uma nova confirmação.");
       }
@@ -231,5 +238,24 @@ export class ChatActionService {
       return {item:this.finish(pending.request,pending.plan,reply,block),approval:block};
     } catch(error) {this.update(pending.request,"failed",error instanceof Error?error.message:String(error),this.approvalBlock(id));throw error;}
     finally {for(const item of items)this.busy.delete(item.id);}
+  }
+
+  private async validateFilePlan(plan:ActionPlan) {
+    if(plan.preflight?.tool!=="file_info")return;
+    const source=String(plan.preflight.input.path);
+    this.permissions.assertPath(source);
+    this.permissions.assertPath(await fs.realpath(source));
+    for(const step of plan.steps){
+      const destination=step.input.newPath??step.input.destination;
+      if(typeof destination!=="string")continue;
+      this.permissions.assertPath(destination);
+      const existing=await fs.lstat(destination).catch(error=>{if(error?.code==="ENOENT")return undefined;throw error;});
+      if(existing)throw new Error("Já existe um recurso no destino. Escolha outro nome ou pasta.");
+      let ancestor=path.dirname(path.resolve(destination));
+      for(;;){
+        try{this.permissions.assertPath(await fs.realpath(ancestor));break;}
+        catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;const parent=path.dirname(ancestor);if(parent===ancestor)throw error;ancestor=parent;}
+      }
+    }
   }
 }

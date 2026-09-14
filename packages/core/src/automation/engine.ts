@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Automation, AutomationExecutionContext, AutomationRunViewModel, AutomationV2, AutomationViewModel, CreateAutomationV2Input, UpdateAutomationV2Input } from "@nexo/shared";
+import type { Automation, AutomationExecutionContext, AutomationExecutionResult, AutomationRunViewModel, AutomationV2, AutomationViewModel, CreateAutomationV2Input, UpdateAutomationV2Input } from "@nexo/shared";
 import { DEFAULT_AUTOMATION_OUTPUT, DEFAULT_AUTOMATION_POLICY } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
 import { AUTOMATION_ACTION_CATALOG } from "./actions/catalog.js";
@@ -24,7 +24,7 @@ export class AutomationEngine {
   private queuedTriggerPayload = new Map<string, Record<string, unknown>>();
   private approvalPollers = new Map<string, ReturnType<typeof setInterval>>();
 
-  constructor(private db: NexoDatabase, executeCommand: (command:string)=>Promise<unknown>) {
+  constructor(private db: NexoDatabase, executeCommand: (command:string)=>Promise<unknown>, private startAutomationChat?: (input: { title: string; prompt: string; automationRunId: string }) => Promise<{ conversationId: string; taskId: string }>) {
     this.repository = new AutomationRepository(db);
     this.runs = new AutomationRunRepository(db);
     this.actions = new AutomationActionExecutor(executeCommand);
@@ -47,8 +47,47 @@ export class AutomationEngine {
   listRuns(id:string,limit=50):AutomationRunViewModel[]{return this.runs.list(id,limit);}
   getRun(id:string):AutomationRunViewModel|undefined{return this.runs.get(id);}
 
-  async runManual(id:string):Promise<AutomationViewModel>{const automation=this.repository.get(id);if(!automation)throw new Error("Automação não encontrada.");if(!automation.enabled)throw new Error("Ative a automação antes de executá-la.");await this.run(automation,{source:"manual"});return this.get(id)??this.toViewModel(automation);}
-  async test(id:string):Promise<AutomationRunViewModel|undefined>{const automation=this.repository.get(id);if(!automation)throw new Error("Automação não encontrada.");return this.run(automation,{source:"test",dryRun:true},true);}
+  async runManual(id:string):Promise<AutomationViewModel|AutomationExecutionResult>{const automation=this.repository.get(id);if(!automation)throw new Error("Automação não encontrada.");if(!automation.enabled)throw new Error("Ative a automação antes de executá-la.");if(automation.output.type==="chat"&&this.startAutomationChat)return this.runChat(automation);await this.run(automation,{source:"manual"});return this.get(id)??this.toViewModel(automation);}
+  async test(id:string):Promise<AutomationRunViewModel|AutomationExecutionResult|undefined>{const automation=this.repository.get(id);if(!automation)throw new Error("Automação não encontrada.");return this.run(automation,{source:"test",dryRun:true},true);}
+
+  private async runChat(automation: AutomationV2, payload: Record<string, unknown> = { source: "manual" }): Promise<AutomationExecutionResult> {
+    const runId=randomUUID();
+    const context:AutomationExecutionContext={automationId:automation.id,runId,trigger:{type:automation.trigger.type,data:payload},actionResults:{},startedAt:new Date().toISOString()};
+    this.runs.start(automation.id,automation.trigger.type,payload,context);
+    const title=`${automation.name} · ${new Date().toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}`;
+    const prompt=automation.prompt?.trim()||fallbackPrompt(automation);
+    try {
+      if(!this.startAutomationChat)throw new Error("Execução em conversa não está disponível.");
+      const task=await this.startAutomationChat({title,prompt,automationRunId:runId});
+      this.runs.linkTask(runId,task.conversationId,task.taskId);
+      this.watchChatRun(runId, task.taskId);
+      return {automationId:automation.id,runId,conversationId:task.conversationId,taskId:task.taskId};
+    } catch(error) {
+      const message=error instanceof Error?error.message:String(error);
+      this.runs.finish(runId,"failed",{error:message});
+      this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"failed",consecutiveFailures:automation.consecutiveFailures+1});
+      throw error;
+    }
+  }
+
+  private watchChatRun(runId:string, taskId:string):void {
+    const timer=setInterval(()=>{
+      const row=this.db.get<{status:string;result_json:string|null;error:string|null}>("SELECT status,result_json,error FROM tasks WHERE id=?",[taskId]);
+      if(!row || !["completed","failed","cancelled"].includes(row.status))return;
+      clearInterval(timer);
+      let summary:string|undefined;
+      if(row.result_json){try{const value=JSON.parse(row.result_json) as Record<string,unknown>;summary=typeof value.text==="string"?value.text:typeof value.summary==="string"?value.summary:undefined;}catch{}}
+      this.completeChatRun(runId,row.status==="completed"?"success":row.status==="cancelled"?"cancelled":"failed",summary,row.error??undefined);
+    },1000);
+    timer.unref?.();
+  }
+
+  completeChatRun(runId:string,status:AutomationRunViewModel["status"],summary?:string,error?:string):void {
+    const run=this.runs.get(runId);if(!run)return;
+    this.runs.finish(runId,status,{summary,error});
+    const current=this.repository.get(run.automationId);if(!current)return;
+    this.repository.updateRunState(current.id,{lastRunAt:new Date().toISOString(),lastRunStatus:status,consecutiveFailures:status==="success"?0:current.consecutiveFailures+(status==="failed"?1:0),nextRunAt:this.scheduler.nextRun(current)});
+  }
 
   start():void{for(const automation of this.repository.list())if(automation.enabled)this.install(automation);for(const approvalId of this.runs.pendingApprovalIds())this.watchApproval(approvalId);}
   stop():void{this.scheduler.stopAll();this.smartTriggers.stopAll();for(const timer of this.approvalPollers.values())clearInterval(timer);this.approvalPollers.clear();}
@@ -56,8 +95,9 @@ export class AutomationEngine {
   private install(automation:AutomationV2):void{const nextRunAt=this.scheduler.nextRun(automation);this.repository.updateRunState(automation.id,{nextRunAt});this.scheduler.install(automation);this.smartTriggers.install(automation);}
   private uninstall(id:string):void{this.scheduler.uninstall(id);this.smartTriggers.uninstall(id);}
 
-  private async run(automation:AutomationV2,payload:Record<string,unknown>,ignoreEnabled=false):Promise<AutomationRunViewModel|undefined>{
+  private async run(automation:AutomationV2,payload:Record<string,unknown>,ignoreEnabled=false):Promise<AutomationRunViewModel|AutomationExecutionResult|undefined>{
     const fresh=this.repository.get(automation.id)??automation;if(!ignoreEnabled&&!fresh.enabled)return undefined;
+    if(!ignoreEnabled&&fresh.output.type==="chat"&&this.startAutomationChat)return this.runChat(fresh,payload);
     if(this.runningAutomationIds.has(fresh.id)){this.queuedTriggerPayload.set(fresh.id,payload);return undefined;}
     this.runningAutomationIds.add(fresh.id);const runId=randomUUID();const context:AutomationExecutionContext={automationId:fresh.id,runId,trigger:{type:fresh.trigger.type,data:payload},actionResults:{},startedAt:new Date().toISOString()};this.runs.start(fresh.id,fresh.trigger.type,payload,context);
     try{
@@ -107,3 +147,4 @@ function summaryFor(result:unknown):string{if(result&&typeof result==="object"){
 function parseJson(value:string|null):unknown{if(!value)return undefined;try{return JSON.parse(value)as unknown;}catch{return value;}}
 function triggerLabel(automation:AutomationV2):string{const t=automation.trigger;if(t.type==="schedule")return t.cron?`Agendamento · ${t.cron}`:t.time?`${t.mode} · ${t.time}`:"Agendamento";if(t.type==="interval")return`A cada ${t.minutes} min`;if(t.type==="file.created")return"Arquivo criado";if(t.type==="file.changed")return"Arquivo alterado";if(t.type==="file.deleted")return"Arquivo removido";if(t.type==="email.received")return"Novo e-mail";if(t.type==="calendar.before_event")return`${t.minutesBefore} min antes do compromisso`;if(t.type==="calendar.event_started")return"Compromisso iniciado";if(t.type==="system.threshold")return`${t.metric} ${t.operator} ${t.threshold}`;if(t.type==="app-start")return"Ao iniciar o Nexo";return"Manual";}
 function actionSummary(automation:AutomationV2):string{if(!automation.actions.length)return"Nenhuma ação";const names=automation.actions.map(action=>action.type==="nexo.command"?"Comando Nexo":action.type==="notification.show"?"Notificação":action.type);return names.slice(0,2).join(" + ")+(names.length>2?` +${names.length-2}`:"");}
+function fallbackPrompt(automation:AutomationV2):string{const command=automation.actions.find(action=>action.type==="nexo.command")?.config.command;if(typeof command==="string"&&command.trim())return command.trim();return `Execute a automação "${automation.name}" e explique o resultado de forma objetiva.`;}

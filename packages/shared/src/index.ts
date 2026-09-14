@@ -54,7 +54,7 @@ export type ConnectionProvider = "google" | "microsoft";
 export type ConnectionCapability = "email.read" | "email.send" | "email.modify" | "calendar.read" | "calendar.write";
 export type ConnectionStatus = "not-configured" | "authorizing" | "connecting" | "validating" | "connected" | "degraded" | "refreshing" | "expired" | "reauthorization-required" | "error" | "admin-consent-required";
 export type CapabilityGrantState = "not-requested" | "requested" | "granted" | "validated" | "denied" | "unavailable" | "reauthorization-required";
-export type CapabilityValidationSource = "token-response" | "token-info" | "persisted" | "api-probe";
+export type CapabilityValidationSource = "token-response" | "api-probe";
 export type CapabilityGrant = {
   capability:ConnectionCapability;
   requested:boolean;
@@ -71,7 +71,7 @@ export type CapabilityGrant = {
 };
 export type ConnectionAccount = {
   id:string;provider:ConnectionProvider;accountEmail?:string;displayName?:string;capabilities:ConnectionCapability[];requestedCapabilities?:ConnectionCapability[];grantedScopes?:string[];
-  capabilityGrants?:CapabilityGrant[];oauthClientId?:string;scopeSource?:"token-response"|"token-info"|"persisted"|"unknown";
+  capabilityGrants?:CapabilityGrant[];oauthClientId?:string;scopeSource?:"token-response"|"unknown";
   status:ConnectionStatus;lastError?:string;updatedAt:string;lastConnectedAt?:string;lastValidatedAt?:string;lastRefreshAt?:string;tokenExpiresAt?:string;providerAccountId?:string;
   lastHealthCheckAt?:string;reauthorizationReason?:string;
 };
@@ -86,7 +86,7 @@ export type ConnectionDiagnosticSnapshot = {
   refreshTokenPresent:boolean;
   requestedCapabilities:ConnectionCapability[];
   grantedScopes:string[];
-  scopeSource?:"token-response"|"token-info"|"persisted"|"unknown";
+  scopeSource?:"token-response"|"unknown";
   capabilities:CapabilityGrant[];
   lastValidatedAt?:string;
   lastRefreshAt?:string;

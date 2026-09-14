@@ -29,6 +29,7 @@ function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
   const name=requireText(data.name,"Nome",160);
   const description=optionalText(data.description,"Descrição",1200);
   const icon=optionalText(data.icon,"Ícone",80);
+  const prompt=optionalText(data.prompt,"Solicitação",4000);
   if(typeof data.enabled!=="boolean")throw new Error("Status da automação inválido.");
   const trigger=validateTrigger(data.trigger);
   const conditions=validateConditions(data.conditions);
@@ -37,7 +38,7 @@ function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
   const actions=validateActions(data.actions,allowedActions);
   const output=validateOutput(data.output);
   const policy=validatePolicy(data.policy);
-  return {name,description,icon,enabled:data.enabled,trigger,conditions,conditionOperator,actions,output,policy};
+  return {name,description,icon,prompt,enabled:data.enabled,trigger,conditions,conditionOperator,actions,output,policy};
 }
 
 function validateTrigger(value:unknown):AutomationTrigger {
@@ -88,7 +89,7 @@ function validateOutput(value:unknown):AutomationOutput {
 function validatePolicy(value:unknown):AutomationPolicy {
   if(value===undefined)return{maxConcurrentRuns:1,retries:{enabled:true,count:2},onRepeatedFailure:"pause"};const data=requireRecord(value,"Política"),retries=requireRecord(data.retries,"Retry");return{maxConcurrentRuns:1,retries:{enabled:retries.enabled!==false,count:requireInteger(retries.count??2,"Quantidade de retries",0,5)},onRepeatedFailure:data.onRepeatedFailure==="continue"?"continue":"pause"};
 }
-function pickEditable(value:Record<string,unknown>){return{name:value.name,description:value.description,icon:value.icon,enabled:value.enabled,trigger:value.trigger,conditions:value.conditions,conditionOperator:value.conditionOperator,actions:value.actions,output:value.output,policy:value.policy};}
+function pickEditable(value:Record<string,unknown>){return{name:value.name,description:value.description,icon:value.icon,prompt:value.prompt,enabled:value.enabled,trigger:value.trigger,conditions:value.conditions,conditionOperator:value.conditionOperator,actions:value.actions,output:value.output,policy:value.policy};}
 function requireId(value:unknown){return requireText(value,"ID da automação",200);}
 function requireRecord(value:unknown,name:string):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw new Error(`${name} inválida.`);return value as Record<string,unknown>;}
 function requireText(value:unknown,name:string,max:number){if(typeof value!=="string"||!value.trim()||value.trim().length>max)throw new Error(`${name} inválido.`);return value.trim();}

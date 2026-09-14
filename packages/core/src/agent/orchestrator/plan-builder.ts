@@ -42,7 +42,7 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
 
   if (["read", "list", "search", "summarize"].includes(intent.intent)) {
     if (previousIds.length) {
-      return readStep("email_get_many", { messageIds: previousIds.slice(0, 30) }, "Carregando os e-mails selecionados da conversa…", tools, "synthesize");
+      return readStep("email_get_many", { messageIds: previousIds.slice(0, 30), ...(previous?.emailConnectionId ? {connectionId:previous.emailConnectionId} : {}) }, "Carregando os e-mails selecionados da conversa…", tools, "synthesize");
     }
     return readStep("email_search", { query, unread, maxResults }, intent.intent === "summarize" ? "Buscando os e-mails que serão resumidos…" : "Consultando os e-mails…", tools, "synthesize");
   }
@@ -67,9 +67,9 @@ function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previ
     if (previousIds.length) {
       const selected = filterPreviousEmailIds(previousIds, previous, sender);
       if (!selected.length) return { direct: "Nenhum e-mail do resultado anterior corresponde ao filtro informado." };
-      const lookup=readStepOnly("email_get_many", {messageIds:selected.slice(0,30)}, "Verificando os e-mails selecionados…", tools);
+      const lookup=readStepOnly("email_get_many", {messageIds:selected.slice(0,30),...(previous?.emailConnectionId ? {connectionId:previous.emailConnectionId} : {})}, "Verificando os e-mails selecionados…", tools);
       if(!lookup)return unavailable("email_get_many");
-      return {steps:[lookup],deferredAction:{kind:"email.bulk",action,sender,subject,receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true||Boolean(intent.reference?.selection.type==="indices"&&intent.reference.selection.indices?.length)},responseMode:"deterministic"};
+      return {steps:[lookup],deferredAction:{kind:"email.bulk",action,sender,subject,receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true||Boolean(intent.reference?.selection.type==="indices"&&intent.reference.selection.indices?.length||intent.reference?.selection.type==="first"&&(intent.reference.selection.count??1)>1)},responseMode:"deterministic"};
     }
     const search = readStepOnly("email_search", { query, unread, maxResults: Math.max(maxResults, 20) }, "Localizando exatamente os e-mails que podem ser alterados…", tools);
     if (!search) return unavailable("email_search");
@@ -113,10 +113,10 @@ function buildCalendarPlan(intent: AgentIntent, tools: AgentToolDescriptor[], pr
   if (intent.intent === "delete" || intent.intent === "update") {
     const previousIds = intent.referencesPreviousResult ? selectedPreviousEventIds(previous, intent.reference) : [];
     if (previousIds.length === 1) {
-      if (intent.intent === "delete") return calendarDelete(previousIds[0], previous?.events?.find(event => event.id === previousIds[0]), tools);
+      if (intent.intent === "delete") return calendarDelete(previousIds[0], previous?.events?.find(event => event.id === previousIds[0]), tools, previous?.calendarConnectionId);
       const patch = calendarPatch(entities, period);
       if (!Object.keys(patch).length) return { direct: "O que você quer alterar nesse compromisso?" };
-      return calendarUpdate(previousIds[0], patch, previous?.events?.find(event => event.id === previousIds[0]), tools);
+      return calendarUpdate(previousIds[0], patch, previous?.events?.find(event => event.id === previousIds[0]), tools, previous?.calendarConnectionId);
     }
     const search = readStepOnly("calendar_search", { start: range.start, end: range.end, query }, "Localizando o compromisso exato…", tools);
     if (!search) return unavailable("calendar_search");
@@ -181,15 +181,15 @@ function bulkEmailWrite(action: "trash" | "archive" | "mark_read" | "mark_unread
   });
 }
 
-function calendarDelete(id: string, event: any, tools: AgentToolDescriptor[]): BuiltIntentPlan {
-  return writeStep("calendar_delete", { eventId: id }, "Preparando o cancelamento para sua confirmação…", tools, {
+function calendarDelete(id: string, event: any, tools: AgentToolDescriptor[], connectionId?:string): BuiltIntentPlan {
+  return writeStep("calendar_delete", { eventId: id, ...(connectionId?{connectionId}:{}) }, "Preparando o cancelamento para sua confirmação…", tools, {
     domain: "calendar", actionType: "delete", affectedCount: 1,
     preview: event ? `${event.title ?? "Compromisso"}\n${event.start ? formatDate(event.start) : ""}` : `Compromisso ${id}`,
     consequence: "O compromisso será cancelado.", expiresInMs: 5 * 60_000
   });
 }
-function calendarUpdate(id: string, patch: Record<string, unknown>, event: any, tools: AgentToolDescriptor[]): BuiltIntentPlan {
-  return writeStep("calendar_update", { eventId: id, ...patch }, "Preparando a alteração para sua confirmação…", tools, {
+function calendarUpdate(id: string, patch: Record<string, unknown>, event: any, tools: AgentToolDescriptor[], connectionId?:string): BuiltIntentPlan {
+  return writeStep("calendar_update", { eventId: id, ...patch, ...(connectionId?{connectionId}:{}) }, "Preparando a alteração para sua confirmação…", tools, {
     domain: "calendar", actionType: "update", affectedCount: 1,
     preview: `${event?.title ?? "Compromisso"}\nAlterações: ${JSON.stringify(patch)}`,
     consequence: "O compromisso será alterado.", expiresInMs: 10 * 60_000

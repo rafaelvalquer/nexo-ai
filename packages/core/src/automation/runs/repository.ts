@@ -19,6 +19,10 @@ export class AutomationRunRepository {
     this.db.run("UPDATE automation_runs SET status=?,finished_at=?,duration_ms=?,summary=?,error=?,approval_id=? WHERE id=?", [status, finishedAt, durationMs ?? null, details.summary ?? null, details.error ?? null, details.approvalId ?? null, id]);
   }
 
+  linkTask(id:string,conversationId:string,taskId:string):void {
+    this.db.run("UPDATE automation_runs SET conversation_id=?,task_id=? WHERE id=?",[conversationId,taskId,id]);
+  }
+
   waitForApproval(id: string, approvalId: string, context: AutomationExecutionContext, nextActionIndex: number): void {
     this.db.run("UPDATE automation_runs SET status='waiting_approval',approval_id=?,context_json=?,next_action_index=? WHERE id=?", [approvalId, JSON.stringify(context), nextActionIndex, id]);
   }
@@ -66,7 +70,7 @@ export class AutomationRunRepository {
   pendingApprovalIds(): string[] { return this.db.all<{approval_id:string}>("SELECT approval_id FROM automation_runs WHERE status='waiting_approval' AND approval_id IS NOT NULL").map(row=>row.approval_id); }
 
   private mapRun(row: RunRow, includeSteps: boolean): AutomationRunViewModel {
-    const run: AutomationRunViewModel = { id: row.id, automationId: row.automation_id, triggerType: row.trigger_type, status: asStatus(row.status), startedAt: row.started_at, finishedAt: row.finished_at ?? undefined, durationMs: row.duration_ms ?? undefined, summary: row.summary ?? undefined, error: row.error ?? undefined, taskId: row.task_id ?? undefined, approvalId: row.approval_id ?? undefined };
+    const run: AutomationRunViewModel = { id: row.id, automationId: row.automation_id, triggerType: row.trigger_type, status: asStatus(row.status), startedAt: row.started_at, finishedAt: row.finished_at ?? undefined, durationMs: row.duration_ms ?? undefined, summary: row.summary ?? undefined, error: row.error ?? undefined, taskId: row.task_id ?? undefined, conversationId: row.conversation_id ?? undefined, approvalId: row.approval_id ?? undefined };
     if (includeSteps) run.steps = this.db.all<StepRow>("SELECT * FROM automation_run_steps WHERE run_id=? ORDER BY ordinal", [row.id]).map(mapStep);
     return run;
   }
@@ -77,7 +81,7 @@ export class AutomationRunRepository {
   }
 }
 
-type RunRow = { id:string;automation_id:string;trigger_type:string;status:string;started_at:string;finished_at:string|null;duration_ms:number|null;summary:string|null;error:string|null;task_id:string|null;approval_id:string|null;context_json:string|null;next_action_index:number|null };
+type RunRow = { id:string;automation_id:string;trigger_type:string;status:string;started_at:string;finished_at:string|null;duration_ms:number|null;summary:string|null;error:string|null;task_id:string|null;conversation_id:string|null;approval_id:string|null;context_json:string|null;next_action_index:number|null };
 type StepRow = { id:string;run_id:string;ordinal:number;action_id:string;action_type:string;status:string;started_at:string;finished_at:string|null;duration_ms:number|null;summary:string|null;error:string|null;approval_id:string|null };
 function mapStep(row: StepRow): AutomationRunStepViewModel { return { id:row.id,runId:row.run_id,ordinal:row.ordinal,actionId:row.action_id,actionType:row.action_type,status:asStatus(row.status),startedAt:row.started_at,finishedAt:row.finished_at??undefined,durationMs:row.duration_ms??undefined,summary:row.summary??undefined,error:row.error??undefined,approvalId:row.approval_id??undefined }; }
 function asStatus(value:string):AutomationRunStatus { return value === "queued" || value === "running" || value === "waiting_approval" || value === "success" || value === "failed" || value === "skipped" || value === "cancelled" ? value : "failed"; }

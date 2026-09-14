@@ -1,4 +1,4 @@
-import type { ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest, CreateAutomationV2Input, UpdateAutomationV2Input } from "@nexo/shared";
+import type { ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest, CreateAutomationV2Input, UpdateAutomationV2Input, AutomationExecutionResult, AutomationViewModel } from "@nexo/shared";
 import { contextBridge,ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("nexoOllama",{pull:(model:string)=>ipcRenderer.invoke("nexo:ollama:pull",model),onProgress:(callback:(event:unknown)=>void)=>{const listener=(_event:unknown,payload:unknown)=>callback(payload);ipcRenderer.on("nexo:ollama:pull-progress",listener);return()=>ipcRenderer.removeListener("nexo:ollama:pull-progress",listener);}});
 const legacyStart=(text:string,attachments:string[])=>(ipcRenderer.invoke("nexo:conversations:list") as Promise<Array<{id:string}>>).then(async conversations=>{const conversation=conversations[0]??await ipcRenderer.invoke("nexo:conversations:create");return ipcRenderer.invoke("nexo:chat:start",conversation.id,text,attachments);});
@@ -20,7 +20,7 @@ updateAutomation:(id:string,data:UpdateAutomationV2Input)=>ipcRenderer.invoke("n
 duplicateAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:duplicate",id),
 toggleAutomation:(id:string,enabled:boolean)=>ipcRenderer.invoke("nexo:automation:toggle",id,enabled),
 removeAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:remove",id),
-runAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:run",id),
+runAutomation:(id:string):Promise<AutomationExecutionResult|AutomationViewModel>=>ipcRenderer.invoke("nexo:automation:run",id),
 testAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:test",id),
 listAutomationRuns:(id:string,limit=50)=>ipcRenderer.invoke("nexo:automation:runs",id,limit),
 getAutomationRun:(id:string)=>ipcRenderer.invoke("nexo:automation:run-get",id),

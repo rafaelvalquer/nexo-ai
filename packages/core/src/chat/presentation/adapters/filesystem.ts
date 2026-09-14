@@ -9,6 +9,7 @@ export function fileActions(folder: boolean): ResourceAction[] {
   return [
     ...(folder ? [{ id: "folder.list", icon: "list", label: "Listar pasta", mutation: false }, { id: "folder.search", icon: "search", label: "Pesquisar na pasta", mutation: false }] as ResourceAction[] : [{ id: "file.preview", icon: "preview", label: "Visualizar", mutation: false }] as ResourceAction[]),
     { id: "file.open_folder", icon: "open", label: "Abrir pasta", mutation: false },
+    ...(!folder ? [{id:"file.open",icon:"open",label:"Abrir externamente",mutation:false}] as ResourceAction[] : []),
     { id: "file.rename", icon: "edit", label: "Renomear", mutation: true },
     { id: "file.move", icon: "move", label: "Mover", mutation: true },
     { id: "file.trash", icon: "trash", label: "Mover para a lixeira", mutation: true },

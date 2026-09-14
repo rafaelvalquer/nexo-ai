@@ -64,6 +64,7 @@ export class AutomationRepository {
       actions: source.actions,
       output: source.output,
       policy: source.policy
+      ,prompt: source.prompt
     });
   }
 
@@ -109,16 +110,16 @@ export class AutomationRepository {
   private insert(automation: AutomationV2): void {
     const legacy = legacyColumns(automation);
     this.db.run(
-      "INSERT INTO automations(id,name,enabled,trigger_type,schedule,watch_path,command,last_run_at,created_at,version,description,icon,trigger_json,conditions_json,condition_operator,actions_json,output_json,policy_json,updated_at,next_run_at,last_run_status,consecutive_failures) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [automation.id, automation.name, automation.enabled ? 1 : 0, legacy.triggerType, legacy.schedule, legacy.watchPath, legacy.command, automation.lastRunAt ?? null, automation.createdAt, 2, automation.description ?? null, automation.icon ?? null, JSON.stringify(automation.trigger), JSON.stringify(automation.conditions), automation.conditionOperator, JSON.stringify(automation.actions), JSON.stringify(automation.output), JSON.stringify(automation.policy), automation.updatedAt, automation.nextRunAt ?? null, automation.lastRunStatus ?? null, automation.consecutiveFailures]
+      "INSERT INTO automations(id,name,enabled,trigger_type,schedule,watch_path,command,last_run_at,created_at,version,description,icon,trigger_json,conditions_json,condition_operator,actions_json,output_json,policy_json,prompt,updated_at,next_run_at,last_run_status,consecutive_failures) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [automation.id, automation.name, automation.enabled ? 1 : 0, legacy.triggerType, legacy.schedule, legacy.watchPath, legacy.command, automation.lastRunAt ?? null, automation.createdAt, 2, automation.description ?? null, automation.icon ?? null, JSON.stringify(automation.trigger), JSON.stringify(automation.conditions), automation.conditionOperator, JSON.stringify(automation.actions), JSON.stringify(automation.output), JSON.stringify(automation.policy), automation.prompt ?? null, automation.updatedAt, automation.nextRunAt ?? null, automation.lastRunStatus ?? null, automation.consecutiveFailures]
     );
   }
 
   private write(automation: AutomationV2): void {
     const legacy = legacyColumns(automation);
     this.db.run(
-      "UPDATE automations SET name=?,enabled=?,trigger_type=?,schedule=?,watch_path=?,command=?,version=2,description=?,icon=?,trigger_json=?,conditions_json=?,condition_operator=?,actions_json=?,output_json=?,policy_json=?,updated_at=?,next_run_at=?,last_run_status=?,consecutive_failures=? WHERE id=?",
-      [automation.name, automation.enabled ? 1 : 0, legacy.triggerType, legacy.schedule, legacy.watchPath, legacy.command, automation.description ?? null, automation.icon ?? null, JSON.stringify(automation.trigger), JSON.stringify(automation.conditions), automation.conditionOperator, JSON.stringify(automation.actions), JSON.stringify(automation.output), JSON.stringify(automation.policy), automation.updatedAt, automation.nextRunAt ?? null, automation.lastRunStatus ?? null, automation.consecutiveFailures, automation.id]
+      "UPDATE automations SET name=?,enabled=?,trigger_type=?,schedule=?,watch_path=?,command=?,version=2,description=?,icon=?,trigger_json=?,conditions_json=?,condition_operator=?,actions_json=?,output_json=?,policy_json=?,prompt=?,updated_at=?,next_run_at=?,last_run_status=?,consecutive_failures=? WHERE id=?",
+      [automation.name, automation.enabled ? 1 : 0, legacy.triggerType, legacy.schedule, legacy.watchPath, legacy.command, automation.description ?? null, automation.icon ?? null, JSON.stringify(automation.trigger), JSON.stringify(automation.conditions), automation.conditionOperator, JSON.stringify(automation.actions), JSON.stringify(automation.output), JSON.stringify(automation.policy), automation.prompt ?? null, automation.updatedAt, automation.nextRunAt ?? null, automation.lastRunStatus ?? null, automation.consecutiveFailures, automation.id]
     );
   }
 
@@ -137,6 +138,7 @@ export class AutomationRepository {
         conditionOperator: (row.condition_operator === "OR" ? "OR" : "AND") as AutomationConditionLogicalOperator,
         actions: safeJson<AutomationAction[]>(row.actions_json, []),
         output: safeJson<AutomationOutput>(row.output_json, DEFAULT_AUTOMATION_OUTPUT),
+        prompt: row.prompt ?? undefined,
         policy: safeJson<AutomationPolicy>(row.policy_json, DEFAULT_AUTOMATION_POLICY),
         createdAt,
         updatedAt: row.updated_at ?? createdAt,
@@ -153,7 +155,7 @@ export class AutomationRepository {
 type AutomationRow = {
   id: string; name: string; enabled: number; trigger_type: string; schedule: string | null; watch_path: string | null; command: string; last_run_at: string | null; created_at: string;
   version?: number | null; description?: string | null; icon?: string | null; trigger_json?: string | null; conditions_json?: string | null; condition_operator?: string | null; actions_json?: string | null; output_json?: string | null; policy_json?: string | null;
-  updated_at?: string | null; next_run_at?: string | null; last_run_status?: string | null; consecutive_failures?: number | null;
+  updated_at?: string | null; next_run_at?: string | null; last_run_status?: string | null; consecutive_failures?: number | null; prompt?: string | null;
 };
 
 function legacyToV2(row: AutomationRow): AutomationV2 {

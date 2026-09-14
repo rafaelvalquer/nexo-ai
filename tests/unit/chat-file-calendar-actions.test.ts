@@ -38,6 +38,22 @@ it("lists real file sizes and previews text inline",async()=>{
   expect(result.result?.data).toEqual(expect.arrayContaining([expect.objectContaining({name:"report.txt",size:Buffer.byteLength("Conteúdo original")})]));
   const preview=await service.execute({...request,actionId:"file.preview"});expect(preview.preview).toEqual({kind:"text",content:"Conteúdo original"});
 });
+it.each(["md","csv","json"])("previews %s files as text without executing their content",async extension=>{
+  const name=`preview.${extension}`,content='{"message":"conteúdo de teste"}';fs.writeFileSync(path.join(files,name),content);
+  const selected=save("list_files",[{name,path:path.join(files,name),type:"file"}],"file.preview");
+  expect((await service.execute(selected)).preview).toEqual({kind:"text",content});
+});
+it.each([["png","image","image/png"],["pdf","pdf","application/pdf"]])("returns %s previews and an exact external-open action",async(extension,kind,mime)=>{
+  const name=`preview.${extension}`,bytes=Buffer.from(extension==="pdf"?"%PDF-1.4\n%%EOF":"image fixture");fs.writeFileSync(path.join(files,name),bytes);
+  const selected=save("list_files",[{name,path:path.join(files,name),type:"file"}],"file.preview");
+  expect((await service.execute(selected)).preview).toEqual({kind,content:`data:${mime};base64,${bytes.toString("base64")}`});
+  expect((await service.execute({...selected,actionId:"file.open"})).openPath).toBe(path.join(files,name));
+});
+it("opens an unsupported preview externally using the persisted path",async()=>{
+  const name="document.bin";fs.writeFileSync(path.join(files,name),"binary fixture");
+  const selected=save("list_files",[{name,path:path.join(files,name),type:"file"}],"file.preview");
+  expect(await service.execute(selected)).toMatchObject({openPath:path.join(files,name)});
+});
 it("renames only after approval and updates the card binding for later actions",async()=>{
   const pending=await service.execute({...request,values:{newName:"renamed.txt"}});
   expect(fs.existsSync(path.join(files,"report.txt"))).toBe(true);expect(fs.existsSync(path.join(files,"renamed.txt"))).toBe(false);
@@ -50,6 +66,25 @@ it("changed file metadata invalidates the preflight before mutation",async()=>{
   const pending=await service.execute({...request,actionId:"file.trash"});fs.appendFileSync(path.join(files,"report.txt")," Alterado");
   await expect(service.resolveApproval(pending.approval!.approvalId,true)).rejects.toThrow("mudou desde a prévia");expect(trash).not.toHaveBeenCalled();
   await service.resolveApproval(pending.approval!.approvalId,false);
+});
+it("refuses to overwrite an existing destination",async()=>{
+  fs.writeFileSync(path.join(files,"existing.txt"),"Preservar");
+  await expect(service.execute({...request,values:{newName:"existing.txt"}})).rejects.toThrow("Já existe");
+  expect(approvals.list()).toHaveLength(0);expect(fs.readFileSync(path.join(files,"existing.txt"),"utf8")).toBe("Preservar");
+});
+it("revalidates a destination created after approval preview",async()=>{
+  const pending=await service.execute({...request,values:{newName:"reserved.txt"}});
+  fs.writeFileSync(path.join(files,"reserved.txt"),"Outro arquivo");
+  await expect(service.resolveApproval(pending.approval!.approvalId,true)).rejects.toThrow("Já existe");
+  expect(fs.existsSync(path.join(files,"report.txt"))).toBe(true);expect(fs.readFileSync(path.join(files,"reserved.txt"),"utf8")).toBe("Outro arquivo");
+});
+it("does not allow a destination junction to escape allowed roots",async()=>{
+  const outside=fs.mkdtempSync(path.join(process.cwd(),".nexo-chat-test-denied-"));
+  try{
+    fs.symlinkSync(outside,path.join(files,"junction"),process.platform==="win32"?"junction":"dir");
+    await expect(service.execute({...request,actionId:"file.move",values:{destination:path.join(files,"junction")}})).rejects.toThrow("fora do escopo");
+    expect(approvals.list()).toHaveLength(0);expect(fs.existsSync(path.join(files,"report.txt"))).toBe(true);
+  }finally{if(!path.resolve(outside).startsWith(path.resolve(process.cwd())+path.sep+".nexo-chat-test-denied-"))throw new Error("Unsafe test cleanup");fs.rmSync(outside,{recursive:true,force:true});}
 });
 it("file trash uses the exact path and respects a policy disabled after preview",async()=>{
   const pending=await service.execute({...request,actionId:"file.trash"});expect(approvals.list()[0].input).toEqual({path:path.join(files,"report.txt")});

@@ -138,6 +138,10 @@ export class ConnectionService {
       operationalCapabilities=validation.operationalCapabilities;
       status=connectionStatusFromGrants(capabilities,grants);
       lastError=summarizeGrantFailures(grants);
+      if(operationalCapabilities.length===0){
+        const detail=lastError??"Nenhuma permissão Google foi validada pelas APIs do provedor.";
+        throw oauthStageError(provider,"validando as permissões solicitadas",new Error(`${detail}\nNenhuma capability foi ativada; autorize novamente após corrigir Google Cloud → Google Auth Platform → Data Access.`));
+      }
     }else{
       grantedScopes=parseScopes(tokens.scope);
       operationalCapabilities=capabilities.filter(capability=>microsoftScopeAllows(grantedScopes,capability));

@@ -1,0 +1,2 @@
+import { CheckCircle2,TriangleAlert,X } from "lucide-react";
+export function InlineNotice({type,message,onDismiss}:{type:"success"|"error";message:string;onDismiss?:()=>void}){const Icon=type==="success"?CheckCircle2:TriangleAlert;return <div className={`inlineNotice ${type}`} role={type==="error"?"alert":"status"} aria-live={type==="error"?"assertive":"polite"}><Icon size={17}/><span>{message}</span>{onDismiss&&<button type="button" aria-label="Fechar mensagem" onClick={onDismiss}><X size={15}/></button>}</div>;}

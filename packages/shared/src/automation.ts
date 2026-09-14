@@ -82,6 +82,7 @@ export type AutomationV2 = {
   conditionOperator: AutomationConditionLogicalOperator;
   actions: AutomationAction[];
   output: AutomationOutput;
+  prompt?: string;
   policy: AutomationPolicy;
   createdAt: string;
   updatedAt: string;
@@ -125,6 +126,7 @@ export type AutomationRunViewModel = {
   summary?: string;
   error?: string;
   taskId?: string;
+  conversationId?: string;
   approvalId?: string;
   steps?: AutomationRunStepViewModel[];
 };
@@ -155,7 +157,15 @@ export type AutomationPreset = {
     actions: AutomationAction[];
     output?: AutomationOutput;
     policy?: AutomationPolicy;
+    prompt?: string;
   };
+};
+
+export type AutomationExecutionResult = {
+  automationId: string;
+  runId: string;
+  conversationId: string;
+  taskId: string;
 };
 
 export type CreateAutomationV2Input = Omit<AutomationV2, "id" | "version" | "createdAt" | "updatedAt" | "nextRunAt" | "lastRunAt" | "lastRunStatus" | "consecutiveFailures">;

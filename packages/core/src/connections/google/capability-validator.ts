@@ -30,12 +30,10 @@ export async function validateGoogleCapabilities(options: {
   const scopeMap = new Map<ConnectionCapability, string | undefined>();
   for (const capability of requested) scopeMap.set(capability, supportingGoogleScope(options.grantedScopes, capability));
 
-  const needsGmailProbe = requested.some(capability =>
-    (capability === "email.read" || capability === "email.modify") && Boolean(scopeMap.get(capability))
-  );
-  const needsCalendarProbe = requested.some(capability =>
-    capability.startsWith("calendar.") && Boolean(scopeMap.get(capability))
-  );
+  // Run read/calendar probes even when `scope` was omitted. The API result is
+  // the source of truth in that case; requested scopes are never inferred.
+  const needsGmailProbe = requested.some(capability => capability === "email.read" || capability === "email.modify");
+  const needsCalendarProbe = requested.some(capability => capability.startsWith("calendar."));
 
   const [gmailProbe, calendarProbe] = await Promise.all([
     needsGmailProbe ? probe(options.accessToken, GOOGLE_GMAIL_PROFILE) : Promise.resolve<ProbeResult | undefined>(undefined),
@@ -45,37 +43,38 @@ export async function validateGoogleCapabilities(options: {
   const grants = requested.map(capability => {
     const supportingScope = scopeMap.get(capability);
     const expectedScopes = expectedGoogleScopes(capability);
-    if (!supportingScope) {
+    if (capability === "email.send") {
+      if (supportingScope) return {
+        capability, requested: true, expectedScopes, granted: true, grantedByScope: supportingScope,
+        validated: true, status: "validated", validationSource: scopeValidationSource(options.scopeSource), lastValidatedAt: now
+      } satisfies CapabilityGrant;
+      return {
+        capability, requested: true, expectedScopes, granted: false, validated: false,
+        status: options.scopeSource === "unknown" ? "unavailable" : "denied",
+        validationSource: options.scopeSource === "unknown" ? undefined : scopeValidationSource(options.scopeSource),
+        providerReason: options.scopeSource === "unknown" ? "scope_unknown" : "missing_scope",
+        providerMessage: options.scopeSource === "unknown"
+          ? `O Google não informou os scopes concedidos para ${capabilityLabel(capability)}.`
+          : `O token Google não contém um scope compatível com ${capabilityLabel(capability)}.`, lastValidatedAt: now
+      } satisfies CapabilityGrant;
+    }
+    if (!supportingScope && options.scopeSource !== "unknown") {
       return {
         capability,
         requested: true,
         expectedScopes,
         granted: false,
         validated: false,
-        status: options.scopeSource === "unknown" ? "unavailable" : "denied",
-        validationSource: options.scopeSource === "unknown" ? undefined : scopeValidationSource(options.scopeSource),
-        providerReason: options.scopeSource === "unknown" ? "scope_unknown" : "missing_scope",
-        providerMessage: options.scopeSource === "unknown"
-          ? `O Google não informou os scopes concedidos para ${capabilityLabel(capability)}.`
-          : `O token Google não contém um scope compatível com ${capabilityLabel(capability)}.`,
+        status: "denied",
+        validationSource: scopeValidationSource(options.scopeSource),
+        providerReason: "missing_scope",
+        providerMessage: `O token Google não contém um scope compatível com ${capabilityLabel(capability)}.`,
         lastValidatedAt: now
       } satisfies CapabilityGrant;
     }
 
-    if (capability === "email.send") {
-      // There is no side-effect-free Gmail endpoint that proves send by itself. Scope is authoritative.
-      return {
-        capability,
-        requested: true,
-        expectedScopes,
-        granted: true,
-        grantedByScope: supportingScope,
-        validated: true,
-        status: "validated",
-        validationSource: scopeValidationSource(options.scopeSource),
-        lastValidatedAt: now
-      } satisfies CapabilityGrant;
-    }
+    // There is no side-effect-free Gmail endpoint that proves send by itself;
+    // the reported `gmail.send` grant is handled above without mutation.
 
     const serviceProbe = capability.startsWith("email.") ? gmailProbe : calendarProbe;
     if (serviceProbe?.ok) {
@@ -115,9 +114,7 @@ export async function validateGoogleCapabilities(options: {
 }
 
 function scopeValidationSource(source: GoogleScopeSource): CapabilityGrant["validationSource"] {
-  if (source === "token-info") return "token-info";
   if (source === "token-response") return "token-response";
-  if (source === "persisted") return "persisted";
   return undefined;
 }
 
@@ -152,10 +149,10 @@ async function probe(token: string, url: string): Promise<ProbeResult> {
 function explainProbeFailure(capability: ConnectionCapability, probeResult?: ProbeResult) {
   const service = capability.startsWith("email.") ? "Gmail" : "Google Calendar";
   if (!probeResult) return `${service}: não foi possível executar a validação operacional.`;
-  if (probeResult.category === "api_disabled") return `${service}: a API está desabilitada ou pertence a um projeto diferente do Client ID OAuth.`;
-  if (probeResult.category === "insufficient_permission") return `${service}: o scope necessário está presente no token, mas a API recusou a chamada por permissão insuficiente. Verifique se a API e o Client ID pertencem ao mesmo projeto Google Cloud.`;
+  if (probeResult.category === "api_disabled") return `${service}: a API está desabilitada ou pertence a um projeto diferente do Client ID OAuth. Habilite-a em Google Cloud → Google Auth Platform → Data Access e confirme o projeto do Client ID.`;
+  if (probeResult.category === "insufficient_permission") return `${service}: o scope necessário está presente no token, mas a API recusou a chamada por permissão insuficiente. Verifique Google Cloud → Google Auth Platform → Data Access, habilitação da API e Test users quando o app estiver em Testing.`;
   if (probeResult.category === "unauthorized") return `${service}: o access token foi recusado. A conta precisa ser autorizada novamente.`;
-  if (probeResult.category === "access_denied") return `${service}: o Google negou o acesso por política ou configuração da conta/projeto.`;
+  if (probeResult.category === "access_denied") return `${service}: o Google negou o acesso por política ou configuração da conta/projeto. Verifique Data Access e Test users e revogue o acesso do Nexo antes de reautorizar.`;
   if (probeResult.category === "transient") return `${service}: a validação falhou temporariamente${probeResult.httpStatus ? ` (HTTP ${probeResult.httpStatus})` : ""}. A autorização foi preservada.`;
   return `${service}: o Google recusou a validação${probeResult.httpStatus ? ` (HTTP ${probeResult.httpStatus})` : ""}.`;
 }

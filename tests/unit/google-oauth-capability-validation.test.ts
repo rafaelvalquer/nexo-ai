@@ -28,22 +28,20 @@ function oauthMock(options:{scope?:string;tokenInfoScope?:string;gmail?:Response
 }
 
 describe("Google OAuth capability validation",()=>{
-  it("uses tokeninfo to validate Gmail when the token response omits scope",async()=>{
+  it("uses the Gmail probe when the token response omits scope",async()=>{
     oauthMock({tokenInfoScope:`openid email profile ${GMAIL_READ}`});const value=await service();const account=await value.connect("google",["email.read"]);
-    expect(account.capabilities).toEqual(["email.read"]);expect(account.grantedScopes).toContain(GMAIL_READ);expect(account.scopeSource).toBe("token-info");
+    expect(account.capabilities).toEqual(["email.read"]);expect(account.grantedScopes).toEqual([]);expect(account.scopeSource).toBe("unknown");
   });
 
-  it("persists a diagnostic connection without orphaning tokens when Gmail rejects the requested scope",async()=>{
+  it("does not persist a connection or token when Gmail validation fails",async()=>{
     oauthMock({scope:"openid email profile",tokenInfoScope:"openid email profile",gmail:new Response(JSON.stringify({error:{message:"Request had insufficient authentication scopes.",errors:[{reason:"insufficientPermissions"}]}}),{status:403})});const value=await service();
-    const account=await value.connect("google",["email.read"]);
-    expect(account.status).toBe("reauthorization-required");expect(account.capabilities).toEqual([]);expect(account.capabilityGrants?.[0]?.providerReason).toBe("missing_scope");
-    expect(db.all("SELECT * FROM connections")).toHaveLength(1);
+    await expect(value.connect("google",["email.read"])).rejects.toThrow(/Nenhuma capability foi ativada/);
+    expect(db.all("SELECT * FROM connections")).toHaveLength(0);expect(secrets.values.size).toBe(0);
   });
 
-  it("explains a disabled Gmail API while preserving the authorization for diagnostics",async()=>{
-    oauthMock({tokenInfoScope:`openid email profile ${GMAIL_READ}`,gmail:new Response(JSON.stringify({error:{message:"Google Gmail API has not been used in project.",errors:[{reason:"accessNotConfigured"}]}}),{status:403})});const value=await service();
-    const account=await value.connect("google",["email.read"]);
-    expect(account.status).toBe("reauthorization-required");expect(account.lastError).toMatch(/API está desabilitada|projeto diferente/i);
+  it("explains a disabled Gmail API without persisting authorization",async()=>{
+    oauthMock({scope:GMAIL_READ,gmail:new Response(JSON.stringify({error:{message:"Google Gmail API has not been used in project.",errors:[{reason:"accessNotConfigured"}]}}),{status:403})});const value=await service();
+    await expect(value.connect("google",["email.read"])).rejects.toThrow(/API está desabilitada|projeto diferente/i);
   });
 
   it("keeps only Gmail active when Calendar validation fails and writes no secrets to diagnostics",async()=>{

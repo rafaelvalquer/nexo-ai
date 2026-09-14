@@ -25,6 +25,8 @@ export type ConversationActionContextState = {
   lastQuery?: string;
   emails?: ActionContextEmail[];
   events?: ActionContextCalendar[];
+  emailConnectionId?: string;
+  calendarConnectionId?: string;
 };
 
 const LIVE_EMAIL_SNAPSHOT_TOOLS = new Set(["email_search", "email_latest"]);
@@ -70,6 +72,7 @@ export function observeConversationActionContext(
     // clear the previous snapshot instead of leaving old Gmail IDs in context.
     if (LIVE_EMAIL_SNAPSHOT_TOOLS.has(step.tool)) next.emails = normalized;
     else if (normalized.length) next.emails = normalized;
+    if(LIVE_EMAIL_SNAPSHOT_TOOLS.has(step.tool)||normalized.length)next.emailConnectionId=typeof step.input.connectionId === "string"?step.input.connectionId:undefined;
   }
 
   if (isCalendarMutationTool(step.tool)) delete next.events;
@@ -89,6 +92,7 @@ export function observeConversationActionContext(
 
     if (LIVE_CALENDAR_SNAPSHOT_TOOLS.has(step.tool)) next.events = normalized;
     else if (normalized.length) next.events = normalized;
+    if(LIVE_CALENDAR_SNAPSHOT_TOOLS.has(step.tool)||normalized.length)next.calendarConnectionId=typeof step.input.connectionId === "string"?step.input.connectionId:undefined;
   }
 
   return next;

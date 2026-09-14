@@ -83,3 +83,24 @@ it("rejects forged conversations, items, actions and renderer-supplied tool para
   await expect(service.execute({...request,input:{messageId:"provider-3"}})).rejects.toThrow();
   expect(execute).not.toHaveBeenCalled();
 });
+it("pagination preserves a card approval created while the next page is loading",async()=>{
+  const record=conversations.presentationRecordForMessage(request.messageId)!;
+  const block=record.presentation.blocks[0] as ResourceCollectionBlock;
+  block.pagination={hasMore:true,cursor:"provider-cursor"};
+  conversations.savePresentation(request.messageId,record);
+  let release!:()=>void;
+  const waiting=new Promise<void>(resolve=>{release=resolve;});
+  const run=vi.spyOn(engine,"runPlan").mockImplementationOnce(async(_text,steps)=>{
+    expect(steps[0]).toMatchObject({tool:"email_search",input:{connectionId:"account",pageToken:"provider-cursor"}});
+    await waiting;
+    return{text:"Nova página",result:{ok:true,summary:"Nova página",data:{messages:[{...messages[0],id:"provider-next"}],total:5}}};
+  });
+  const loading=service.loadMore(request.conversationId,request.messageId,request.blockId);
+  const pending=await service.execute(request);
+  release();
+  const loaded=await loading;
+  expect(loaded.items).toHaveLength(5);
+  expect(loaded.items[0]).toMatchObject({state:"awaiting_approval",pendingApprovalId:pending.approval!.approvalId});
+  expect(conversations.getMessages(request.conversationId)[0].blocks).toContainEqual(pending.approval);
+  run.mockRestore();
+});

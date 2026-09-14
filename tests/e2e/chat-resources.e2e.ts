@@ -58,3 +58,38 @@ test("keyboard reply opens a composer and requires a separate confirmation",asyn
   await expect(page.getByText("Ação cancelada",{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath("chat-reply-keyboard.png")});
 });
+
+for(const label of ["Arquivar","Marcar como lido","Mover para a lixeira"]){
+  test(`keyboard ${label} prepares an exact card approval`,async({page})=>{
+    const card=page.locator(".resourceCard").first();
+    await card.getByRole("button",{name:label,exact:true}).focus();await page.keyboard.press("Enter");
+    await expect(page.getByRole("region",{name:"Confirmação da ação"})).toBeVisible();
+    const request=await page.evaluate(()=>(window as any).__resourceRequests.at(-1));
+    expect(request.itemId).toBe(await card.getAttribute("data-resource-id"));expect(request.itemIds).toBeUndefined();
+    await page.getByRole("button",{name:"Cancelar",exact:true}).focus();await page.keyboard.press("Enter");
+    expect(await page.evaluate(()=>(window as any).__resourceApprovals.at(-1).approved)).toBe(false);
+  });
+}
+
+test("file, folder, calendar and generic cards preserve keyboard controls and legacy Markdown",async({page},info)=>{
+  const files=builder.fromToolResult("list_files",{ok:true,summary:"Arquivos",data:[{name:"report.csv",path:"C:\\Downloads\\report.csv",type:"file",size:2800},{name:"Relatórios",path:"C:\\Downloads\\Relatórios",type:"directory",childCount:27}]}).presentation.blocks;
+  const calendar=builder.fromToolResult("calendar_list",{ok:true,summary:"Agenda",data:[{id:"event",title:"Daily URA",start:"2026-09-14T10:00:00Z",end:"2026-09-14T10:30:00Z",location:"Microsoft Teams",meetingUrl:"https://example.com/meeting"}]},{connectionId:"account"}).presentation.blocks;
+  const generic=builder.fromToolResult("unknown_tool",{ok:true,summary:"Resumo seguro da ferramenta",data:[{secret:"nunca exibir"}]}).presentation.blocks;
+  const messages=[{id:"mixed",conversationId:"preview-1",role:"assistant",content:"Fallback",createdAt:new Date().toISOString(),blocks:[...files,...calendar,...generic]},{id:"legacy",conversationId:"preview-1",role:"assistant",content:"**Mensagem antiga** continua legível.",createdAt:new Date().toISOString()}];
+  await page.evaluate(async({messages,modulePath})=>{(window as any).nexo.conversationMessages=async()=>structuredClone(messages);const {useAssistantStore}=await import(modulePath);await useAssistantStore.getState().sync();},{messages,modulePath:"/stores/assistant.ts"});
+  await page.setViewportSize({width:910,height:698});
+  await expect(page.locator(".resourceCard")).toHaveCount(4);await expect(page.getByText("Mensagem antiga",{exact:true})).toBeVisible();await expect(page.getByText("nunca exibir")).toHaveCount(0);
+  const buttons=page.locator(".resourceCardActions button");
+  const expected=new Set(await buttons.evaluateAll(elements=>elements.map(element=>element.getAttribute("aria-label"))));
+  await buttons.first().focus();const visited=new Set<string>();
+  for(let index=0;index<90&&visited.size<expected.size;index++){
+    const label=await page.evaluate(()=>document.activeElement?.classList.contains("resourceActionButton")?document.activeElement.getAttribute("aria-label"):null);
+    if(label)visited.add(label);await page.keyboard.press("Tab");
+  }
+  expect([...visited].sort()).toEqual([...expected].sort());
+  for(const [title,button,field] of [["report.csv","Renomear","Novo nome"],["report.csv","Mover","Pasta de destino"],["Relatórios","Pesquisar na pasta","Pesquisar por nome"],["Daily URA","Editar compromisso","Título"],["Daily URA","Responder convite","Resposta ao convite"]]){
+    const card=page.locator(".resourceCard").filter({hasText:title});await card.getByRole("button",{name:button,exact:true}).focus();await page.keyboard.press("Enter");await expect(card.getByLabel(field,{exact:true})).toBeFocused();await page.keyboard.press("Escape");await expect(card.locator("form")).toHaveCount(0);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.locator(".resourceCard").filter({hasText:"Daily URA"}).scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath("mixed-cards-910.png")});
+});
