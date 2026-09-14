@@ -84,7 +84,16 @@ export function registerBrowserAgentIpc(core:NexoCore, options:BrowserAgentDeskt
 
 function createUtilityWorkerFactory(workerEntry:string):BrowserWorkerFactory {
   return () => {
-    const child = utilityProcess.fork(workerEntry, [], {serviceName:"Nexo Browser Agent"});
+    const child = utilityProcess.fork(workerEntry, [], {serviceName:"Nexo Browser Agent", stdio:"pipe"});
+    child.stdout?.on("data", chunk => {
+      const message = String(chunk).trim();
+      if (message) console.info(`[BrowserAgentWorker] ${message}`);
+    });
+    child.stderr?.on("data", chunk => {
+      const message = String(chunk).trim();
+      if (message) console.error(`[BrowserAgentWorker] ${message}`);
+    });
+    child.on("spawn", () => console.info(`[BrowserAgentWorker] iniciado pid=${child.pid ?? "n/a"}`));
     return {
       postMessage:message => child.postMessage(message),
       kill:() => child.kill(),
