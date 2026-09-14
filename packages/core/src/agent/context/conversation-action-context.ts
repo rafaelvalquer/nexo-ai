@@ -27,6 +27,9 @@ export type ConversationActionContextState = {
   events?: ActionContextCalendar[];
 };
 
+const LIVE_EMAIL_SNAPSHOT_TOOLS = new Set(["email_search", "email_latest"]);
+const LIVE_CALENDAR_SNAPSHOT_TOOLS = new Set(["calendar_list", "calendar_search"]);
+
 export function observeConversationActionContext(
   previous: ConversationActionContextState | undefined,
   userRequest: string,
@@ -44,7 +47,12 @@ export function observeConversationActionContext(
   };
 
   if (!result.ok) return next;
-  if (step.tool.startsWith("email_")) {
+
+  // Any mailbox mutation makes the previous selection unsafe to reuse. A later
+  // explicit follow-up must start from a new live search rather than stale IDs.
+  if (isEmailMutationTool(step.tool)) delete next.emails;
+
+  if (step.tool.startsWith("email_") && !isEmailMutationTool(step.tool)) {
     const data = result.data as any;
     const messages = Array.isArray(data?.messages) ? data.messages : Array.isArray(data) ? data : data?.id ? [data] : [];
     const normalized = messages
@@ -57,10 +65,16 @@ export function observeConversationActionContext(
         receivedAt: typeof item.receivedAt === "string" ? item.receivedAt : undefined,
         snippet: typeof item.snippet === "string" ? item.snippet.slice(0, 600) : undefined
       }));
-    if (normalized.length) next.emails = normalized;
+
+    // Live list/search tools are authoritative snapshots. An empty result must
+    // clear the previous snapshot instead of leaving old Gmail IDs in context.
+    if (LIVE_EMAIL_SNAPSHOT_TOOLS.has(step.tool)) next.emails = normalized;
+    else if (normalized.length) next.emails = normalized;
   }
 
-  if (step.tool.startsWith("calendar_")) {
+  if (isCalendarMutationTool(step.tool)) delete next.events;
+
+  if (step.tool.startsWith("calendar_") && !isCalendarMutationTool(step.tool)) {
     const data = result.data as any;
     const events = Array.isArray(data) ? data : data?.id ? [data] : [];
     const normalized = events
@@ -72,14 +86,16 @@ export function observeConversationActionContext(
         start: typeof item.start === "string" ? item.start : undefined,
         end: typeof item.end === "string" ? item.end : undefined
       }));
-    if (normalized.length) next.events = normalized;
+
+    if (LIVE_CALENDAR_SNAPSHOT_TOOLS.has(step.tool)) next.events = normalized;
+    else if (normalized.length) next.events = normalized;
   }
 
   return next;
 }
 
 export function selectedPreviousEmailIds(state: ConversationActionContextState | undefined, selection?: AgentIntent["reference"]) {
-  let rows = state?.emails ?? [];
+  const rows = state?.emails ?? [];
   if (!selection?.selection || selection.selection.type === "all") return rows.map(row => row.id);
   if (selection.selection.type === "first") return rows.slice(0, selection.selection.count ?? 1).map(row => row.id);
   const indices = new Set(selection.selection.indices ?? []);
@@ -87,9 +103,17 @@ export function selectedPreviousEmailIds(state: ConversationActionContextState |
 }
 
 export function selectedPreviousEventIds(state: ConversationActionContextState | undefined, selection?: AgentIntent["reference"]) {
-  let rows = state?.events ?? [];
+  const rows = state?.events ?? [];
   if (!selection?.selection || selection.selection.type === "all") return rows.map(row => row.id);
   if (selection.selection.type === "first") return rows.slice(0, selection.selection.count ?? 1).map(row => row.id);
   const indices = new Set(selection.selection.indices ?? []);
   return rows.filter((_row, index) => indices.has(index + 1)).map(row => row.id);
+}
+
+function isEmailMutationTool(toolName: string) {
+  return /^email_(?:send(?:_composed)?|mark_(?:un)?read|archive|flag|trash|move|add_label|remove_label|bulk_(?:trash|archive|mark_read|mark_unread))$/.test(toolName);
+}
+
+function isCalendarMutationTool(toolName: string) {
+  return /^calendar_(?:create|create_meeting|update|delete|rsvp)$/.test(toolName);
 }

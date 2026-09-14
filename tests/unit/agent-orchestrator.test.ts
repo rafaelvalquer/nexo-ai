@@ -11,6 +11,7 @@ import { ApprovalService } from "../../packages/core/src/permissions/approvals.j
 import { NexoDatabase } from "../../packages/core/src/database/db.js";
 import { parseStructuredJson } from "../../packages/core/src/llm/structured-response-parser.js";
 import { resolveUserPath } from "../../packages/core/src/filesystem/path-resolver.js";
+import { observeConversationActionContext } from "../../packages/core/src/agent/context/conversation-action-context.js";
 
 class FakeLLM implements LLMProvider {
   constructor(private outputs:string[]){}
@@ -61,6 +62,31 @@ describe("Ollama intent orchestrator",()=>{
     expect(intent).toMatchObject({domain:"calendar",intent:"list",entities:{period:"tomorrow"}});
   });
 
+  it("forces repeated independent email queries to refresh live data even if the model marks them as previous-result references",async()=>{
+    const previous:any={
+      updatedAt:new Date().toISOString(),lastDomain:"email",lastIntent:"search",lastTool:"email_search",lastQuery:"liste meus e-mails não lidos",
+      emails:[{id:"old-1",from:"old@example.com",subject:"Antigo"}]
+    };
+    const llm=new FakeLLM([JSON.stringify({schemaVersion:1,status:"ready",domain:"email",intent:"search",operation:"search_messages",entities:{unread:true,maxResults:20},referencesPreviousResult:true,reference:{source:"previous_result",selection:{type:"all"}},requiresDataLookup:true,requiresConfirmation:false,confidence:.99})]);
+    const intent=await new IntentOrchestrator(llm).interpret("liste meus e-mails não lidos",emailTools,{previous});
+    expect(intent.referencesPreviousResult).toBe(false);
+    expect(intent.reference).toBeUndefined();
+    const plan=buildIntentPlan(intent,emailTools,previous);
+    expect(plan.steps?.[0]).toMatchObject({tool:"email_search",input:{unread:true,maxResults:20}});
+  });
+
+  it("keeps previous-result reuse for explicit follow-ups",async()=>{
+    const previous:any={
+      updatedAt:new Date().toISOString(),lastDomain:"email",lastIntent:"search",lastTool:"email_search",lastQuery:"liste meus e-mails não lidos",
+      emails:[{id:"m1",from:"a@example.com",subject:"A"},{id:"m2",from:"b@example.com",subject:"B"}]
+    };
+    const llm=new FakeLLM([JSON.stringify({schemaVersion:1,status:"ready",domain:"email",intent:"summarize",operation:"summarize_previous",entities:{},referencesPreviousResult:true,reference:{source:"previous_result",selection:{type:"all"}},requiresDataLookup:true,requiresConfirmation:false,confidence:.99})]);
+    const intent=await new IntentOrchestrator(llm).interpret("resuma esses e-mails",emailTools,{previous});
+    expect(intent.referencesPreviousResult).toBe(true);
+    const plan=buildIntentPlan(intent,emailTools,previous);
+    expect(plan.steps?.[0]).toMatchObject({tool:"email_get_many",input:{messageIds:["m1","m2"]}});
+  });
+
   it("freezes email ids during preflight instead of querying again after approval",()=>{
     const materialized=materializeDeferredAction({kind:"email.bulk",action:"trash",sender:"notifications@github.com"},{ok:true,summary:"2",data:{messages:[{id:"m1",from:{email:"notifications@github.com"},subject:"A"},{id:"m2",from:{email:"notifications@github.com"},subject:"B"},{id:"m3",from:{email:"other@example.com"},subject:"C"}]}});
     expect(materialized.step?.tool).toBe("email_bulk_trash");
@@ -82,6 +108,20 @@ describe("Ollama intent orchestrator",()=>{
   it("converts tomorrow to a deterministic one-day interval",()=>{
     const range=resolvePeriod("tomorrow",new Date(2026,8,13,20,0,0));
     expect(new Date(range.end).getTime()-new Date(range.start).getTime()).toBe(24*60*60*1000);
+  });
+});
+
+describe("conversation action freshness",()=>{
+  it("clears stale email ids when a new live Gmail search returns no messages",()=>{
+    const previous:any={updatedAt:new Date().toISOString(),lastDomain:"email",emails:[{id:"stale-1",subject:"Já removido"}]};
+    const next=observeConversationActionContext(previous,"liste meus e-mails não lidos",undefined,{tool:"email_search",input:{unread:true}},{ok:true,summary:"Nenhum e-mail encontrado.",data:{messages:[]}});
+    expect(next.emails).toEqual([]);
+  });
+
+  it("invalidates cached email selections after a successful mailbox mutation",()=>{
+    const previous:any={updatedAt:new Date().toISOString(),lastDomain:"email",emails:[{id:"m1",subject:"A"},{id:"m2",subject:"B"}]};
+    const next=observeConversationActionContext(previous,"apague esses e-mails",undefined,{tool:"email_bulk_trash",input:{messageIds:["m1","m2"]}},{ok:true,summary:"2 e-mails alterados",data:{requested:2,succeeded:2,failed:0,failures:[]}});
+    expect(next.emails).toBeUndefined();
   });
 });
 
