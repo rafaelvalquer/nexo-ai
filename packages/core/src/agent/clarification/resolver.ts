@@ -3,6 +3,7 @@ import type { ClarificationQuestion } from "@nexo/shared";
 import type { PermissionEngine } from "../../permissions/policy.js";
 import { resolveKnownFolderFromText } from "../../filesystem/known-folders.js";
 import { resolveUserPath } from "../../filesystem/path-resolver.js";
+import { extractEmailAddresses } from "../../email/compose/extractor.js";
 
 export type ClarificationAnswerInput = {
   optionId?: string;
@@ -32,7 +33,14 @@ export class ClarificationResolver {
 
     if (!raw) return { resolved: false, suggestedOptionId: question.suggestedOptionId };
     if (question.field === "folder") return this.resolveFolder(raw, source);
+    if (question.field === "to") return this.resolveRecipients(raw,source);
     return { resolved: true, value: raw, source };
+  }
+
+  private resolveRecipients(raw:string,source:"button"|"custom_input"|"chat_text"):ClarificationAnswer{
+    const recipients=extractEmailAddresses(raw);
+    if(!recipients.length)return{resolved:false,message:"Informe pelo menos um endereço de e-mail válido."};
+    return{resolved:true,value:recipients,source};
   }
 
   private resolveMultiChoice(question: ClarificationQuestion, input: ClarificationAnswerInput, source: "button" | "custom_input" | "chat_text", raw?: string): ClarificationAnswer {
