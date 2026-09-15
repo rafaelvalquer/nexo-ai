@@ -29,6 +29,10 @@ export type BrowserDiagnosticEventName =
   | "agent_loaded"
   | "agent_created"
   | "first_turn_started"
+  | "first_model_response_started"
+  | "first_model_response_delta"
+  | "first_model_response_completed"
+  | "first_model_tool_call_received"
   | "first_action_started"
   | "first_navigation";
 
@@ -42,6 +46,7 @@ export type BrowserAgentErrorCode =
   | "BROWSER_MODEL_NOT_FOUND"
   | "BROWSER_MODEL_INVALID_RESPONSE"
   | "BROWSER_MODEL_INCOMPATIBLE"
+  | "BROWSER_MODEL_TOOL_CALL_UNSUPPORTED"
   | "BROWSER_AGENT_LOAD_FAILED"
   | "BROWSER_AGENT_INIT_TIMEOUT"
   | "BROWSER_FIRST_ACTION_TIMEOUT"
