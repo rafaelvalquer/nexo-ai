@@ -8,8 +8,15 @@ export class EmailComposeDraftService{
   constructor(private repository:EmailComposeDraftRepository){}
 
   create(input:CreateEmailComposeDraftInput){
+    return this.createWithId(randomUUID(),input);
+  }
+
+  /** Creates an idempotent review draft tied to another stable identifier, such as an approval id. */
+  createWithId(id:string,input:CreateEmailComposeDraftInput){
+    const existing=this.repository.get(id);
+    if(existing)return existing;
     const validated=validateEmailCompose({to:input.to,subject:input.subject,bodyText:input.bodyText});
-    return this.repository.create(randomUUID(),{...input,...validated});
+    return this.repository.create(id,{...input,...validated});
   }
 
   get(id:string){return this.repository.get(id);}
