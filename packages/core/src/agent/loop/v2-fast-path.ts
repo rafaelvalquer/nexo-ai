@@ -27,7 +27,10 @@ export class V2FastPathRouter {
     }
 
     const mentionsEmail = /\b(e-?mails?|gmail|caixa\s+de\s+entrada|mensagens?\s+recebidas?)\b/i.test(text);
-    if (mentionsEmail && /\b([uú]ltim[oa]|mais\s+recente)\b/i.test(text) && !/\b(resuma|resumir)\b/i.test(text)) {
+    if (mentionsEmail && /([uú]ltim[oa]|mais\s+recente)/i.test(text) && !/\b(resuma|resumir)\b/i.test(text)) {
+      const pluralLatest = /([uú]ltimos|[uú]ltimas)/i.test(text);
+      const count = requestedCount(text);
+      if (pluralLatest || count) return this.call(available, "email_search", { maxResults: Math.min(50, count ?? 10) }, "Consultando os e-mails mais recentes…");
       return this.call(available, "email_latest", {}, "Buscando o e-mail mais recente…");
     }
     if (mentionsEmail && /\b(liste|listar|mostre|mostrar|quais|ver|veja)\b/i.test(text) && !/\b(resuma|resumir)\b/i.test(text)) {
@@ -39,7 +42,7 @@ export class V2FastPathRouter {
     if (folder && /\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text)) {
       const count = requestedCount(text);
       const onlyDirectories = /\b(pastas?|diret[oó]rios?)\b/i.test(text) && !/\barquivos?\b/i.test(text);
-      const recent = /\b(recentes?|mais\s+recentes?|[uú]ltimos?)\b/i.test(text);
+      const recent = /(recentes?|mais\s+recentes?|[uú]ltimos?)/i.test(text);
       return this.call(available, "list_files", {
         path: folder,
         ...(onlyDirectories ? { kind: "directory" } : {}),
@@ -64,7 +67,7 @@ export class V2FastPathRouter {
 }
 
 function requestedCount(text: string) {
-  const match = text.match(/\b(?:[uú]ltim(?:os|as)|primeir(?:os|as)|mostre|liste|listar)?\s*(\d{1,3})\b/i);
+  const match = text.match(/(?:[uú]ltim(?:os|as)|primeir(?:os|as)|mostre|liste|listar)?\s*(\d{1,3})\b/i);
   return match ? Number(match[1]) : undefined;
 }
 
