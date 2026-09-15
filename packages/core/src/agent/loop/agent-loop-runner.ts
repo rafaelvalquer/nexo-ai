@@ -30,11 +30,15 @@ export class AgentLoopRunner {
 
   async run(userRequest: string, options: { mode: "read_only" | "full"; runId?: string; conversationId?:string;taskId?:string;messages?:AgentLoopState["messages"];signal?: AbortSignal } ): Promise<AgentLoopState> {
     if (!this.llm.agentTurn) throw new Error("O provider de LLM não implementa agentTurn().");
-    const available = this.availableForMode(options.mode);
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
+
+    // Capability repair may change the operational tool set. Always perform it
+    // before taking the per-turn catalog snapshot, otherwise this turn can keep
+    // a stale list that omits email_send_composed even after email.send is healed.
     const remediation=await this.emailSendRemediation(userRequest);
     if(remediation)return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});
+    const available = this.availableForMode(options.mode);
 
     const fast=this.fastPath.resolve(userRequest,available);
     if(fast){const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;}
