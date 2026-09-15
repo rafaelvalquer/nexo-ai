@@ -1,6 +1,12 @@
 import { createModels, createProvider, type Model } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import type { BrowserAgentErrorCode } from "@nexo/shared/browser-agent";
+import {
+  formatSanitizedToolCallDiagnostic,
+  inspectOllamaToolCalls,
+  type BrowserToolCallSource,
+  type SanitizedToolCallDiagnostic
+} from "./tool-call-compat.js";
 
 /**
  * The model catalog still needs a provider entry, but Browser Agent requests are
@@ -18,6 +24,8 @@ export type OllamaPreflightResult = {
   capabilities: string[];
   latencyMs: number;
   compatibilityLatencyMs: number;
+  toolCallSource: BrowserToolCallSource;
+  diagnostic: SanitizedToolCallDiagnostic;
 };
 
 export class BrowserAgentPreflightError extends Error {
@@ -94,7 +102,6 @@ export class NexoBrowserModelAdapter {
             }
           }],
           stream: false,
-          think: false,
           options: { temperature: 0, num_predict: 256 }
         }),
         signal: boundedSignal(signal, 20_000)
@@ -124,10 +131,17 @@ export class NexoBrowserModelAdapter {
       );
     }
 
-    if (!hasExpectedToolCall(compatibility)) {
+    const message = compatibility && typeof compatibility === "object"
+      ? (compatibility as { message?:unknown }).message
+      : undefined;
+    const inspection = inspectOllamaToolCalls(message, new Set([PREFLIGHT_TOOL_NAME]));
+    const expected = inspection.calls.find(call =>
+      call.name === PREFLIGHT_TOOL_NAME && call.arguments.url === PREFLIGHT_URL
+    );
+    if (!expected) {
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_TOOL_CALL_UNSUPPORTED",
-        `O modelo ${this.modelId} respondeu ao endpoint nativo /api/chat, mas não produziu o tool call exigido pelo Browser Agent.`
+        `O modelo ${this.modelId} respondeu ao endpoint nativo /api/chat, mas não produziu o tool call exigido pelo Browser Agent. Diagnóstico sanitizado: ${formatSanitizedToolCallDiagnostic(inspection.diagnostic)}.`
       );
     }
 
@@ -137,7 +151,9 @@ export class NexoBrowserModelAdapter {
       toolCallingValidated:true,
       capabilities,
       latencyMs,
-      compatibilityLatencyMs:Date.now() - compatibilityStarted
+      compatibilityLatencyMs:Date.now() - compatibilityStarted,
+      toolCallSource:expected.source,
+      diagnostic:inspection.diagnostic
     };
   }
 
@@ -198,35 +214,6 @@ export class NexoBrowserModelAdapter {
     } catch {
       return false;
     }
-  }
-}
-
-function hasExpectedToolCall(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  const message = (value as { message?: unknown }).message;
-  if (!message || typeof message !== "object") return false;
-  const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
-  if (!Array.isArray(toolCalls)) return false;
-  for (const call of toolCalls) {
-    if (!call || typeof call !== "object") continue;
-    const fn = (call as { function?: unknown }).function;
-    if (!fn || typeof fn !== "object") continue;
-    const name = (fn as { name?: unknown }).name;
-    if (name !== PREFLIGHT_TOOL_NAME) continue;
-    const args = parseToolArguments((fn as { arguments?: unknown }).arguments);
-    if (args?.url === PREFLIGHT_URL) return true;
-  }
-  return false;
-}
-
-function parseToolArguments(value: unknown): { url?: unknown } | undefined {
-  if (value && typeof value === "object") return value as { url?: unknown };
-  if (typeof value !== "string") return undefined;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as { url?: unknown } : undefined;
-  } catch {
-    return undefined;
   }
 }
 
