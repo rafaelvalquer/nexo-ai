@@ -1,13 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentLoop } from "../../packages/core/src/agent/loop/agent-loop.js";
+import { AgentLoopRunner } from "../../packages/core/src/agent/loop/agent-loop-runner.js";
 import { V2FastPathRouter } from "../../packages/core/src/agent/loop/v2-fast-path.js";
 import { ToolCandidateSelector } from "../../packages/core/src/agent/orchestrator/tool-candidate-selector.js";
-import type { AgentToolDescriptor } from "../../packages/core/src/agent/orchestrator/tool-catalog.js";
+import { CapabilityAwareToolCatalog, type AgentToolDescriptor } from "../../packages/core/src/agent/orchestrator/tool-catalog.js";
 import { encodeObservation } from "../../packages/core/src/agent/loop/observation-encoder.js";
 import type { AgentLoopDependencies } from "../../packages/core/src/agent/loop/types.js";
 import type { PreparedAction } from "../../packages/core/src/agent/execution/types.js";
+import { ActionExecutor } from "../../packages/core/src/agent/execution/action-executor.js";
+import { ToolRegistry } from "../../packages/core/src/tools/registry.js";
+import { createAgentToolSchemas } from "../../packages/core/src/llm/agent/tool-schema-factory.js";
+import { OllamaProvider } from "../../packages/core/src/llm/ollama.js";
 
 function tool(name:string,domain:string,mutatesState=false):AgentToolDescriptor{return{name,description:`Tool ${name}`,domain,operation:name,risk:mutatesState?"SAFE_WRITE":"READ",mutatesState,requiresConfirmation:mutatesState,permissions:[],parameters:{type:"object",properties:{}}};}
+
+function connectionHarness() {
+  const connectionId = "11111111-1111-4111-8111-111111111111";
+  const capabilities = ["email.read", "email.send", "email.modify", "calendar.read", "calendar.write"];
+  const account = { id: connectionId, status: "connected", capabilities };
+  const connections = {
+    get: (id:string) => id === connectionId ? account : undefined,
+    resolveForCapability: (capability:string) => capabilities.includes(capability) ? { status: "ready", account } : { status: "not_connected" }
+  } as any;
+  return { connectionId, account, connections };
+}
+
+afterEach(()=>vi.unstubAllGlobals());
 
 describe("Agent V2 routing",()=>{
   it("limits the model catalog while keeping system tools for computer analysis",()=>{
@@ -42,5 +60,102 @@ describe("Agent V2 routing",()=>{
     expect(executionContext).toMatchObject({conversationId:"conversation-1",taskId:"task-1"});
     expect(secondMessages.some(message=>message.role==="assistant"&&message.toolCalls?.[0]?.name==="lookup")).toBe(true);
     expect(secondMessages.some(message=>message.role==="tool"&&message.toolName==="lookup"&&message.toolCallId==="c1")).toBe(true);
+  });
+
+  it("hides connectionId from Email/Calendar agent schemas while keeping it required internally",()=>{
+    const { connections } = connectionHarness();
+    const registry = new ToolRegistry(undefined, {} as any, {} as any);
+    const schemas = createAgentToolSchemas(new CapabilityAwareToolCatalog(registry, connections).list());
+
+    for (const name of ["email_send_composed", "calendar_create"]) {
+      const exposed = schemas.find(schema => schema.name === name);
+      expect(exposed).toBeDefined();
+      expect((exposed!.parameters as any)?.properties?.connectionId).toBeUndefined();
+      expect((exposed!.parameters as any)?.required ?? []).not.toContain("connectionId");
+      const internal = registry.get(name);
+      expect(internal).toBeDefined();
+      expect(internal!.inputSchema.safeParse({}).success).toBe(false);
+    }
+  });
+
+  it("resolves email.send in Core when the model omits connectionId and reaches WAITING_APPROVAL",async()=>{
+    const { connectionId, connections } = connectionHarness();
+    const registry = new ToolRegistry(undefined, {} as any);
+    const catalog = new CapabilityAwareToolCatalog(registry, connections);
+    const executor = new ActionExecutor(
+      registry,
+      { requiresApproval:()=>false, assertPath:()=>undefined } as any,
+      { record:()=>undefined } as any,
+      { connections }
+    );
+    const llm = {
+      agentTurn: async()=>({
+        toolCalls:[{
+          id:"send-1",
+          name:"email_send_composed",
+          arguments:{to:[{email:"rafael.valquer@gmail.com"}],subject:"Oi",bodyText:"Oi"}
+        }]
+      })
+    } as any;
+
+    const state = await new AgentLoopRunner(llm,catalog,registry,executor,connections).run(
+      "Envie e-mail para rafael.valquer@gmail.com falando Oi",
+      { mode:"full", conversationId:"conversation-email" }
+    );
+
+    expect(state.status).toBe("WAITING_APPROVAL");
+    expect(state.pendingAction?.toolName).toBe("email_send_composed");
+    expect(state.pendingAction?.input.connectionId).toBe(connectionId);
+    const assistantCall = state.messages.find(message=>message.role==="assistant"&&message.toolCalls?.[0]?.name==="email_send_composed");
+    expect(assistantCall?.toolCalls?.[0]?.arguments).not.toHaveProperty("connectionId");
+  });
+
+  it("ignores a connectionId invented by the model and resolves the authorized account in Core",async()=>{
+    const { connectionId, connections } = connectionHarness();
+    const registry = new ToolRegistry(undefined, {} as any);
+    const catalog = new CapabilityAwareToolCatalog(registry, connections);
+    const executor = new ActionExecutor(registry,{requiresApproval:()=>false,assertPath:()=>undefined} as any,{record:()=>undefined} as any,{connections});
+    const llm={agentTurn:async()=>({toolCalls:[{id:"send-2",name:"email_send_composed",arguments:{connectionId:"nexus-ai",to:[{email:"rafael.valquer@gmail.com"}],subject:"Oi",bodyText:"Oi"}}]})} as any;
+
+    const state=await new AgentLoopRunner(llm,catalog,registry,executor,connections).run("Envie e-mail para rafael.valquer@gmail.com falando Oi",{mode:"full"});
+    expect(state.status).toBe("WAITING_APPROVAL");
+    expect(state.pendingAction?.input.connectionId).toBe(connectionId);
+  });
+
+  it("sanitizes reasoning returned in Ollama content before exposing the final answer",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async()=>({
+      ok:true,
+      status:200,
+      json:async()=>({message:{content:"Okay, let me reason about this first.\n</think>\nResposta final limpa."}})
+    })));
+    const provider=new OllamaProvider("http://localhost:11434","qwen3:4b");
+    const turn=await provider.agentTurn!({messages:[{role:"user",content:"teste"}],tools:[]});
+    expect(turn.content).toBe("Resposta final limpa.");
+    expect(turn.toolCalls).toEqual([]);
+  });
+
+  it("discards assistant content whenever Ollama returns native tool_calls",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async()=>({
+      ok:true,
+      status:200,
+      json:async()=>({message:{content:"<think>conteúdo que não deve aparecer</think>",tool_calls:[{id:"c1",function:{name:"lookup",arguments:{id:"42"}}}]}})
+    })));
+    const provider=new OllamaProvider("http://localhost:11434","qwen3:4b");
+    const turn=await provider.agentTurn!({messages:[{role:"user",content:"teste"}],tools:[{name:"lookup",description:"Lookup",parameters:{type:"object",properties:{id:{type:"string"}}}}]});
+    expect(turn.content).toBeUndefined();
+    expect(turn.toolCalls).toEqual([{id:"c1",name:"lookup",arguments:{id:"42"}}]);
+  });
+
+  it("sanitizes hidden reasoning again at the AgentLoop finalResponse boundary",async()=>{
+    const deps:AgentLoopDependencies={
+      agentTurn:async()=>({content:"internal chain\n</think>\nSomente a resposta final.",toolCalls:[]}),
+      tools:()=>[],
+      preflight:async()=>({ok:false,code:"TOOL_NOT_FOUND",message:"unused"}),
+      execute:async()=>{throw new Error("unused");},
+      observe:()=>{throw new Error("unused");}
+    };
+    const state=await new AgentLoop(deps).run("responda");
+    expect(state.status).toBe("COMPLETED");
+    expect(state.finalResponse).toBe("Somente a resposta final.");
   });
 });
