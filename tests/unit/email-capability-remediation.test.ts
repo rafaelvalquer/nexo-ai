@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { emailSendCapabilityRemediation, isEmailSendRequest } from "../../packages/core/src/agent/orchestrator/email-capability-remediation.js";
+import { describe, expect, it, vi } from "vitest";
+import { emailSendCapabilityRemediation, isEmailSendRequest, resolveEmailSendCapability } from "../../packages/core/src/agent/orchestrator/email-capability-remediation.js";
 
 describe("email send capability remediation", () => {
   it("recognizes Portuguese send and reply requests", () => {
@@ -21,5 +21,43 @@ describe("email send capability remediation", () => {
 
   it("returns no remediation when the capability is ready", () => {
     expect(emailSendCapabilityRemediation({ status: "ready", account: {} } as any)).toBeUndefined();
+  });
+
+  it("revalidates a Google account when email.send was requested but is missing operationally", async () => {
+    const account = {
+      id: "google-1",
+      provider: "google",
+      accountEmail: "rafael@example.com",
+      capabilities: ["email.read", "email.modify"],
+      requestedCapabilities: ["email.read", "email.modify", "email.send"]
+    } as any;
+    let repaired = false;
+    const service = {
+      resolveForCapability: vi.fn(() => repaired
+        ? { status: "ready", account }
+        : { status: "missing_capability", account }),
+      test: vi.fn(async () => { repaired = true; })
+    } as any;
+
+    const resolution = await resolveEmailSendCapability(service);
+    expect(service.test).toHaveBeenCalledWith("google-1");
+    expect(resolution.status).toBe("ready");
+  });
+
+  it("does not silently request a capability the user never selected", async () => {
+    const account = {
+      id: "google-1",
+      provider: "google",
+      capabilities: ["email.read", "email.modify"],
+      requestedCapabilities: ["email.read", "email.modify"]
+    } as any;
+    const service = {
+      resolveForCapability: vi.fn(() => ({ status: "missing_capability", account })),
+      test: vi.fn()
+    } as any;
+
+    const resolution = await resolveEmailSendCapability(service);
+    expect(service.test).not.toHaveBeenCalled();
+    expect(resolution.status).toBe("missing_capability");
   });
 });
