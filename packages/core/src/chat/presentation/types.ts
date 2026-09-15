@@ -19,7 +19,7 @@ export const presentationSchema = z.object({ version: z.literal(1), blocks: z.ar
   z.object({ ...base, type:z.literal("clarification"), clarificationId:z.string(), title:z.string(), questions:z.array(clarificationQuestion), state:z.enum(["pending","submitted","cancelled","expired"]), values:z.record(z.unknown()).optional() }),
   z.object({ ...base,type:z.literal("email_compose_review"),draftId:z.string(),approvalId:z.string().optional(),status:z.enum(["review","sending","sent","cancelled","expired"]),fields:z.object({to:z.array(z.string()),subject:z.string(),bodyText:z.string()}),error:z.string().optional(),sentAt:z.string().optional(),expiresAt:z.string().optional() }),
   z.object({ ...base, type: z.literal("status"), state: actionState, text: z.string() }),
-  z.object({ ...base, type:z.literal("browser_run"), runId:z.string(), title:z.string(), status:z.enum(["running","paused","waiting_approval","completed","failed","cancelled"]), url:z.string().optional(), pageTitle:z.string().optional(), step:z.string().optional(), startedAt:z.string(), finishedAt:z.string().optional(), finalThumbnail:z.string().optional() })
+  z.object({ ...base, type:z.literal("browser_run"), runId:z.string(), title:z.string(), status:z.enum(["starting","running","paused","waiting_approval","completed","failed","cancelled"]), url:z.string().optional(), pageTitle:z.string().optional(), step:z.string().optional(), startedAt:z.string(), finishedAt:z.string().optional(), finalThumbnail:z.string().optional() })
 ])) });
 
 export type ResourceBinding = { blockId: string; itemId: string; toolName: string; input: Record<string, unknown> };
