@@ -11,6 +11,7 @@ export function browserAgentTools(service:BrowserAgentService):ToolDefinition[] 
     domain:"browser",
     operation:"agent_run",
     mutatesState:false,
+    agent:{category:"browser",outputTrust:"untrusted_external",polling:{allowed:true,minIntervalMs:2000,maxDurationMs:60000,maxAttempts:30,progressFields:["status","progress"]}},
     inputSchema:z.object({
       request:z.string().min(1).max(20_000),
       mode:z.enum(["research","personal"]).default("research"),

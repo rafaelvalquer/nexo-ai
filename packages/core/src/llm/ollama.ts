@@ -153,12 +153,20 @@ export class OllamaProvider implements LLMProvider {
           throw new Error(`Ollama respondeu HTTP ${res.status}`);
         }
         const data = await res.json() as { message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: unknown } }> } };
-        if (!data.message) throw new OllamaInvalidResponseError("Ollama não retornou uma mensagem de agent turn.");
-        const toolCalls = (data.message.tool_calls ?? []).map((call, index) => {
-          if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
-          return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
-        });
-          this.metrics?.record("agent.native_tool_calling",1,{toolCalls:toolCalls.length});return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
+          try {
+            if (!data.message) throw new OllamaInvalidResponseError("Ollama não retornou uma mensagem de agent turn.");
+            const toolCalls = (data.message.tool_calls ?? []).map((call, index) => {
+              if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
+              return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
+            });
+            this.metrics?.record("agent.native_tool_calling",1,{toolCalls:toolCalls.length});return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
+          } catch (error) {
+            if (!(error instanceof OllamaInvalidResponseError)) throw error;
+            this.metrics?.record("agent.native_tool_call_invalid",1);
+            this.metrics?.record("agent.structured_fallback_after_invalid_native",1);
+            try { const repaired=await structuredAgentTurn(this as Required<Pick<LLMProvider,"planStructured">>,request,signal);this.metrics?.record("agent.native_tool_call_repaired",1);return repaired; }
+            catch { throw error; }
+          }
       } catch (error) {
         if (error instanceof OllamaInvalidResponseError) throw error;
         return this.handleError(error, "agent turn", DEFAULT_TIMEOUTS.tool_reasoning, signal);

@@ -20,7 +20,7 @@ export const calendarAdapter: PresentationAdapter = (result, context) => {
     return { id: randomUUID(), resource: { kind: "calendar", eventId: event.id, title: event.title, start: event.start, end: event.end, location: event.location, description: event.description, joinUrl, allDay: event.allDay }, actions: typeof context.input.connectionId === "string" ? calendarActions(joinUrl) : [] };
   });
   return {
-    presentation: { version: 1, blocks: [{ id: blockId, version: 1, type: "resource_collection", domain: "calendar", title: "Compromissos", total: items.length, items }] },
+    presentation: { version: 1, blocks: [{ id: blockId, version: 1, type: "resource_collection", domain: "calendar", title: "Compromissos",subtitle:items.length?undefined:"Nenhum compromisso encontrado no período.", total: items.length, items }] },
     bindings: items.map(item => ({ blockId, itemId: item.id, toolName: context.toolName, input: { connectionId: context.input.connectionId, eventId: item.resource.kind === "calendar" ? item.resource.eventId : undefined } })),
   };
 };

@@ -13,6 +13,8 @@ export class RetentionService {
       this.db.run("DELETE FROM audit_logs WHERE created_at < ?",[cutoff]);
       this.db.run("DELETE FROM local_metrics WHERE created_at < ?",[cutoff]);
       this.db.run("DELETE FROM tasks WHERE finished_at IS NOT NULL AND finished_at < ?",[cutoff]);
+      this.db.run("DELETE FROM agent_graph_checkpoints WHERE run_id IN (SELECT id FROM agent_runs WHERE status IN ('COMPLETED','FAILED','CANCELLED') AND updated_at < ?)",[cutoff]);
+      this.db.run("DELETE FROM agent_graph_checkpoints WHERE rowid IN (SELECT rowid FROM (SELECT c.rowid,ROW_NUMBER() OVER(PARTITION BY c.run_id ORDER BY c.created_at DESC) AS ordinal FROM agent_graph_checkpoints c JOIN agent_runs r ON r.id=c.run_id WHERE r.status IN ('COMPLETED','FAILED','CANCELLED')) WHERE ordinal>20)");
       const documents=this.documents.purgeOlderThan(cutoff);
       return {cutoff,documents};
     });

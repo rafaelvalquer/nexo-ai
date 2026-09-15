@@ -49,12 +49,24 @@ export function deterministicEmailCategoryIntent(text: string): AgentIntent | un
   });
 }
 
+export function deterministicEmailReadIntent(text:string):AgentIntent|undefined{
+  if(!/\b(e-?mails?|mensagens?|caixa\s+de\s+entrada)\b/i.test(text))return undefined;
+  const normalized=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const latest=/(?:ultimo|ultima)\s+e-?mail\b|\be-?mail\s+mais\s+recente\b/i.test(normalized);
+  const summarize=/\b(resuma|resumir|resumo)\b/i.test(text);
+  const list=latest||summarize||/\b(mostre|mostrar|liste|listar|[uú]ltimos?)\b/i.test(text);
+  if(!list)return undefined;
+  const quantity=latest?1:requestedQuantity(text)??20;
+  return baseIntent({intent:latest?"read":summarize?"summarize":"list",operation:latest?"latest":"search_messages",entities:{maxResults:quantity},confidence:1});
+}
+
 export function enrichEmailIntent(intent: AgentIntent, text: string): AgentIntent {
   if (intent.domain !== "email") return intent;
   if (isMailboxPreferenceCommand(text)) {
     return { ...intent, status: "ready", intent: "update", operation: "select_mailboxes", entities: {}, requiresDataLookup: false, requiresConfirmation: false, missing: undefined, question: undefined };
   }
   let entities={...intent.entities} as Record<string,unknown>;
+  const quantity=requestedQuantity(text);if(quantity)entities.maxResults=quantity;
   if(intent.intent==="send"||/send|compose/.test(intent.operation)){
     entities=canonicalizeEmailComposeEntities(entities);
     if(!hasRecipients(entities)){
@@ -68,6 +80,8 @@ export function enrichEmailIntent(intent: AgentIntent, text: string): AgentInten
   if (categories.length) entities={...entities,categories};
   return { ...intent, entities };
 }
+
+function requestedQuantity(text:string){const match=text.match(/\b(?:meus|minhas|os|as)?\s*(\d{1,2})\s+(?:[uú]ltimos?\s+)?(?:e-?mails?|mensagens?)\b/i);return match?Math.max(1,Math.min(50,Number(match[1]))):undefined;}
 
 function baseIntent(overrides: Partial<AgentIntent>): AgentIntent {
   return {

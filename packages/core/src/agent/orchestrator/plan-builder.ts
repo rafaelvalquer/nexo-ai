@@ -133,9 +133,14 @@ function buildFilesystemPlan(intent: AgentIntent, tools: AgentToolDescriptor[]):
   const resolvedPath = resolveUserPath({ path: entities.path, folder: entities.folder, file: entities.file ?? entities.name });
   const folderPath = resolveUserPath({ path: entities.path, folder: entities.folder }) ?? (stringValue(entities.folder) ? resolveKnownFolder(stringValue(entities.folder)!) : undefined);
 
+  if(intent.intent==="create"&&intent.operation==="create_folder"){
+    if(!resolvedPath)return{direct:"Qual é o nome da pasta e onde ela deve ser criada?"};
+    return writeStep("create_folder",{path:resolvedPath},"Preparando a criação da pasta para sua confirmação…",tools,{domain:"filesystem",actionType:"create",preview:resolvedPath,affectedCount:1,consequence:"Uma nova pasta será criada.",expiresInMs:10*60_000});
+  }
+
   if (intent.intent === "list") {
     if (!folderPath) return { direct: "Qual pasta você quer listar? Você pode usar Downloads, Documentos ou Desktop." };
-    return readStep("list_files", { path: folderPath }, `Listando arquivos em ${folderPath}…`, tools, "synthesize");
+    return readStep("list_files", { path: folderPath,kind:entities.kind,sortBy:entities.sortBy,sortDirection:entities.sortDirection,limit:entities.limit }, `Listando arquivos em ${folderPath}…`, tools, "synthesize");
   }
 
   if (intent.intent === "search") {

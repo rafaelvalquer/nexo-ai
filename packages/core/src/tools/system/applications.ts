@@ -25,15 +25,15 @@ function resolveApplication(name:string) {
 export function applicationTools(): ToolDefinition[] {
   return [
     {
-      name:"open_url", description:"Abre uma URL no navegador padrão", risk:"SAFE_WRITE", permissions:["system.open"],
+      name:"open_url", description:"Abre uma URL no navegador padrão", risk:"SAFE_WRITE", mutationSafety:{idempotency:"none",reconciliation:"not_supported"},permissions:["system.open"],
       inputSchema:z.object({url:z.string().url()}), async execute({url}){await open(url);return {ok:true,summary:`URL aberta: ${url}`};}
     },
     {
-      name:"open_path", description:"Abre arquivo ou pasta com o aplicativo padrão", risk:"SAFE_WRITE", permissions:["system.open"], pathFields:["path"],
+      name:"open_path", description:"Abre arquivo ou pasta com o aplicativo padrão", risk:"SAFE_WRITE", mutationSafety:{idempotency:"none",reconciliation:"not_supported"},permissions:["system.open"], pathFields:["path"],
       inputSchema:z.object({path:z.string()}), async execute({path:target}){await open(target);return {ok:true,summary:`Aberto: ${target}`};}
     },
     {
-      name:"open_application", description:"Abre um aplicativo permitido", risk:"SAFE_WRITE", permissions:["system.open"],
+      name:"open_application", description:"Abre um aplicativo permitido", risk:"SAFE_WRITE", mutationSafety:{idempotency:"none",reconciliation:"not_supported"},permissions:["system.open"],
       inputSchema:z.object({application:z.string()}), async execute({application}){const target=resolveApplication(application);if(!target)throw new Error(`Aplicativo não permitido ou não encontrado: ${application}`);await openApp(target);return {ok:true,summary:`Aplicativo aberto: ${application}`};}
     }
   ];

@@ -9,7 +9,7 @@ export function memoryTools(service: MemoryService): ToolDefinition[] {
       description: "Salva uma informação útil na memória local somente quando o usuário pede explicitamente para lembrar, guardar ou salvar algo.",
       risk: "SAFE_WRITE",
       permissions: ["memory.write"],
-      mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"none"},agent:{category:"memory",outputTrust:"sensitive_local"},
+      mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"not_supported"},agent:{category:"memory",outputTrust:"sensitive_local"},
       inputSchema: z.object({
         key: z.string().min(1).describe("Chave normalizada, ex: user.name, project.tavernquest.path"),
         value: z.string().min(1).describe("Valor a salvar"),
@@ -79,7 +79,7 @@ export function memoryTools(service: MemoryService): ToolDefinition[] {
       description: "Remove uma informação da memória local do usuário. Requer confirmação.",
       risk: "SENSITIVE",
       permissions: ["memory.write"],
-      mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"none"},agent:{category:"memory",outputTrust:"sensitive_local"},
+      mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"not_supported"},agent:{category:"memory",outputTrust:"sensitive_local"},
       inputSchema: z.object({
         key: z.string().min(1).describe("Chave exata da memória a remover")
       }),

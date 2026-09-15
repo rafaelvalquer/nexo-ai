@@ -3,16 +3,19 @@ import { resolveKnownFolderFromText } from "../../filesystem/known-folders.js";
 
 const RECENT_FILES_PATTERN = /\b(?:quais\s+s[aã]o\s+os\s+)?(?:[uú]ltimos\s+arquivos|arquivos\s+(?:mais\s+)?recentes|arquivos\s+mais\s+novos)\b/i;
 const LIST_FILES_PATTERN = /\b(?:liste|listar|lista|mostre|mostrar|veja|ver)\b[\s\S]*\b(?:arquivos?|itens?)\b|\b(?:arquivos?|itens?)\b[\s\S]*\b(?:liste|listar|lista|mostre|mostrar|veja|ver)\b/i;
+const LIST_FOLDERS_PATTERN=/\b(?:quais|liste|listar|mostre|mostrar)\b[\s\S]*\bpastas\b/i;
+const CREATE_FOLDER_PATTERN=/\b(?:crie|criar|create)\b[\s\S]*\bpasta\b/i;
 
 export function isRecentFilesRequest(text: string) {
   return RECENT_FILES_PATTERN.test(text.normalize("NFC"));
 }
 
 export function isFilesystemListRequest(text: string) {
-  return isRecentFilesRequest(text) || LIST_FILES_PATTERN.test(text.normalize("NFC"));
+  return isRecentFilesRequest(text) || LIST_FILES_PATTERN.test(text.normalize("NFC"))||LIST_FOLDERS_PATTERN.test(text.normalize("NFC"));
 }
 
 export function deterministicFilesystemIntent(text: string): AgentIntent | undefined {
+  if(CREATE_FOLDER_PATTERN.test(text)){const folder=resolveKnownFolderFromText(text),name=text.match(/pasta\s+(?:chamada\s+)?["“']?([^"”']+?)["”']?\s+(?:dentro\s+)?(?:de|da|do|em)\s+(?:minha\s+)?(?:pasta\s+)?(?:Downloads?|Documentos?|Documents?|Desktop|[ÁA]rea\s+de\s+trabalho)\b/i)?.[1]?.trim();if(folder&&name)return{schemaVersion:1,status:"ready",domain:"filesystem",intent:"create",operation:"create_folder",entities:{folder:folder.id,name},referencesPreviousResult:false,requiresDataLookup:false,requiresConfirmation:true,confidence:1};}
   if (!isFilesystemListRequest(text)) return undefined;
   const match = resolveKnownFolderFromText(text);
   const explicitPath = extractExplicitFolderPath(text);
@@ -21,11 +24,12 @@ export function deterministicFilesystemIntent(text: string): AgentIntent | undef
 
   if (explicitPath) entities.path = explicitPath;
   else if (match && match.confidence >= 0.95) entities.folder = match.id;
+  if(LIST_FOLDERS_PATTERN.test(text))entities.kind="directory";
   if (recent) Object.assign(entities, {
     kind: "file",
     sortBy: "modifiedAt",
     sortDirection: "desc",
-    limit: 20,
+    limit: requestedQuantity(text)??20,
   });
 
   const missingFolder = !entities.folder && !entities.path;
@@ -61,8 +65,9 @@ export function enrichFilesystemIntent(intent: AgentIntent, text: string): Agent
     kind: "file",
     sortBy: "modifiedAt",
     sortDirection: "desc",
-    limit: 20,
+    limit: requestedQuantity(text)??20,
   });
+  if(LIST_FOLDERS_PATTERN.test(text))entities.kind="directory";
 
   if (!isList) return { ...intent, entities };
 
@@ -88,6 +93,8 @@ export function enrichFilesystemIntent(intent: AgentIntent, text: string): Agent
     confidence: Math.max(intent.confidence, explicitPath ? 1 : match?.confidence ?? 0),
   };
 }
+
+function requestedQuantity(text:string){const match=text.match(/\b(?:os|as|meus|minhas)?\s*(\d{1,3})\s+(?:arquivos?|itens?|pastas?)\b/i);if(!match)return undefined;return Math.max(1,Math.min(100,Number(match[1])));}
 
 function extractExplicitFolderPath(text: string) {
   const quoted = text.match(/\bpasta\s+["“']([^"”']+)["”']/i)?.[1]?.trim();

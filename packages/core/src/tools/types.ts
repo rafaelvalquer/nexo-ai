@@ -13,7 +13,7 @@ export type ToolDefinition={
   mutatesState?:boolean;
   /** Explicit opt-in for a provider that receives an idempotency key. */
   supportsIdempotency?:boolean;
-  mutationSafety?: { idempotency: "provider" | "nexo" | "none"; reconciliation: "supported" | "none" };
+  mutationSafety?: { idempotency: "provider" | "nexo" | "none"; reconciliation: "supported" | "not_supported" };
   agent?: { category?: string; outputTrust: "trusted_local" | "untrusted_external" | "sensitive_local"; hidden?: boolean; polling?: { allowed: true; minIntervalMs: number; maxDurationMs: number; maxAttempts: number; progressFields?: string[] } };
   execute(input:any,context?:ToolExecutionContext):Promise<ToolResult>;
 };

@@ -25,6 +25,14 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm eval:agent
+      - run: pnpm version:check
+      - name: Agent model-backed smoke
+        if: ${{ vars.NEXO_MODEL_EVAL_URL != '' }}
+        env:
+          NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
+          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL }}
+        run: pnpm eval:agent:model
       - run: pnpm --filter @nexo/shared build
       - run: pnpm --filter @nexo/browser-agent build
       - run: pnpm --filter @nexo/core build

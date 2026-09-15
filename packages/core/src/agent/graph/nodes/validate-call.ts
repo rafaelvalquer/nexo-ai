@@ -1,2 +1,2 @@
 import type { AgentGraphState } from "../graph-state.js";
-export function validateCallNode(_state: AgentGraphState) { return { stage: "VALIDATE_CALL" as const }; }
+export function validateCallNode(state: AgentGraphState) {const loop=state.loopState;if(!loop)return{stage:"VALIDATE_CALL" as const,error:"Estado do loop ausente."};if(loop.protocolRepairCount>2)return{stage:"VALIDATE_CALL" as const,error:"Limite de reparos do protocolo excedido."};return{stage:"VALIDATE_CALL" as const,loopState:loop,error:undefined};}

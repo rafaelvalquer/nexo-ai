@@ -17,7 +17,7 @@ export class CalendarReconciler implements MutationReconciler {
           : { status: "confirmed_failure" };
       }
       if (input.start && input.end && input.title) {
-        const matches = (await this.calendar.list(input.connectionId, input.start, input.end, signal)).filter(event => event.title === input.title && event.start === input.start);
+        const matches = (await this.calendar.list(input.connectionId, input.start, input.end, signal)).filter(event => event.title === input.title && event.start === input.start&&event.end===input.end);
         return matches.length === 1 ? { status: "confirmed_success", result: { ok: true, summary: "Criação do compromisso confirmada.", data: matches[0] } } : { status: "still_unknown", reason: "Não há correspondência única para a criação." };
       }
       return { status: "still_unknown", reason: "Exclusão sem confirmação inequívoca do provedor." };

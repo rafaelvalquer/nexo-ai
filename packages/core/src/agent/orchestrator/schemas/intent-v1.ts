@@ -14,7 +14,7 @@ const referenceSchema = z.object({
   })
 }).optional();
 
-export const agentIntentV1Schema = z.object({
+const agentIntentV1ObjectSchema = z.object({
   schemaVersion: z.literal(1),
   status: z.enum(["ready", "needs_clarification"]),
   domain: intentDomainSchema,
@@ -31,10 +31,16 @@ export const agentIntentV1Schema = z.object({
   suggestedValues: z.record(z.unknown()).optional()
 });
 
+function requireClarificationFields<T extends z.AnyZodObject>(schema:T):z.ZodEffects<T,z.infer<T>,z.input<T>>{return schema.superRefine((value,ctx)=>{
+  if(value.status==="needs_clarification"&&(!Array.isArray(value.missing)||value.missing.length===0))ctx.addIssue({code:z.ZodIssueCode.custom,path:["missing"],message:"Uma intenção que requer esclarecimento deve declarar ao menos um campo ausente."});
+});}
+
+export const agentIntentV1Schema = requireClarificationFields(agentIntentV1ObjectSchema);
+
 export type AgentIntentV1 = z.infer<typeof agentIntentV1Schema>;
 
 export function schemaForIntentDomain(domain: IntentDomain) {
-  return agentIntentV1Schema.extend({ domain: z.literal(domain) });
+  return requireClarificationFields(agentIntentV1ObjectSchema.extend({ domain: z.literal(domain) }));
 }
 
 export function jsonSchemaForIntentDomain(domain: IntentDomain) {
@@ -45,12 +51,18 @@ export function jsonSchemaForIntentDomain(domain: IntentDomain) {
 }
 
 export function parseAgentIntentV1(value: unknown, expectedDomain?: IntentDomain): AgentIntentV1 {
-  const normalized = normalizePayload(value);
+  const normalized = repairClarification(normalizePayload(value));
   const parsed = agentIntentV1Schema.parse(normalized);
   if (expectedDomain && parsed.domain !== expectedDomain) {
     throw new Error(`Domínio estruturado inesperado: esperado ${expectedDomain}, recebido ${parsed.domain}.`);
   }
   return parsed;
+}
+
+function repairClarification(value:unknown):unknown{
+  if(!isRecord(value)||value.status!=="needs_clarification")return value;
+  if(Array.isArray(value.missing)&&value.missing.length)return value;
+  return{...value,missing:["details"],question:typeof value.question==="string"&&value.question.trim()?value.question:"Preciso de mais detalhes para continuar."};
 }
 
 function normalizePayload(value: unknown): unknown {

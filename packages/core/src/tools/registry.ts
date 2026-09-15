@@ -23,7 +23,7 @@ export class ToolRegistry {
     this.register(...base,...mem,...(email?emailTools(email):[]),...(calendar?calendarTools(calendar):[]));
     activeToolRegistry=this;
   }
-  register(...tools:ToolDefinition[]) { for (const tool of tools) {const mutates=tool.mutatesState??tool.risk!=="READ";tool.mutatesState=mutates;tool.agent??={category:tool.domain??domain(tool.name),outputTrust:outputTrust(tool)};if(mutates&&!tool.mutationSafety)tool.mutationSafety={idempotency:tool.supportsIdempotency?"provider":"none",reconciliation:"supported"};this.tools.set(tool.name,tool);} return this; }
+  register(...tools:ToolDefinition[]) { for (const tool of tools) {const mutates=tool.mutatesState??tool.risk!=="READ";tool.mutatesState=mutates;tool.agent??={category:tool.domain??domain(tool.name),outputTrust:outputTrust(tool)};this.tools.set(tool.name,tool);} return this; }
   unregister(name:string) { return this.tools.delete(name); }
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}

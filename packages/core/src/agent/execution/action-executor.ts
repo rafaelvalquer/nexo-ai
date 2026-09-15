@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID,createHash } from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { ToolRegistry } from "../../tools/registry.js";
 import type { ToolDefinition } from "../../tools/types.js";
@@ -13,6 +14,7 @@ import type { ConnectionService } from "../../connections/service.js";
 import type { ConnectionCapability } from "@nexo/shared";
 import {actionFingerprint,canonicalJson,createIdempotencyKey} from "./action-fingerprint.js";
 import {ConnectionResolver,isConnectionCapability} from "./connection-resolver.js";
+import {semanticMutationAllowed} from "../security/semantic-mutation-guard.js";
 export {actionFingerprint,canonicalJson} from "./action-fingerprint.js";
 
 /** The sole safe execution entry point for agent, UI, and automation actions. */
@@ -28,6 +30,8 @@ export class ActionExecutor {
     const tool = this.registry.get(toolName);
     if (!tool) {this.options.metrics?.record("agent.tool_call_invalid",1,{tool:toolName});return fail("TOOL_NOT_FOUND", `Ferramenta não disponível: ${toolName}`);}
     try { this.options.security?.assertToolEnabled(tool.name); } catch (error) { return fail("SECURITY_DENIED", message(error)); }
+    const mutatesState = tool.mutatesState ?? tool.risk !== "READ";
+    if(mutatesState&&!semanticMutationAllowed(context.userRequest))return fail("SECURITY_DENIED","A solicitação é semanticamente de leitura e não autoriza alteração de estado.");
     const candidate={...rawInput};
     for (const capability of tool.permissions) {
       if(isConnectionCapability(capability)&&this.options.connections){const resolution=new ConnectionResolver(this.options.connections).resolve(capability,candidate.connectionId);if(!resolution.ok)return fail("CAPABILITY_DENIED",resolution.reason!);if(resolution.connectionId&&!candidate.connectionId)candidate.connectionId=resolution.connectionId;}
@@ -41,7 +45,7 @@ export class ActionExecutor {
       this.options.security?.assertRecipientDomains(input.to as Array<{ email?: string }> | undefined);
       for (const field of tool.pathFields ?? []) validatePaths(input[field], target => this.permissions.assertPath(target));
     } catch (error) { return fail("PATH_DENIED", message(error)); }
-    const mutatesState = tool.mutatesState ?? tool.risk !== "READ";
+    await enrichReconciliationEvidence(tool.name,input);
     const executionId = context.executionId ?? randomUUID();
     const fingerprint = actionFingerprint(tool.name, input);
     const action: PreparedAction = {
@@ -54,7 +58,7 @@ export class ActionExecutor {
     return { ok: true, action };
   }
 
-  async execute(action: PreparedAction, context: ActionExecutionContext = {}): Promise<ActionExecutionResult> {
+  async executePrepared(action: PreparedAction, context: ActionExecutionContext = {}): Promise<ActionExecutionResult> {
     if (action.status !== "PREPARED") throw new Error(`Ação ${action.executionId} não está pronta para despacho.`);
     const tool = this.registry.get(action.toolName);
     if (!tool) return { status: "FAILED", action, error: "Ferramenta não encontrada durante o despacho." };
@@ -85,6 +89,9 @@ export class ActionExecutor {
     }
   }
 
+  /** @deprecated Prefer executePrepared; retained for API compatibility. */
+  execute(action:PreparedAction,context:ActionExecutionContext={}){return this.executePrepared(action,context);}
+
   private withResources<T>(tool: ToolDefinition, input: Record<string, unknown>, context: ActionExecutionContext, work: () => Promise<T>) {
     const keys: string[] = [];
     if (tool.name.startsWith("browser_")) keys.push(`browser:${context.runId ?? "default"}`);
@@ -98,3 +105,4 @@ function validatePaths(value: unknown, use: (path: string) => void) { if (typeof
 function fail(code: Extract<ActionPreflightResult, { ok: false }> ["code"], message: string): ActionPreflightResult { return { ok: false, code, message }; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function isAmbiguous(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || /timeout|timed? out|network|connection reset|socket/i.test(message(error)); }
+async function enrichReconciliationEvidence(toolName:string,input:Record<string,unknown>){if(!["copy_file","move_file","rename_file"].includes(toolName))return;const source=typeof input.source==="string"?input.source:typeof input.path==="string"?input.path:undefined;if(!source)return;try{input.__nexoSourceHash=createHash("sha256").update(await fs.readFile(source)).digest("hex");}catch{/* Directories and unreadable inputs use existence evidence only. */}}

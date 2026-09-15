@@ -20,6 +20,7 @@ export function responsePolicy(
   mode: ResponseMode;
   appendText: boolean;
 } {
+  if(intent?.intent==="summarize")return{mode:"synthesize",appendText:true};
   if (toolNames.length > 0 && toolNames.every(name => PRESENTATION_ONLY_TOOLS.has(name))) {
     return {
       mode: "presentation",

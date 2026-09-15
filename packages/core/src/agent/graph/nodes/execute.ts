@@ -1,2 +1,2 @@
 import type { AgentGraphState } from "../graph-state.js";
-export function executeNode(_state: AgentGraphState) { return { stage: "EXECUTE" as const }; }
+export function executeNode(state: AgentGraphState) {const loop=state.loopState;if(!loop)return{stage:"EXECUTE" as const,error:"Execução sem estado."};if(loop.status==="EXECUTING"&&!loop.pendingAction)return{stage:"EXECUTE" as const,error:"Execução sem PreparedAction persistida."};return{stage:"EXECUTE" as const,loopState:loop,error:undefined};}

@@ -14,7 +14,7 @@ import { reconcileNode } from "./nodes/reconcile.js";
 import { loopGuardNode } from "./nodes/loop-guard.js";
 import { finalizeNode } from "./nodes/finalize.js";
 
-/** Durable LangGraph shell. Domain authority remains in AgentLoop and ActionExecutor. */
+/** Durable orchestration graph. Nodes enforce protocol and persisted state invariants. */
 export class AgentGraph {
   constructor(private readonly checkpointer?: BaseCheckpointSaver) {}
 
