@@ -74,7 +74,7 @@ export async function validateGoogleCapabilities(options: {
     }
 
     // There is no side-effect-free Gmail endpoint that proves send by itself;
-    // the reported `gmail.send` grant is handled above without mutation.
+    // the reported `gmail.send`/`gmail.modify` grant is handled above without mutation.
 
     const serviceProbe = capability.startsWith("email.") ? gmailProbe : calendarProbe;
     if (serviceProbe?.ok) {
@@ -115,6 +115,7 @@ export async function validateGoogleCapabilities(options: {
 
 function scopeValidationSource(source: GoogleScopeSource): CapabilityGrant["validationSource"] {
   if (source === "token-response") return "token-response";
+  if (source === "tokeninfo") return "tokeninfo";
   return undefined;
 }
 

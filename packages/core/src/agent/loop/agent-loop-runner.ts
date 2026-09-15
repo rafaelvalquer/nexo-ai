@@ -18,7 +18,7 @@ import type { LocalMetricsService } from "../../observability/metrics.js";
 import type {AgentReconciliationCoordinator} from "../execution/reconciliation/agent-reconciliation-coordinator.js";
 import { V2FastPathRouter } from "./v2-fast-path.js";
 import { modelVisiblePresentationData, wrapPresentationData } from "../../chat/presentation/internal-metadata.js";
-import { emailSendCapabilityRemediation, isEmailSendRequest } from "../orchestrator/email-capability-remediation.js";
+import { emailSendCapabilityRemediation, isEmailSendRequest, resolveEmailSendCapability } from "../orchestrator/email-capability-remediation.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
@@ -33,7 +33,7 @@ export class AgentLoopRunner {
     const available = this.availableForMode(options.mode);
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
-    const remediation=this.emailSendRemediation(userRequest);
+    const remediation=await this.emailSendRemediation(userRequest);
     if(remediation)return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});
 
     const fast=this.fastPath.resolve(userRequest,available);
@@ -97,7 +97,11 @@ export class AgentLoopRunner {
   private toObservation(execution:Awaited<ReturnType<ActionExecutor["executePrepared"]>>,callId:string){
     const tool=this.registry.get(execution.action.toolName),declared=tool?.agent?.outputTrust,trust=declared==="trusted_local"?"TRUSTED_LOCAL":declared==="sensitive_local"?"SENSITIVE_LOCAL":declared==="untrusted_external"||/^(email|calendar|browser)_/.test(tool?.name??"")?"UNTRUSTED_CONTENT":tool?.name.startsWith("memory_")||tool?.pathFields?.length?"SENSITIVE_LOCAL":"TRUSTED_LOCAL";
     const observation=encodeObservation(callId,execution.action.toolName,execution.result??{ok:false,summary:"A execução não retornou resultado.",error:execution.error},trust);
-    if(PRESENTATION_INPUT_TOOLS.has(execution.action.toolName)&&typeof execution.action.input.connectionId==="string")observation.data=wrapPresentationData(observation.data,execution.action.input);
+    if(PRESENTATION_INPUT_TOOLS.has(execution.action.toolName)&&typeof execution.action.input.connectionId==="string"){
+      const connectionId=execution.action.input.connectionId;
+      const account=this.connections?.get(connectionId);
+      observation.data=wrapPresentationData(observation.data,{...execution.action.input,__connectionCapabilities:account?.capabilities??[]});
+    }
     return observation;
   }
 
@@ -111,7 +115,11 @@ export class AgentLoopRunner {
     return Boolean(requested);
   }
 
-  private emailSendRemediation(userRequest:string){if(!this.connections||!isEmailSendRequest(userRequest))return undefined;return emailSendCapabilityRemediation(this.connections.resolveForCapability("email.send"));}
+  private async emailSendRemediation(userRequest:string){
+    if(!this.connections||!isEmailSendRequest(userRequest))return undefined;
+    const resolution=await resolveEmailSendCapability(this.connections);
+    return emailSendCapabilityRemediation(resolution);
+  }
 
   private async completeWithoutExecution(userRequest:string,finalResponse:string,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"]}){
     const now=new Date().toISOString();

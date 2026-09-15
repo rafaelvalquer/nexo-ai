@@ -1,5 +1,7 @@
+const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
+const GOOGLE_TOKENINFO_TIMEOUT_MS = 15_000;
 
-export type GoogleScopeSource = "token-response" | "unknown";
+export type GoogleScopeSource = "token-response" | "tokeninfo" | "unknown";
 
 export type GoogleGrantSnapshot = {
   clientId?: string;
@@ -25,19 +27,99 @@ export async function inspectGoogleGrant(options: {
   persistedScopes?: string[];
 }): Promise<GoogleGrantSnapshot> {
   const tokenResponseScopes = parseScopes(options.tokenScope);
-  // The authorization-code token response is the only reported-scope source.
-  // When Google omits `scope`, keep the internal state unknown. Persisted scopes
-  // are never evidence for a new token response (including refresh responses).
-  const scopes = tokenResponseScopes;
-  const scopeSource: GoogleScopeSource = tokenResponseScopes.length
-    ? "token-response" : "unknown";
+  if (tokenResponseScopes.length) {
+    return {
+      clientId: undefined,
+      scopes: tokenResponseScopes,
+      scopeSource: "token-response",
+      clientMatches: undefined
+    };
+  }
+
+  // Google may omit `scope` from token/refresh responses. In that case, inspect
+  // the active access token instead of downgrading capabilities to "unknown".
+  // Persisted scopes remain diagnostic-only and are never treated as evidence
+  // for the current token.
+  const inspected = await inspectAccessToken(options.accessToken);
+  if (!inspected.ok) {
+    return {
+      clientId: inspected.clientId,
+      scopes: [],
+      scopeSource: "unknown",
+      expiresIn: inspected.expiresIn,
+      accountEmail: inspected.accountEmail,
+      clientMatches: inspected.clientId ? inspected.clientId === options.configuredClientId : undefined,
+      inspectionError: inspected.error
+    };
+  }
+
+  if (inspected.clientId && options.configuredClientId && inspected.clientId !== options.configuredClientId) {
+    throw new GoogleOAuthClientMismatchError(options.configuredClientId, inspected.clientId);
+  }
 
   return {
-    clientId: undefined,
-    scopes,
-    scopeSource,
-    clientMatches: undefined
+    clientId: inspected.clientId,
+    scopes: inspected.scopes,
+    scopeSource: "tokeninfo",
+    expiresIn: inspected.expiresIn,
+    accountEmail: inspected.accountEmail,
+    clientMatches: inspected.clientId ? inspected.clientId === options.configuredClientId : undefined
   };
+}
+
+type TokenInfoInspection = {
+  ok: boolean;
+  scopes: string[];
+  clientId?: string;
+  expiresIn?: number;
+  accountEmail?: string;
+  error?: string;
+};
+
+async function inspectAccessToken(accessToken: string): Promise<TokenInfoInspection> {
+  let response: Response;
+  try {
+    const url = `${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`;
+    response = await fetch(url, { signal: AbortSignal.timeout(GOOGLE_TOKENINFO_TIMEOUT_MS) });
+  } catch (error) {
+    return {
+      ok: false,
+      scopes: [],
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+
+  let body: Record<string, unknown> = {};
+  try { body = await response.json() as Record<string, unknown>; } catch { /* no-op */ }
+
+  const clientId = firstString(body.aud, body.audience, body.issued_to);
+  const scopes = parseScopes(firstString(body.scope));
+  const expiresIn = numberOrUndefined(body.expires_in);
+  const accountEmail = firstString(body.email);
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      scopes: [],
+      clientId,
+      expiresIn,
+      accountEmail,
+      error: firstString(body.error_description, body.error, body.message) ?? `Google tokeninfo retornou HTTP ${response.status}.`
+    };
+  }
+
+  if (!scopes.length) {
+    return {
+      ok: false,
+      scopes: [],
+      clientId,
+      expiresIn,
+      accountEmail,
+      error: "O Google validou o access token, mas não informou os scopes concedidos."
+    };
+  }
+
+  return { ok: true, scopes, clientId, expiresIn, accountEmail };
 }
 
 export function parseScopes(value?: string): string[] {
