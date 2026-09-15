@@ -10,13 +10,14 @@ import { FolderCard } from "./filesystem/FolderCard";
 import { CalendarCard } from "./calendar/CalendarCard";
 import { GenericResourceCard } from "./generic/GenericResourceCard";
 
+const BULK_EMAIL_ACTION_IDS=new Set(["email.trash","email.archive","email.mark_read","email.mark_unread"]);
 type Reference={conversationId:string;messageId:string;blockId:string};
 export function ResourceCollection({block,conversationId,messageId}:{block:ResourceCollectionBlock;conversationId?:string;messageId?:string}) {
   const [selected,setSelected]=useState<string[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState("");
   const execute=useAssistantStore(store=>store.executeResourceAction),loadMore=useAssistantStore(store=>store.loadMoreBlock),limit=useAssistantStore(store=>store.blockLimits[block.id]??8);
   const reference=conversationId&&messageId?{conversationId,messageId,blockId:block.id}:undefined;
   const chosen=block.items.filter(item=>selected.includes(item.id));
-  const common=chosen[0]?.actions.filter(action=>/^email\.(trash|archive|mark_read|mark_unread)$/.test(action.id)&&chosen.every(item=>item.actions.some(other=>other.id===action.id&&!other.disabled)&&!item.pendingApprovalId))??[];
+  const common=chosen[0]?.actions.filter(action=>BULK_EMAIL_ACTION_IDS.has(action.id)&&chosen.every(item=>item.actions.some(other=>other.id===action.id&&!other.disabled)&&!item.pendingApprovalId))??[];
   async function bulk(action:ResourceAction){if(!reference||!chosen.length)return;setLoading(true);setError("");try{await execute({...reference,itemId:chosen[0].id,itemIds:chosen.map(item=>item.id),actionId:action.id});setSelected([]);}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setLoading(false);}}
   return <section className="resourceCollection" aria-label={block.title}>
     <header className="resourceCollectionHeading"><div><h3>{block.title}</h3>{block.subtitle&&<p>{block.subtitle}</p>}</div><span>{Math.min(limit,block.items.length)} exibidos{block.total!==undefined?` de ${Math.max(block.total,block.items.length)}`:""}</span></header>
@@ -38,7 +39,8 @@ function ResourceEntry({item,reference,selected,onSelect}:{item:ResourceItem;ref
     {form==="email.reply"&&resource.kind==="email"?<ReplyComposer recipient={resource.sender.name??resource.sender.email} onCancel={()=>setForm(undefined)} onSubmit={bodyText=>run(form,{bodyText})}/>:form&&<ActionForm actionId={form} item={item} onCancel={()=>setForm(undefined)} onSubmit={values=>run(form,values)}/>}
     {error&&<p className="chatError" role="alert">{error}</p>}
   </>;
-  if(resource.kind==="email")return <EmailCard item={item} resource={resource} onExpand={()=>action({id:"email.expand",icon:"more",label:"Ver mensagem",mutation:false})} selected={selected} onSelect={reference&&!item.pendingApprovalId&&!item.actions.every(action=>action.disabled)?onSelect:undefined}>{children}</EmailCard>;
+  const selectableEmail=resource.kind==="email"&&item.actions.some(action=>BULK_EMAIL_ACTION_IDS.has(action.id)&&!action.disabled);
+  if(resource.kind==="email")return <EmailCard item={item} resource={resource} onExpand={()=>action({id:"email.expand",icon:"more",label:"Ver mensagem",mutation:false})} selected={selected} onSelect={reference&&!item.pendingApprovalId&&selectableEmail?onSelect:undefined}>{children}</EmailCard>;
   if(resource.kind==="file")return <FileCard item={item} resource={resource} onExpand={()=>void run("file.preview").catch(()=>{})}>{children}</FileCard>;
   if(resource.kind==="folder")return <FolderCard item={item} resource={resource} onExpand={()=>void run("folder.list").catch(()=>{})}>{children}</FolderCard>;
   if(resource.kind==="calendar")return <CalendarCard item={item} resource={resource}>{children}</CalendarCard>;
