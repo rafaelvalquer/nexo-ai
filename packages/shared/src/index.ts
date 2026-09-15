@@ -10,7 +10,7 @@ export type VisualExecutionContext = { visualRunId:string; taskId?:string; agent
 export type Approval = {
   id:string; createdAt:string; toolName:string; input:Record<string,unknown>; risk:RiskLevel; reason:string;
   status:"pending"|"approved"|"rejected"|"expired"; agentRunId?:string; checkpointId?:string; visualRunId?:string; taskId?:string;
-  domain?:string;actionType?:string;preview?:string;affectedCount?:number;consequence?:string;fingerprint?:string;expiresAt?:string;
+  domain?:string;actionType?:string;preview?:string;affectedCount?:number;consequence?:string;fingerprint?:string;executionId?:string;expiresAt?:string;
 };
 
 export type ChatMessage = {

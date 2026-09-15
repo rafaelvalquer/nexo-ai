@@ -31,7 +31,7 @@ export class AgentLoop {
       const action=preflight.action;state.actionFingerprints.push(action.fingerprint);
       if(!this.isPollingAction(state,action.toolName)){const guard=this.guard(state);if(!guard.ok){this.deps.metric?.("agent.loop_detected",1,{kind:"action"});state.finalResponse=guard.reason;await this.save(state,"FAILED");return state;}}
       state.pendingAction={callId:decision.call.id,toolName:action.toolName,input:action.input,fingerprint:action.fingerprint,executionId:action.executionId,idempotencyKey:action.idempotencyKey,iteration:state.iteration,mutatesState:action.mutatesState};
-      if(action.requiresApproval){this.deps.metric?.("agent.approval_requested",1,{tool:action.toolName});await this.save(state,"WAITING_APPROVAL");return state;}
+      if(action.requiresApproval){await this.save(state,"WAITING_APPROVAL");return state;}
       await this.save(state,"EXECUTING");const execution=await this.deps.execute(action,{runId:state.runId,signal});if(!await this.observeExecution(state,execution,decision.call.id,signal))return state;
     }
     return state;

@@ -20,7 +20,7 @@ import { IntentMemoryStore } from "./intent-memory/store.js";
 import { IntentMemoryRetriever } from "./intent-memory/retriever.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 
-export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata};
+export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata;executionId?:string};
 export type PlanOrigin="fast"|"llm";
 export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences";emailDraft?:EmailComposePlanDraft};
 
