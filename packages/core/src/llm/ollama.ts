@@ -1,4 +1,4 @@
-import type { AgentModelTurn, AgentTurnRequest, LLMMessage, LLMProvider, StructuredPlanRequest } from "./provider.js";
+import type { AgentModelMessage, AgentModelTurn, AgentTurnRequest, LLMMessage, LLMProvider, StructuredPlanRequest } from "./provider.js";
 import { structuredAgentTurn } from "./agent/structured-agent-turn.js";
 import { DEFAULT_TIMEOUTS } from "../config/defaults.js";
 import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, OllamaInvalidResponseError } from "./errors.js";
@@ -8,6 +8,31 @@ import { parseStructuredJson } from "./structured-response-parser.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 
 const DEFAULT_KEEP_ALIVE = "10m";
+const DEFAULT_AGENT_NUM_CTX = Math.max(8_192, Number(process.env.NEXO_AGENT_NUM_CTX ?? 16_384) || 16_384);
+
+function serializeAgentMessages(messages: AgentModelMessage[]) {
+  return messages.map(message => {
+    if (message.role === "assistant" && message.toolCalls?.length) {
+      return {
+        role: "assistant",
+        content: message.content ?? "",
+        tool_calls: message.toolCalls.map(call => ({
+          id: call.id,
+          type: "function",
+          function: { name: call.name, arguments: call.arguments }
+        }))
+      };
+    }
+    if (message.role === "tool") {
+      return {
+        role: "tool",
+        content: message.content,
+        ...(message.toolName ? { tool_name: message.toolName } : {})
+      };
+    }
+    return { role: message.role, content: message.content };
+  });
+}
 
 export class OllamaProvider implements LLMProvider {
   private intentModel?: string;
@@ -142,31 +167,37 @@ export class OllamaProvider implements LLMProvider {
       try {
         const res = await fetch(`${this.baseUrl}/api/chat`, {
           method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: request.model?.trim() || this.model, stream: false, think: false, keep_alive: DEFAULT_KEEP_ALIVE,
-            messages: request.messages.map(message => ({ role: message.role, content: message.content, ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}) })),
-            tools: request.tools.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters ?? { type: "object", properties: {} } } })), options: { temperature: 0 } }),
+          body: JSON.stringify({
+            model: request.model?.trim() || this.model,
+            stream: false,
+            think: false,
+            keep_alive: DEFAULT_KEEP_ALIVE,
+            messages: serializeAgentMessages(request.messages),
+            tools: request.tools.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters ?? { type: "object", properties: {} } } })),
+            options: { temperature: 0, num_ctx: DEFAULT_AGENT_NUM_CTX }
+          }),
           signal: this.signal(signal, DEFAULT_TIMEOUTS.tool_reasoning)
         });
         if (!res.ok) {
-          // Older Ollama/model combinations reject tools. Their structured JSON capability remains safe.
           if ([400, 404, 422].includes(res.status)){this.metrics?.record("agent.structured_fallback",1,{status:res.status});return structuredAgentTurn(this as Required<Pick<LLMProvider, "planStructured">>, request, signal);}
           throw new Error(`Ollama respondeu HTTP ${res.status}`);
         }
         const data = await res.json() as { message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: unknown } }> } };
-          try {
-            if (!data.message) throw new OllamaInvalidResponseError("Ollama não retornou uma mensagem de agent turn.");
-            const toolCalls = (data.message.tool_calls ?? []).map((call, index) => {
-              if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
-              return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
-            });
-            this.metrics?.record("agent.native_tool_calling",1,{toolCalls:toolCalls.length});return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
-          } catch (error) {
-            if (!(error instanceof OllamaInvalidResponseError)) throw error;
-            this.metrics?.record("agent.native_tool_call_invalid",1);
-            this.metrics?.record("agent.structured_fallback_after_invalid_native",1);
-            try { const repaired=await structuredAgentTurn(this as Required<Pick<LLMProvider,"planStructured">>,request,signal);this.metrics?.record("agent.native_tool_call_repaired",1);return repaired; }
-            catch { throw error; }
-          }
+        try {
+          if (!data.message) throw new OllamaInvalidResponseError("Ollama não retornou uma mensagem de agent turn.");
+          const toolCalls = (data.message.tool_calls ?? []).map((call, index) => {
+            if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
+            return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
+          });
+          this.metrics?.record("agent.native_tool_calling",1,{toolCalls:toolCalls.length});
+          return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
+        } catch (error) {
+          if (!(error instanceof OllamaInvalidResponseError)) throw error;
+          this.metrics?.record("agent.native_tool_call_invalid",1);
+          this.metrics?.record("agent.structured_fallback_after_invalid_native",1);
+          try { const repaired=await structuredAgentTurn(this as Required<Pick<LLMProvider,"planStructured">>,request,signal);this.metrics?.record("agent.native_tool_call_repaired",1);return repaired; }
+          catch { throw error; }
+        }
       } catch (error) {
         if (error instanceof OllamaInvalidResponseError) throw error;
         return this.handleError(error, "agent turn", DEFAULT_TIMEOUTS.tool_reasoning, signal);
@@ -179,23 +210,12 @@ export class OllamaProvider implements LLMProvider {
       const preferredModel = request.model?.trim() || this.intentModel || this.model;
       const invoke = async (model: string, repair = false) => {
         const messages = repair
-          ? [
-              ...request.messages,
-              { role: "system" as const, content: "A resposta anterior não respeitou o schema. Retorne somente um objeto JSON compatível com o schema fornecido, sem markdown, comentários ou texto adicional." }
-            ]
+          ? [...request.messages,{ role: "system" as const, content: "A resposta anterior não respeitou o schema. Retorne somente um objeto JSON compatível com o schema fornecido, sem markdown, comentários ou texto adicional." }]
           : request.messages;
         const res = await fetch(`${this.baseUrl}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            model,
-            stream: false,
-            messages,
-            think: false,
-            format: request.schema,
-            keep_alive: DEFAULT_KEEP_ALIVE,
-            options: { temperature: 0 }
-          }),
+          body: JSON.stringify({model,stream:false,messages,think:false,format:request.schema,keep_alive:DEFAULT_KEEP_ALIVE,options:{temperature:0}}),
           signal: this.signal(signal, DEFAULT_TIMEOUTS.planner)
         });
         if (!res.ok) {
@@ -208,15 +228,12 @@ export class OllamaProvider implements LLMProvider {
         if (!data.message?.content) throw new OllamaInvalidResponseError("Ollama não retornou conteúdo estruturado.");
         return request.parse(parseStructuredJson(data.message.content));
       };
-
       try {
-        try {
-          return await invoke(preferredModel, false);
-        } catch (firstError: any) {
+        try { return await invoke(preferredModel, false); }
+        catch (firstError: any) {
           if (firstError?.status === 404 && preferredModel !== this.model) return await invoke(this.model, false);
-          try {
-            return await invoke(preferredModel, true);
-          } catch (secondError: any) {
+          try { return await invoke(preferredModel, true); }
+          catch (secondError: any) {
             if (secondError?.status === 404 && preferredModel !== this.model) return await invoke(this.model, true);
             throw secondError;
           }
@@ -232,34 +249,22 @@ export class OllamaProvider implements LLMProvider {
       try {
         const messages: LLMMessage[] = [{ role: "user", content: `Faça um resumo do seguinte texto:\n\n${text}` }];
         const res = await fetch(`${this.baseUrl}/api/chat`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, stream: false, messages, keep_alive: DEFAULT_KEEP_ALIVE }),
-          signal: AbortSignal.timeout(DEFAULT_TIMEOUTS.summarize)
+          method: "POST",headers:{"content-type":"application/json"},body:JSON.stringify({model:this.model,stream:false,messages,keep_alive:DEFAULT_KEEP_ALIVE}),signal:AbortSignal.timeout(DEFAULT_TIMEOUTS.summarize)
         });
         if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
         const data = await res.json() as { message?: { content?: string } };
         return data.message?.content ?? "";
-      } catch (e) {
-        return this.handleError(e, "resumo", DEFAULT_TIMEOUTS.summarize);
-      }
+      } catch (e) { return this.handleError(e, "resumo", DEFAULT_TIMEOUTS.summarize); }
     });
   }
 
   async embed(text: string) {
     try {
-      const res = await fetch(`${this.baseUrl}/api/embeddings`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: this.model, prompt: text }),
-        signal: AbortSignal.timeout(DEFAULT_TIMEOUTS.embeddings)
-      });
+      const res = await fetch(`${this.baseUrl}/api/embeddings`, {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({model:this.model,prompt:text}),signal:AbortSignal.timeout(DEFAULT_TIMEOUTS.embeddings)});
       if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
       const data = await res.json() as { embedding?: number[] };
       return data.embedding ?? [];
-    } catch (e) {
-      return this.handleError(e, "embeddings", DEFAULT_TIMEOUTS.embeddings);
-    }
+    } catch (e) { return this.handleError(e, "embeddings", DEFAULT_TIMEOUTS.embeddings); }
   }
 
   async stream(messages: LLMMessage[], onToken: (token: string) => void, signal?: AbortSignal) {
@@ -268,47 +273,13 @@ export class OllamaProvider implements LLMProvider {
       const timeout = controller ? setTimeout(() => controller.abort(new Error("Timeout")), DEFAULT_TIMEOUTS.chat) : undefined;
       try {
         const effective = signal ?? controller!.signal;
-        const res = await fetch(`${this.baseUrl}/api/chat`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: this.model, stream: true, messages, keep_alive: DEFAULT_KEEP_ALIVE }),
-          signal: effective
-        });
+        const res = await fetch(`${this.baseUrl}/api/chat`, {method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({model:this.model,stream:true,messages,keep_alive:DEFAULT_KEEP_ALIVE}),signal:effective});
         if (!res.ok) throw new Error(`Ollama respondeu HTTP ${res.status}`);
         if (!res.body) throw new Error("Ollama não retornou um stream de resposta.");
-        const reader = res.body.getReader(), decoder = new TextDecoder();
-        let buffer = "", full = "", thinkingStarted = false, contentStarted = false;
-        const consumeLine = (line: string) => {
-          const clean = line.trim();
-          if (!clean) return;
-          let payload: { message?: { content?: string; thinking?: string }; error?: string };
-          try { payload = JSON.parse(clean); } catch { return; }
-          if (payload.error) throw new Error(payload.error);
-          const thinking = payload.message?.thinking ?? "";
-          if (thinking && !thinkingStarted) { thinkingStarted = true; onToken(LLM_STREAM_THINKING_STARTED); }
-          const token = payload.message?.content ?? "";
-          if (token) {
-            if (!contentStarted) { contentStarted = true; onToken(LLM_STREAM_CONTENT_STARTED); }
-            full += token;
-            onToken(token);
-          }
-        };
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) consumeLine(line);
-        }
-        buffer += decoder.decode();
-        if (buffer.trim()) consumeLine(buffer);
-        return full;
-      } catch (e) {
-        return this.handleError(e, "chat", DEFAULT_TIMEOUTS.chat, signal);
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    }, signal);
+        const reader=res.body.getReader(),decoder=new TextDecoder();let buffer="",full="",thinkingStarted=false,contentStarted=false;
+        const consumeLine=(line:string)=>{const clean=line.trim();if(!clean)return;let payload:{message?:{content?:string;thinking?:string};error?:string};try{payload=JSON.parse(clean);}catch{return;}if(payload.error)throw new Error(payload.error);const thinking=payload.message?.thinking??"";if(thinking&&!thinkingStarted){thinkingStarted=true;onToken(LLM_STREAM_THINKING_STARTED);}const token=payload.message?.content??"";if(token){if(!contentStarted){contentStarted=true;onToken(LLM_STREAM_CONTENT_STARTED);}full+=token;onToken(token);}};
+        while(true){const{value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split("\n");buffer=lines.pop()??"";for(const line of lines)consumeLine(line);}buffer+=decoder.decode();if(buffer.trim())consumeLine(buffer);return full;
+      } catch(e){return this.handleError(e,"chat",DEFAULT_TIMEOUTS.chat,signal);} finally {if(timeout)clearTimeout(timeout);}
+    },signal);
   }
 }
