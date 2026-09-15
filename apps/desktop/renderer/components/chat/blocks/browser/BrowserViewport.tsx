@@ -1,6 +1,7 @@
 import { useEffect,useRef,useState } from "react";
 import type { BrowserRun } from "@nexo/shared/browser-agent";
 import { LatestFrameBuffer } from "./latest-frame-buffer";
+import { browserPhaseLabel } from "./browser-phase";
 
 type Props={run:BrowserRun;expanded?:boolean};
 
@@ -10,6 +11,11 @@ export function BrowserViewport({run,expanded=false}:Props){
   const drawingRef=useRef(false);
   const lastSequenceRef=useRef(0);
   const[hasLiveFrame,setHasLiveFrame]=useState(false);
+  const hasNavigated=Boolean(run.currentUrl&&run.currentUrl!=="about:blank"&&/^https?:\/\//i.test(run.currentUrl));
+
+  useEffect(()=>{
+    if(!hasNavigated)setHasLiveFrame(false);
+  },[hasNavigated,run.currentUrl]);
 
   useEffect(()=>{
     if(!["starting","running","paused","waiting_approval"].includes(run.status))return;
@@ -42,9 +48,10 @@ export function BrowserViewport({run,expanded=false}:Props){
     return()=>{disposed=true;latestRef.current.clear();unsubscribe();};
   },[run.id,run.status]);
 
+  const placeholder=browserPhaseLabel(run.phase)??"Preparando navegador…";
   return <div className={`browserViewport ${expanded?"expanded":""}`}>
-    <canvas ref={canvasRef} aria-label="Visualização ao vivo do navegador"/>
-    {!hasLiveFrame&&run.finalThumbnail&&<img className="browserThumbnail" src={run.finalThumbnail} alt="Última captura da execução"/>}
-    {!hasLiveFrame&&!run.finalThumbnail&&<div className="browserViewportPlaceholder"><span className="browserPulse"/>Preparando visualização ao vivo…</div>}
+    {hasNavigated&&<canvas ref={canvasRef} aria-label="Visualização ao vivo do navegador"/>}
+    {hasNavigated&&!hasLiveFrame&&run.finalThumbnail&&<img className="browserThumbnail" src={run.finalThumbnail} alt="Última captura da execução"/>}
+    {(!hasNavigated||(!hasLiveFrame&&!run.finalThumbnail))&&<div className="browserViewportPlaceholder"><span className="browserPulse"/>{placeholder}</div>}
   </div>;
 }
