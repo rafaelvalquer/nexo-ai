@@ -33,5 +33,5 @@ export async function structuredAgentTurn(provider: Required<Pick<LLMProvider, "
 function toStructuredMessage(message: AgentModelMessage) {
   if (message.role === "tool") return { role: "user" as const, content: `TOOL_RESULT ${message.toolName ?? "unknown"}: ${message.content}` };
   if (message.role === "assistant" && message.toolCalls?.length) return { role: "assistant" as const, content: `TOOL_CALL ${message.toolCalls.map(call => `${call.name}(${JSON.stringify(call.arguments)})`).join(", ")}${message.content ? `\n${message.content}` : ""}` };
-  return { role: message.role === "tool" ? "user" as const : message.role, content: message.content };
+  return { role: message.role, content: message.content };
 }
