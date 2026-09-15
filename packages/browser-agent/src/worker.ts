@@ -48,7 +48,7 @@ parentPort.on("message", event => {
   void handle(command).catch(error => {
     const message = error instanceof Error ? error.message : String(error);
     if (command.type === "run") {
-      emit({ type: "failed", runId: command.config.runId, error: `Falha ao inicializar o Browser Agent: ${message}` });
+      emit({ type: "failed", runId: command.config.runId, error: `Falha ao inicializar o Browser Agent: ${message}`, errorCode:"BROWSER_AGENT_LOAD_FAILED" });
       return;
     }
     emit({ type: "log", runId: currentRunId, level: "error", message });
@@ -64,8 +64,12 @@ async function handle(command: BrowserWorkerCommand) {
   switch (command.type) {
     case "run": {
       currentRunId = command.config.runId;
+      emit({ type:"phase", runId:currentRunId, phase:"loading_agent" });
+      emit({ type:"log", runId:currentRunId, level:"info", message:"Carregando Browser Use Pi." });
       try {
         const runner = await getRunner();
+        emit({ type:"diagnostic", runId:currentRunId, event:"agent_loaded" });
+        emit({ type:"log", runId:currentRunId, level:"info", message:"Browser Use Pi carregado." });
         await runner.run(command.config);
       } finally {
         rejectPendingApprovals();
