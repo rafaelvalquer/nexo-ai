@@ -85,7 +85,6 @@ export async function runBrowserToolCallingDiagnostic({
       messages,
       tools,
       stream: false,
-      think: false,
       options: { temperature: 0 }
     },
     timeoutMs,
@@ -120,32 +119,14 @@ async function probe(fetchImpl, { endpoint, headers, body, timeoutMs, now, respo
       signal: AbortSignal.timeout(timeoutMs)
     });
   } catch (error) {
-    return {
-      endpoint,
-      ok: false,
-      httpStatus: null,
-      latencyMs: now() - startedAt,
-      toolCallDetected: false,
-      assistantContentPresent: false,
-      toolCalls: [],
-      error: safeError(error)
-    };
+    return failedProbe(endpoint, null, now() - startedAt, safeError(error));
   }
 
   let payload;
   try {
     payload = await response.json();
   } catch (error) {
-    return {
-      endpoint,
-      ok: false,
-      httpStatus: response.status,
-      latencyMs: now() - startedAt,
-      toolCallDetected: false,
-      assistantContentPresent: false,
-      toolCalls: [],
-      error: `Resposta JSON inválida: ${safeError(error)}`
-    };
+    return failedProbe(endpoint, response.status, now() - startedAt, `Resposta JSON inválida: ${safeError(error)}`);
   }
 
   const summary = responseShape === "native"
@@ -159,6 +140,20 @@ async function probe(fetchImpl, { endpoint, headers, body, timeoutMs, now, respo
     latencyMs: now() - startedAt,
     ...summary,
     error: response.ok ? null : `HTTP ${response.status}`
+  };
+}
+
+function failedProbe(endpoint, httpStatus, latencyMs, error) {
+  return {
+    endpoint,
+    ok:false,
+    httpStatus,
+    latencyMs,
+    toolCallDetected:false,
+    assistantContentPresent:false,
+    toolCalls:[],
+    diagnostic:emptyDiagnostic(),
+    error
   };
 }
 
@@ -198,53 +193,113 @@ function summarizeOpenAI(payload) {
   const messages = Array.isArray(payload?.choices)
     ? payload.choices.map(choice => choice?.message).filter(Boolean)
     : [];
-  return summarizeMessages(messages);
+  return summarizeMessages(messages, false);
 }
 
 function summarizeNative(payload) {
-  return summarizeMessages(payload?.message ? [payload.message] : []);
+  return summarizeMessages(payload?.message ? [payload.message] : [], true);
 }
 
-function summarizeMessages(messages) {
-  const toolCalls = [];
+function summarizeMessages(messages, parseQwenMarkup) {
+  const calls = [];
+  const toolNames = new Set();
   let assistantContentPresent = false;
+  let assistantContentLength = 0;
+  let thinkingLength = 0;
+  let structuredToolCallCount = 0;
+  let fallbackToolCallCount = 0;
+  let invalidToolCallMarkupCount = 0;
+  let containsToolCallMarkup = false;
 
   for (const message of messages) {
-    if (typeof message?.content === "string" && message.content.trim().length > 0) {
-      assistantContentPresent = true;
+    const content = typeof message?.content === "string" ? message.content : "";
+    const thinking = typeof message?.thinking === "string" ? message.thinking : "";
+    assistantContentLength += content.length;
+    thinkingLength += thinking.length;
+    if (content.trim().length > 0) assistantContentPresent = true;
+
+    if (Array.isArray(message?.tool_calls)) {
+      for (const call of message.tool_calls) {
+        const parsed = normalizeCall(call, "structured");
+        if (!parsed) continue;
+        structuredToolCallCount += 1;
+        toolNames.add(parsed.name);
+        calls.push(parsed);
+      }
     }
-    if (!Array.isArray(message?.tool_calls)) continue;
-    for (const call of message.tool_calls) {
-      const fn = call?.function;
-      if (!fn || typeof fn !== "object") continue;
-      const args = normalizeArguments(fn.arguments);
-      toolCalls.push({
-        name: typeof fn.name === "string" ? fn.name : null,
-        arguments: args
-      });
+
+    if (parseQwenMarkup) {
+      const pattern = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi;
+      for (const match of content.matchAll(pattern)) {
+        containsToolCallMarkup = true;
+        try {
+          const parsedJson = JSON.parse(match[1]?.trim() ?? "");
+          const parsed = normalizeCall(parsedJson, "qwen_markup");
+          if (!parsed) {
+            invalidToolCallMarkupCount += 1;
+            continue;
+          }
+          fallbackToolCallCount += 1;
+          toolNames.add(parsed.name);
+          calls.push(parsed);
+        } catch {
+          invalidToolCallMarkupCount += 1;
+        }
+      }
     }
   }
 
-  const toolCallDetected = toolCalls.some(call =>
+  const toolCallDetected = calls.some(call =>
     call.name === TOOL_NAME && call.arguments?.url === TARGET_URL
   );
 
   return {
     toolCallDetected,
     assistantContentPresent,
-    toolCalls
+    toolCalls:calls.map(call => ({ name:call.name, source:call.source })),
+    diagnostic:{
+      assistantContentLength,
+      thinkingLength,
+      structuredToolCallCount,
+      fallbackToolCallCount,
+      containsToolCallMarkup,
+      invalidToolCallMarkupCount,
+      toolNames:[...toolNames].sort()
+    }
   };
+}
+
+function normalizeCall(value, source) {
+  if (!value || typeof value !== "object") return null;
+  const direct = value;
+  const fn = direct.function && typeof direct.function === "object" ? direct.function : direct;
+  if (typeof fn.name !== "string" || !fn.name) return null;
+  const args = normalizeArguments(fn.arguments);
+  if (!args) return null;
+  return { name:fn.name, arguments:args, source };
 }
 
 function normalizeArguments(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function emptyDiagnostic() {
+  return {
+    assistantContentLength:0,
+    thinkingLength:0,
+    structuredToolCallCount:0,
+    fallbackToolCallCount:0,
+    containsToolCallMarkup:false,
+    invalidToolCallMarkupCount:0,
+    toolNames:[]
+  };
 }
 
 function classify(openAi, nativeApi) {
