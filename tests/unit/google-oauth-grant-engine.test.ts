@@ -55,7 +55,7 @@ describe("Google OAuth grant engine",()=>{
     mockGoogle({tokenInfoScope:`openid email profile ${GMAIL_MODIFY}`});
     const value=await service();const account=await value.connect("google",["email.read","email.modify"]);
     expect(account.status).toBe("connected");
-    expect(account.scopeSource).toBe("token-response");
+    expect(account.scopeSource).toBe("tokeninfo");
     expect(account.grantedScopes).toContain(GMAIL_MODIFY);
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(([input])=>String(input).includes("tokeninfo"))).toBe(true);
   });
@@ -66,7 +66,7 @@ describe("Google OAuth grant engine",()=>{
     const account=await value.connect("google",["email.read","email.send","email.modify"]);
     expect(account.status).toBe("connected");
     expect(account.capabilities).toEqual(expect.arrayContaining(["email.read","email.send","email.modify"]));
-    expect(account.capabilityGrants?.find(grant=>grant.capability==="email.send")).toMatchObject({status:"validated",granted:true,validated:true});
+    expect(account.capabilityGrants?.find(grant=>grant.capability==="email.send")).toMatchObject({status:"validated",granted:true,validated:true,validationSource:"tokeninfo"});
   });
 
   it("models the reported gmail.send-only scenario as degraded instead of falsely connected",async()=>{
