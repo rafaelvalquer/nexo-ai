@@ -1,10 +1,40 @@
-import type { ConnectionResolution } from "@nexo/shared";
+import type { ConnectionCapability, ConnectionResolution } from "@nexo/shared";
+
+type CapabilityConnectionService = {
+  resolveForCapability(capability: ConnectionCapability): ConnectionResolution;
+  test(id: string): Promise<unknown>;
+};
 
 export function isEmailSendRequest(userRequest: string) {
   const normalized = userRequest.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const mentionsEmail = /\b(e-?mail|emails)\b/.test(normalized) || /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(normalized);
   const asksToSend = /\b(envie|enviar|envia|mande|mandar|send|enviar-me|encaminhe|encaminhar|responda|responder)\b/.test(normalized);
   return mentionsEmail && asksToSend;
+}
+
+/**
+ * Revalidates a Google connection once when email.send was explicitly requested
+ * but is missing from the operational capability list. This heals connections
+ * created by older builds that lost send capability when Google omitted `scope`
+ * from a token response.
+ */
+export async function resolveEmailSendCapability(service: CapabilityConnectionService): Promise<ConnectionResolution> {
+  let resolution = service.resolveForCapability("email.send");
+  if (resolution.status !== "missing_capability") return resolution;
+
+  const account = resolution.account;
+  const requested = account.requestedCapabilities ?? account.capabilities;
+  if (account.provider !== "google" || !requested.includes("email.send")) return resolution;
+
+  try {
+    await service.test(account.id);
+  } catch {
+    // Keep the original remediation path. test() already records diagnostics and
+    // the user should never lose a working read/modify connection because repair failed.
+  }
+
+  resolution = service.resolveForCapability("email.send");
+  return resolution;
 }
 
 export function emailSendCapabilityRemediation(resolution: ConnectionResolution): string | undefined {
