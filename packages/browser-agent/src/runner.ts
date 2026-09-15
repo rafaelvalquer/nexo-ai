@@ -1,6 +1,7 @@
 import { Browser, BrowserUse, Type } from "@browser_use/pi";
 import type { BrowserAgentErrorCode, BrowserResearchResult, BrowserRunPhase } from "@nexo/shared/browser-agent";
 import { BrowserPublicEventMapper } from "./event-adapter.js";
+import { createFirstResponseTelemetry } from "./first-response-telemetry.js";
 import { BrowserAgentPreflightError, NexoBrowserModelAdapter } from "./model-adapter.js";
 import { BrowserAgentPolicy } from "./policy.js";
 import type { BrowserWorkerMessage, BrowserWorkerRunConfig } from "./types.js";
@@ -39,7 +40,7 @@ export class BrowserAgentRunner {
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_request_completed", durationMs:preflight.compatibilityLatencyMs });
 
       const { models, model } = await adapter.createModels(undefined, preflight);
-      this.emit({ type:"log", runId:config.runId, level:"info", message:`Ollama validado em ${Date.now() - preflightStarted} ms.` });
+      this.emit({ type:"log", runId:config.runId, level:"info", message:`Ollama e tool calling validados em ${Date.now() - preflightStarted} ms.` });
 
       this.phase(config.runId, "loading_agent");
       this.emit({ type:"diagnostic", runId:config.runId, event:"agent_loading" });
@@ -78,7 +79,12 @@ export class BrowserAgentRunner {
       this.emit({ type:"diagnostic", runId:config.runId, event:"agent_created", durationMs:Date.now() - agentStarted });
       this.emit({ type:"started", runId:config.runId });
       this.phase(config.runId, "waiting_model");
+      const firstTurnStartedAt = Date.now();
       this.emit({ type:"diagnostic", runId:config.runId, event:"first_turn_started" });
+      const firstResponseTelemetry = createFirstResponseTelemetry(
+        (event, durationMs) => this.emit({ type:"diagnostic", runId:config.runId, event, durationMs }),
+        firstTurnStartedAt
+      );
 
       const result = await agent.run(config.request, {
         schema: resultSchema,
@@ -94,8 +100,14 @@ export class BrowserAgentRunner {
           }
           this.emit({ type:"step", runId:config.runId, label:mapped.label, step:mapped.step, action:mapped.action });
         },
-        // Critical events are journaled by Browser Use Pi itself. Nexo does not expose raw events.
-        onEvent: async () => undefined
+        onEvent: async event => {
+          firstResponseTelemetry.handle(event);
+          if (event.type === "tool_execution_start" && !firstActionEmitted) {
+            firstActionEmitted = true;
+            this.emit({ type:"diagnostic", runId:config.runId, event:"first_action_started", durationMs:Date.now() - firstTurnStartedAt });
+            this.phase(config.runId, "executing");
+          }
+        }
       });
       if (result.status !== "completed") {
         const cancelled = result.status === "cancelled";

@@ -8,10 +8,13 @@ import type { BrowserAgentErrorCode } from "@nexo/shared/browser-agent";
  * supplies a deterministic compatibility token that never represents a real secret.
  */
 export const NEXO_OLLAMA_COMPAT_API_KEY = "nexo-local-ollama";
+const PREFLIGHT_TOOL_NAME = "nexo_browser_preflight";
+const PREFLIGHT_URL = "https://example.com";
 
 export type OllamaPreflightResult = {
   available: true;
   modelExists: true;
+  toolCallingValidated: true;
   capabilities: string[];
   latencyMs: number;
   compatibilityLatencyMs: number;
@@ -71,43 +74,70 @@ export class NexoBrowserModelAdapter {
         body: JSON.stringify({
           model: this.modelId,
           messages: [
-            { role: "system", content: "Responda somente OK." },
-            { role: "user", content: "OK" }
+            {
+              role: "system",
+              content: "You are a capability probe. You must call the provided function. Do not answer with natural language."
+            },
+            {
+              role: "user",
+              content: `Call ${PREFLIGHT_TOOL_NAME} with url exactly ${PREFLIGHT_URL}.`
+            }
           ],
+          tools: [{
+            type: "function",
+            function: {
+              name: PREFLIGHT_TOOL_NAME,
+              description: "Capability probe for Browser Agent tool calling.",
+              parameters: {
+                type: "object",
+                properties: { url: { type: "string" } },
+                required: ["url"],
+                additionalProperties: false
+              }
+            }
+          }],
           stream: false,
           temperature: 0,
-          max_tokens: 8
+          max_tokens: 256
         }),
-        signal: boundedSignal(signal, 10_000)
+        signal: boundedSignal(signal, 20_000)
       });
     } catch (error) {
-      throw classifyFetchError(error, "O Ollama não concluiu a chamada de compatibilidade do Browser Agent.");
+      throw classifyFetchError(error, "O Ollama não concluiu o preflight de tool calling do Browser Agent.");
     }
 
     if (!compatibilityResponse.ok) {
       if (compatibilityResponse.status === 404) {
-        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado durante o teste de compatibilidade.`);
+        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado durante o teste de tool calling.`);
       }
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_INCOMPATIBLE",
-        `O endpoint OpenAI-compatible do Ollama respondeu com HTTP ${compatibilityResponse.status}.`
+        `O endpoint OpenAI-compatible do Ollama respondeu com HTTP ${compatibilityResponse.status} durante o teste de tool calling.`
       );
     }
 
+    let compatibility: unknown;
     try {
-      const compatibility = await compatibilityResponse.json() as { choices?: unknown };
-      if (!Array.isArray(compatibility.choices)) throw new Error("choices ausente");
+      compatibility = await compatibilityResponse.json();
     } catch (error) {
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_INVALID_RESPONSE",
-        "O endpoint OpenAI-compatible do Ollama retornou uma resposta inválida.",
+        "O endpoint OpenAI-compatible do Ollama retornou uma resposta inválida durante o preflight de tool calling.",
         { cause:error }
+      );
+    }
+
+    if (!hasExpectedToolCall(compatibility)) {
+      throw new BrowserAgentPreflightError(
+        "BROWSER_MODEL_TOOL_CALL_UNSUPPORTED",
+        `O modelo ${this.modelId} respondeu ao endpoint OpenAI-compatible, mas não produziu o tool call exigido pelo Browser Agent.`
       );
     }
 
     return {
       available:true,
       modelExists:true,
+      toolCallingValidated:true,
       capabilities,
       latencyMs,
       compatibilityLatencyMs:Date.now() - compatibilityStarted
@@ -171,6 +201,40 @@ export class NexoBrowserModelAdapter {
     } catch {
       return false;
     }
+  }
+}
+
+function hasExpectedToolCall(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const choices = (value as { choices?: unknown }).choices;
+  if (!Array.isArray(choices)) return false;
+  for (const choice of choices) {
+    if (!choice || typeof choice !== "object") continue;
+    const message = (choice as { message?: unknown }).message;
+    if (!message || typeof message !== "object") continue;
+    const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
+    if (!Array.isArray(toolCalls)) continue;
+    for (const call of toolCalls) {
+      if (!call || typeof call !== "object") continue;
+      const fn = (call as { function?: unknown }).function;
+      if (!fn || typeof fn !== "object") continue;
+      const name = (fn as { name?: unknown }).name;
+      if (name !== PREFLIGHT_TOOL_NAME) continue;
+      const args = parseToolArguments((fn as { arguments?: unknown }).arguments);
+      if (args?.url === PREFLIGHT_URL) return true;
+    }
+  }
+  return false;
+}
+
+function parseToolArguments(value: unknown): { url?: unknown } | undefined {
+  if (value && typeof value === "object") return value as { url?: unknown };
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as { url?: unknown } : undefined;
+  } catch {
+    return undefined;
   }
 }
 
