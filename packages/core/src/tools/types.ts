@@ -13,5 +13,6 @@ export type ToolDefinition={
   mutatesState?:boolean;
   /** Explicit opt-in for a provider that receives an idempotency key. */
   supportsIdempotency?:boolean;
+  mutationSafety?: { idempotency: "provider" | "nexo" | "none"; reconciliation: "supported" | "none" };
   execute(input:any,context?:ToolExecutionContext):Promise<ToolResult>;
 };

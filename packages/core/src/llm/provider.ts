@@ -1,4 +1,9 @@
 export type LLMMessage = { role: "system" | "user" | "assistant"; content: string };
+export type AgentModelMessage = { role: "system" | "user" | "assistant" | "tool"; content: string; toolCallId?: string };
+export type AgentToolSchema = { name: string; description: string; parameters?: unknown };
+export type AgentToolCall = { id: string; name: string; arguments: Record<string, unknown> };
+export type AgentModelTurn = { content?: string; toolCalls: AgentToolCall[] };
+export type AgentTurnRequest = { messages: AgentModelMessage[]; tools: AgentToolSchema[]; model?: string };
 
 export type StructuredPlanRequest<T> = {
   messages: LLMMessage[];
@@ -17,6 +22,8 @@ export interface LLMProvider {
    * OllamaProvider implements it with native JSON Schema output.
    */
   planStructured?<T>(request: StructuredPlanRequest<T>, signal?: AbortSignal): Promise<T>;
+  /** One decision round; protocol validation remains the responsibility of the Core. */
+  agentTurn?(request: AgentTurnRequest, signal?: AbortSignal): Promise<AgentModelTurn>;
   summarize(text: string): Promise<string>;
   embed(text: string): Promise<number[]>;
   health(): Promise<{ ok: boolean; detail: string }>;

@@ -43,6 +43,8 @@ export class AgentPlanner{
   constructor(private llm:LLMProvider,private registry:ToolRegistry,private intentMemory?:IntentMemoryStore,private intentLearningEnabled:()=>boolean=()=>true,private metrics?:LocalMetricsService){
     this.orchestrator=new IntentOrchestrator(llm,diagnostic=>this.recordIntentDiagnostic(diagnostic));this.synthesizer=new ResponseSynthesizer(llm);if(intentMemory){this.intentRetriever=new IntentMemoryRetriever(intentMemory,text=>llm.embed(text));this.retrieverStore=intentMemory;}
   }
+  /** Transitional access for AgentLoop; it does not expose planning/orchestration. */
+  agentProvider(){return this.llm;}
   async plan(userText:string,context:LLMMessage[]=[],signal?:AbortSignal,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Promise<Plan>{
     const tools=availableTools??this.toolDescriptors();
     const preferenceIntent=deterministicEmailPreferenceIntent(userText);

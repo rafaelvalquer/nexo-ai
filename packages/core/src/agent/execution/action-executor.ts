@@ -8,6 +8,7 @@ import type { AuditService } from "../../audit/audit.js";
 import type { LocalMetricsService } from "../../observability/metrics.js";
 import type { ResourceManager } from "../../runtime/resource-manager.js";
 import type { ActionExecutionContext, ActionExecutionResult, ActionPreflightResult, PreparedAction } from "./types.js";
+import type { ExecutionRecordRepository } from "./execution-record-repository.js";
 
 /** The sole safe execution entry point for agent, UI, and automation actions. */
 export class ActionExecutor {
@@ -15,7 +16,7 @@ export class ActionExecutor {
     private readonly registry: ToolRegistry,
     private readonly permissions: PermissionEngine,
     private readonly audit: AuditService,
-    private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager } = {}
+    private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository } = {}
   ) {}
 
   async preflight(toolName: string, rawInput: Record<string, unknown>, context: ActionExecutionContext = {}): Promise<ActionPreflightResult> {
@@ -36,12 +37,14 @@ export class ActionExecutor {
     const mutatesState = tool.mutatesState ?? tool.risk !== "READ";
     const executionId = context.executionId ?? randomUUID();
     const fingerprint = actionFingerprint(tool.name, input);
-    return { ok: true, action: {
+    const action: PreparedAction = {
       executionId, toolName: tool.name, input, fingerprint, mutatesState, risk: tool.risk,
       idempotencyKey: mutatesState && tool.supportsIdempotency ? idempotencyKey(context.runId, executionId, fingerprint) : undefined,
       requiresApproval: mutatesState || this.permissions.requiresApproval(tool.risk, mutatesState) || Boolean(this.options.security?.requiresApproval(tool.name, tool.risk)),
       status: "PREPARED"
-    }};
+    };
+    if (mutatesState) this.options.records?.prepare(action, context.runId);
+    return { ok: true, action };
   }
 
   async execute(action: PreparedAction, context: ActionExecutionContext = {}): Promise<ActionExecutionResult> {
@@ -50,13 +53,14 @@ export class ActionExecutor {
     if (!tool) return { status: "FAILED", action, error: "Ferramenta não encontrada durante o despacho." };
     const startedAt = Date.now();
     // Audit dispatch before a mutation: a crash/timeout after this point is ambiguous, never retry it automatically.
-    if (action.mutatesState) this.audit.record(tool.name, tool.risk, "DISPATCHING", { executionId: action.executionId, fingerprint: action.fingerprint });
+    if (action.mutatesState) { this.options.records?.prepare(action, context.runId); this.options.records?.markDispatching(action.executionId); this.audit.record(tool.name, tool.risk, "DISPATCHING", { executionId: action.executionId, fingerprint: action.fingerprint }); }
     try {
       if (context.signal?.aborted) throw context.signal.reason ?? new DOMException("Cancelada", "AbortError");
       const result = await this.withResources(tool, action.input, context, () => tool.execute(action.input, { ...context, executionId: action.executionId, idempotencyKey: action.idempotencyKey }));
       const status = result.ok ? "SUCCEEDED" : "FAILED" as const;
       this.options.metrics?.record("tool.duration_ms", Date.now() - startedAt, { tool: tool.name, ok: result.ok });
       this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, result });
+      if (action.mutatesState) this.options.records?.complete(action.executionId, status, { result });
       return { status, action, result };
     } catch (error) {
       const ambiguous = action.mutatesState && isAmbiguous(error);
@@ -65,6 +69,7 @@ export class ActionExecutor {
       this.options.metrics?.record("tool.duration_ms", Date.now() - startedAt, { tool: tool.name, ok: false });
       this.options.metrics?.record("tool.failed", 1, { tool: tool.name });
       this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, error: errorMessage });
+      if (action.mutatesState) this.options.records?.complete(action.executionId, status, { error: errorMessage });
       return { status, action, error: errorMessage };
     }
   }

@@ -1,0 +1,3 @@
+import type { ExecutionRecord } from "../execution-record-repository.js";
+import type { MutationReconciler, ReconciliationResult } from "./reconciler.js";
+export class ReconcilerRegistry { constructor(private readonly reconcilers: MutationReconciler[] = []) {} register(reconciler: MutationReconciler) { this.reconcilers.push(reconciler); return this; } async reconcile(record: ExecutionRecord, signal?: AbortSignal): Promise<ReconciliationResult> { const reconciler = this.reconcilers.find(candidate => candidate.supports(record)); return reconciler ? reconciler.reconcile(record, signal) : { status: "still_unknown", reason: "Nenhum reconciliador registrado para esta ferramenta." }; } }

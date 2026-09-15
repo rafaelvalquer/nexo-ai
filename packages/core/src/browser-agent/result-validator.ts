@@ -12,7 +12,7 @@ export function validateBrowserResearchResult(value: unknown, allowedDomains: st
     if (!["http:", "https:"].includes(url.protocol)) throw new Error("Somente fontes HTTP(S) são permitidas.");
     const host = url.hostname.toLowerCase();
     if (allowed.length && !allowed.some(domain => host === domain || host.endsWith(`.${domain}`) || (domain.startsWith("*.") && (host === domain.slice(2) || host.endsWith(`.${domain.slice(2)}`))))) {
-      throw new Error(`Fonte fora dos domínios permitidos: ${host}`);
+      throw new Error(`Domínio permitido pela política? Não: ${host}`);
     }
     return url.toString();
   };
@@ -24,7 +24,7 @@ export function validateBrowserResearchResult(value: unknown, allowedDomains: st
   const findings = raw.findings.map(item => {
     if (!item || typeof item.title !== "string" || !item.title.trim() || typeof item.summary !== "string" || !item.summary.trim() || typeof item.sourceUrl !== "string") throw new Error("Achado inválido.");
     const sourceUrl = assertUrl(item.sourceUrl);
-    if (!sourceUrls.has(sourceUrl)) throw new Error(`Achado referencia uma fonte não declarada: ${sourceUrl}`);
+    if (!sourceUrls.has(sourceUrl)) throw new Error(`Fonte declarada? Não: ${sourceUrl}`);
     return { title: item.title.trim(), summary: item.summary.trim(), sourceUrl };
   });
   return { summary: raw.summary.trim(), sources, findings };

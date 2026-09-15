@@ -47,6 +47,7 @@ export type NexoSettings = {
   memoryEnabled:boolean;memoryAskBeforeSave:boolean;intentLearningEnabled?:boolean;embeddingModel:string;documentMaxSizeMb:number;externalDataRetention:"session"|"local";connectionsEnabled:boolean;
   browserAutomationEnabled:boolean;fileWritesEnabled:boolean;requireApprovalForEmail:boolean;allowedDomains:string[];dataRetentionDays:number;onboardingCompleted:boolean;ocrEnabled:boolean;
   executionTimeoutMinutes:number|null;maxConcurrentChatSessions:number;maxConcurrentLLMRequests:number;oauth:OAuthConfiguration;
+  agentLoopMode?:"legacy"|"read_only"|"shadow"|"full";forceLegacyAgent?:boolean;
 };
 
 export type OAuthConfiguration = { googleClientId:string;microsoftClientId:string;microsoftTenant:string };

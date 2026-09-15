@@ -160,6 +160,23 @@ CREATE TABLE IF NOT EXISTS pending_clarifications (
   expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pending_clarifications_conversation ON pending_clarifications(conversation_id,status,created_at);
+`], [15, `
+ALTER TABLE agent_runs ADD COLUMN engine_version TEXT;
+ALTER TABLE agent_runs ADD COLUMN state_version INTEGER;
+CREATE TABLE IF NOT EXISTS execution_records (
+  execution_id TEXT PRIMARY KEY, run_id TEXT, tool_name TEXT NOT NULL, fingerprint TEXT NOT NULL,
+  idempotency_key TEXT, mutates_state INTEGER NOT NULL, risk TEXT NOT NULL, status TEXT NOT NULL,
+  input_json TEXT NOT NULL, result_json TEXT, error TEXT, created_at TEXT NOT NULL,
+  dispatch_started_at TEXT, completed_at TEXT, reconciliation_json TEXT, reconciled_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_execution_idempotency ON execution_records(idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS approval_consumptions (
+  approval_id TEXT PRIMARY KEY, execution_id TEXT NOT NULL UNIQUE, fingerprint TEXT NOT NULL, consumed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_graph_checkpoints (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, state_json TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_graph_checkpoints_run ON agent_graph_checkpoints(run_id, created_at);
 `]];
 
 export class NexoDatabase {

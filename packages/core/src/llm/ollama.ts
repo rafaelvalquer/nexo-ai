@@ -1,4 +1,5 @@
-import type { LLMMessage, LLMProvider, StructuredPlanRequest } from "./provider.js";
+import type { AgentModelTurn, AgentTurnRequest, LLMMessage, LLMProvider, StructuredPlanRequest } from "./provider.js";
+import { structuredAgentTurn } from "./agent/structured-agent-turn.js";
 import { DEFAULT_TIMEOUTS } from "../config/defaults.js";
 import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, OllamaInvalidResponseError } from "./errors.js";
 import { LLM_STREAM_CONTENT_STARTED, LLM_STREAM_THINKING_STARTED } from "./stream-events.js";
@@ -129,6 +130,35 @@ export class OllamaProvider implements LLMProvider {
         return data.message.content;
       } catch (e) {
         return this.handleError(e, "planejamento", DEFAULT_TIMEOUTS.planner, signal);
+      }
+    }, signal);
+  }
+
+  async agentTurn(request: AgentTurnRequest, signal?: AbortSignal): Promise<AgentModelTurn> {
+    return this.scheduled(async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: request.model?.trim() || this.model, stream: false, think: false, keep_alive: DEFAULT_KEEP_ALIVE,
+            messages: request.messages.map(message => ({ role: message.role, content: message.content, ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}) })),
+            tools: request.tools.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters ?? { type: "object", properties: {} } } })), options: { temperature: 0 } }),
+          signal: this.signal(signal, DEFAULT_TIMEOUTS.tool_reasoning)
+        });
+        if (!res.ok) {
+          // Older Ollama/model combinations reject tools. Their structured JSON capability remains safe.
+          if ([400, 404, 422].includes(res.status)) return structuredAgentTurn(this as Required<Pick<LLMProvider, "planStructured">>, request, signal);
+          throw new Error(`Ollama respondeu HTTP ${res.status}`);
+        }
+        const data = await res.json() as { message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: unknown } }> } };
+        if (!data.message) throw new OllamaInvalidResponseError("Ollama não retornou uma mensagem de agent turn.");
+        const toolCalls = (data.message.tool_calls ?? []).map((call, index) => {
+          if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
+          return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
+        });
+        return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
+      } catch (error) {
+        if (error instanceof OllamaInvalidResponseError) throw error;
+        return this.handleError(error, "agent turn", DEFAULT_TIMEOUTS.tool_reasoning, signal);
       }
     }, signal);
   }
