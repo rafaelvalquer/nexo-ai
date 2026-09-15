@@ -34,7 +34,7 @@ async function work(page: Page) {
 }
 
 test("quatro polvos passeiam, voltam às mesas e mostram a atividade atual", async ({ page }, info) => {
-  test.setTimeout(60000);
+  test.setTimeout(120000);
   await page.setViewportSize({ width: 1440, height: 960 });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));

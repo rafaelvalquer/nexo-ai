@@ -1,6 +1,6 @@
 import type { RiskLevel,ToolResult } from "@nexo/shared";
 import { z } from "zod";
-export type ToolExecutionContext={runId?:string;taskId?:string;conversationId?:string;agentId?:string;executionId?:string;idempotencyKey?:string;signal?:AbortSignal};
+export type ToolExecutionContext={runId?:string;taskId?:string;conversationId?:string;agentId?:string;executionId?:string;idempotencyKey?:string;approvalId?:string;/** @internal Set only after ApprovalCoordinator consumes an exact approval. */dispatchAuthorized?:boolean;signal?:AbortSignal};
 export type ToolDefinition={
   name:string;
   description:string;
@@ -14,5 +14,6 @@ export type ToolDefinition={
   /** Explicit opt-in for a provider that receives an idempotency key. */
   supportsIdempotency?:boolean;
   mutationSafety?: { idempotency: "provider" | "nexo" | "none"; reconciliation: "supported" | "none" };
+  agent?: { category?: string; outputTrust: "trusted_local" | "untrusted_external" | "sensitive_local"; hidden?: boolean; polling?: { allowed: true; minIntervalMs: number; maxDurationMs: number; maxAttempts: number; progressFields?: string[] } };
   execute(input:any,context?:ToolExecutionContext):Promise<ToolResult>;
 };

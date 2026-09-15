@@ -5,6 +5,7 @@ import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, Olla
 import { LLM_STREAM_CONTENT_STARTED, LLM_STREAM_THINKING_STARTED } from "./stream-events.js";
 import type { ResourceManager } from "../runtime/resource-manager.js";
 import { parseStructuredJson } from "./structured-response-parser.js";
+import type { LocalMetricsService } from "../observability/metrics.js";
 
 const DEFAULT_KEEP_ALIVE = "10m";
 
@@ -15,7 +16,8 @@ export class OllamaProvider implements LLMProvider {
     private baseUrl: string,
     private model: string,
     private resources?: ResourceManager,
-    intentModel?: string
+    intentModel?: string,
+    private metrics?: LocalMetricsService
   ) {
     this.intentModel = intentModel?.trim() || process.env.NEXO_INTENT_MODEL?.trim() || undefined;
   }
@@ -24,6 +26,7 @@ export class OllamaProvider implements LLMProvider {
   setIntentModel(model?: string) { this.intentModel = model?.trim() || undefined; }
   setBaseUrl(url: string) { this.baseUrl = url.replace(/\/$/, ""); }
   setResourceManager(resources: ResourceManager) { this.resources = resources; }
+  setMetrics(metrics:LocalMetricsService){this.metrics=metrics;}
 
   async health() {
     try {
@@ -146,7 +149,7 @@ export class OllamaProvider implements LLMProvider {
         });
         if (!res.ok) {
           // Older Ollama/model combinations reject tools. Their structured JSON capability remains safe.
-          if ([400, 404, 422].includes(res.status)) return structuredAgentTurn(this as Required<Pick<LLMProvider, "planStructured">>, request, signal);
+          if ([400, 404, 422].includes(res.status)){this.metrics?.record("agent.structured_fallback",1,{status:res.status});return structuredAgentTurn(this as Required<Pick<LLMProvider, "planStructured">>, request, signal);}
           throw new Error(`Ollama respondeu HTTP ${res.status}`);
         }
         const data = await res.json() as { message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: unknown } }> } };
@@ -155,7 +158,7 @@ export class OllamaProvider implements LLMProvider {
           if (!call.function?.name || !call.function.arguments || typeof call.function.arguments !== "object" || Array.isArray(call.function.arguments)) throw new OllamaInvalidResponseError("Tool call inválida retornada pelo Ollama.");
           return { id: call.id ?? `ollama-${index}`, name: call.function.name, arguments: call.function.arguments as Record<string, unknown> };
         });
-        return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
+          this.metrics?.record("agent.native_tool_calling",1,{toolCalls:toolCalls.length});return { ...(data.message.content ? { content: data.message.content } : {}), toolCalls };
       } catch (error) {
         if (error instanceof OllamaInvalidResponseError) throw error;
         return this.handleError(error, "agent turn", DEFAULT_TIMEOUTS.tool_reasoning, signal);

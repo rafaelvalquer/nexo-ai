@@ -14,7 +14,7 @@ test("Conexões preserva configuração, conexão, permissões e diagnóstico no
   await expect(page.getByText("Configuração OAuth salva com segurança.")).toBeVisible();
   await page.getByRole("button",{name:"Conectar Google"}).click();
   await expect(page.getByText("preview-google@nexo.local")).toBeVisible();
-  await page.getByRole("button",{name:"Gerenciar conexão"}).click();await expect(page.getByRole("button",{name:"Permissões"})).toHaveAttribute("aria-expanded","true");
+  await page.getByRole("button",{name:"Gerenciar conexão"}).click();await expect(page.getByRole("button",{name:/^Permissões \d+ de \d+ operacionais$/})).toHaveAttribute("aria-expanded","true");
   await page.getByRole("button",{name:/Estado da conexão/}).press("Enter");await expect(page.getByRole("button",{name:/Estado da conexão/})).toHaveAttribute("aria-expanded","true");
   await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Diagnóstico",exact:true}).click();
   await expect(page.getByText("✓ Token presente",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Copiar diagnóstico"}).click();

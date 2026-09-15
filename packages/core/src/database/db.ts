@@ -177,6 +177,12 @@ CREATE TABLE IF NOT EXISTS agent_graph_checkpoints (
   id TEXT PRIMARY KEY, run_id TEXT NOT NULL, state_json TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_graph_checkpoints_run ON agent_graph_checkpoints(run_id, created_at);
+`], [16, `
+ALTER TABLE agent_graph_checkpoints ADD COLUMN namespace TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_graph_checkpoints ADD COLUMN parent_id TEXT;
+ALTER TABLE agent_graph_checkpoints ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agent_graph_checkpoints ADD COLUMN writes_json TEXT NOT NULL DEFAULT '[]';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_checkpoint_identity ON agent_graph_checkpoints(run_id,namespace,id);
 `]];
 
 export class NexoDatabase {

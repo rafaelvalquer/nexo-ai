@@ -1,0 +1,3 @@
+import type {ToolDefinition} from "../../tools/types.js";import type {PermissionEngine} from "../../permissions/policy.js";
+export function validateActionInput(tool:ToolDefinition,input:Record<string,unknown>){return tool.inputSchema.safeParse(input);}
+export function validateActionPaths(tool:ToolDefinition,input:Record<string,unknown>,permissions:PermissionEngine){for(const field of tool.pathFields??[]){const value=input[field];if(typeof value==="string")permissions.assertPath(value);else if(Array.isArray(value))for(const item of value)if(typeof item==="string")permissions.assertPath(item);}}

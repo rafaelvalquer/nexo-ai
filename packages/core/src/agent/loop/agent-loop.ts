@@ -1,35 +1,47 @@
 import { randomUUID } from "node:crypto";
 import { validateAgentTurn } from "./agent-protocol.js";
-import { DEFAULT_AGENT_LOOP_LIMITS, type AgentLoopDependencies, type AgentLoopLimits, type AgentLoopState } from "./types.js";
+import { DEFAULT_AGENT_LOOP_LIMITS, type AgentLoopDependencies, type AgentLoopLimits, type AgentLoopState, type AgentObservation } from "./types.js";
+import { LoopGuard, observationFingerprint } from "./loop-guard.js";
+import { PollingController } from "./polling-policy.js";
+import type { ActionExecutionResult, PreparedAction } from "../execution/types.js";
 
-/** Iterative, one-tool-per-turn loop. It never dispatches an unapproved or ambiguous mutation. */
+export type AgentLoopRunOptions={runId?:string;conversationId?:string;taskId?:string;messages?:AgentLoopState["messages"];deadlineAt?:string;signal?:AbortSignal};
+
+/** Sequential V2 state machine. Every security-relevant transition is durable. */
 export class AgentLoop {
-  constructor(private readonly deps: AgentLoopDependencies, private readonly limits: AgentLoopLimits = DEFAULT_AGENT_LOOP_LIMITS) {}
-  async run(userRequest: string, options: { runId?: string; deadlineAt?: string; signal?: AbortSignal } = {}): Promise<AgentLoopState> {
-    const state: AgentLoopState = { version: 2, runId: options.runId ?? randomUUID(), userRequest, messages: [{ role: "user", content: userRequest, trust: "TRUSTED_LOCAL" }], observations: [], iteration: 0, toolCallCount: 0, consecutiveFailures: 0, protocolRepairCount: 0, startedAt: new Date().toISOString(), deadlineAt: options.deadlineAt ?? new Date(Date.now() + 5 * 60_000).toISOString(), status: "DECIDING" };
-    while (state.status === "DECIDING") {
-      if (options.signal?.aborted) return { ...state, status: "CANCELLED" };
-      if (Date.now() >= Date.parse(state.deadlineAt) || state.iteration >= this.limits.maxIterations || state.toolCallCount >= this.limits.maxToolCalls) return fail(state, "Limite seguro do agent loop atingido.");
-      const decision = validateAgentTurn(await this.deps.agentTurn({ messages: state.messages, tools: this.deps.tools() }, options.signal));
-      if (decision.kind === "final") return { ...state, status: "COMPLETED", finalResponse: decision.content };
-      if (decision.kind === "repair") { const repairs = state.protocolRepairCount + 1; if (repairs > this.limits.maxProtocolRepairAttempts) return fail({ ...state, protocolRepairCount: repairs }, decision.error); state.protocolRepairCount = repairs; state.messages.push({ role: "tool", content: decision.error, trust: "TRUSTED_LOCAL" }); continue; }
-      state.status = "PREFLIGHT";
-      const preflight = await this.deps.preflight(decision.call.name, decision.call.arguments, { runId: state.runId, signal: options.signal });
-      if (!preflight.ok) { state.consecutiveFailures++; if (state.consecutiveFailures >= this.limits.maxConsecutiveFailures) return fail(state, preflight.message); state.messages.push({ role: "tool", toolCallId: decision.call.id, content: `ACTION_ERROR: ${preflight.message}`, trust: "TRUSTED_LOCAL" }); state.status = "DECIDING"; continue; }
-      const action = preflight.action;
-      state.pendingAction = { callId: decision.call.id, toolName: action.toolName, input: action.input, fingerprint: action.fingerprint, executionId: action.executionId, idempotencyKey: action.idempotencyKey, iteration: state.iteration, mutatesState: action.mutatesState };
-      if (action.requiresApproval) return { ...state, status: "WAITING_APPROVAL" };
-      state.status = "EXECUTING";
-      const execution = await this.deps.execute(action, { runId: state.runId, signal: options.signal });
-      if (execution.status === "RESULT_UNKNOWN") return { ...state, status: "RESULT_UNKNOWN" };
-      state.status = "OBSERVING";
-      const observation = this.deps.observe(execution, decision.call.id);
-      state.observations.push(observation); state.messages.push({ role: "tool", toolCallId: decision.call.id, content: JSON.stringify({ source: action.toolName, trust: observation.trust, data: observation.data, references: observation.references, summary: observation.summary }), trust: observation.trust });
-      state.toolCallCount++; state.iteration++; state.pendingAction = undefined; state.consecutiveFailures = execution.status === "SUCCEEDED" ? 0 : state.consecutiveFailures + 1;
-      if (state.consecutiveFailures >= this.limits.maxConsecutiveFailures) return fail(state, "Falhas consecutivas excederam o limite seguro.");
-      state.status = "DECIDING";
+  private readonly polling=new Map<string,PollingController>();
+  constructor(private readonly deps:AgentLoopDependencies,private readonly limits:AgentLoopLimits=DEFAULT_AGENT_LOOP_LIMITS){}
+  async run(userRequest:string,options:AgentLoopRunOptions={}):Promise<AgentLoopState>{
+    const now=new Date().toISOString();
+    const state:AgentLoopState={version:2,runId:options.runId??randomUUID(),conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages??[{role:"user",content:userRequest,trust:"TRUSTED_LOCAL"}],observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[],observationFingerprints:[],startedAt:now,updatedAt:now,deadlineAt:options.deadlineAt??new Date(Date.now()+this.limits.maxExecutionMs).toISOString(),status:"DECIDING"};
+    await this.save(state,"DECIDING");return this.continue(state,options.signal);
+  }
+  async resume(state:AgentLoopState,signal?:AbortSignal){if(state.version!==2)throw new Error("Versão de estado incompatível.");if(state.status!=="DECIDING")throw new Error(`Run ${state.runId} não pode retomar decisão a partir de ${state.status}.`);return this.continue(structuredClone(state),signal);}
+  async acceptExecution(state:AgentLoopState,action:PreparedAction,execution:ActionExecutionResult,signal?:AbortSignal){if(state.status!=="EXECUTING"||!state.pendingAction)throw new Error("Não existe ação aprovada em execução.");const pending=state.pendingAction;if(pending.executionId!==action.executionId||pending.fingerprint!==action.fingerprint||pending.toolName!==action.toolName)throw new Error("A execução não corresponde à PendingAgentAction persistida.");if(!await this.observeExecution(state,execution,pending.callId,signal))return state;return this.continue(state,signal);}
+  private async continue(state:AgentLoopState,signal?:AbortSignal):Promise<AgentLoopState>{
+    while(state.status==="DECIDING"){
+      if(signal?.aborted){await this.save(state,"CANCELLED");return state;}
+      if(this.limitReached(state)){await this.failAtLimit(state);return state;}
+      const started=Date.now(),decision=validateAgentTurn(await this.deps.agentTurn({messages:state.messages,tools:this.deps.tools()},signal));this.deps.metric?.("agent.turns",1,{runId:state.runId});this.deps.metric?.("agent.turn_duration_ms",Date.now()-started,{runId:state.runId});
+      if(decision.kind==="final"){state.finalResponse=decision.content;await this.save(state,"COMPLETED");return state;}
+      if(decision.kind==="repair"){state.protocolRepairCount++;this.deps.metric?.("agent.schema_repaired",1,{kind:"protocol"});if(state.protocolRepairCount>this.limits.maxProtocolRepairAttempts){state.finalResponse=decision.error;await this.save(state,"FAILED");return state;}state.messages.push({role:"tool",content:decision.error,trust:"TRUSTED_LOCAL"});await this.save(state,"DECIDING");continue;}
+      this.deps.metric?.("agent.tool_calls",1,{tool:decision.call.name});await this.save(state,"PREFLIGHT");
+      const preflight=await this.deps.preflight(decision.call.name,decision.call.arguments,{runId:state.runId,signal});
+      if(!preflight.ok){state.consecutiveFailures++;state.messages.push({role:"tool",toolCallId:decision.call.id,content:`ACTION_ERROR: ${preflight.message}`,trust:"TRUSTED_LOCAL"});if(state.consecutiveFailures>=this.limits.maxConsecutiveFailures){state.finalResponse=preflight.message;await this.save(state,"FAILED");return state;}await this.save(state,"DECIDING");continue;}
+      const action=preflight.action;state.actionFingerprints.push(action.fingerprint);
+      if(!this.isPollingAction(state,action.toolName)){const guard=this.guard(state);if(!guard.ok){this.deps.metric?.("agent.loop_detected",1,{kind:"action"});state.finalResponse=guard.reason;await this.save(state,"FAILED");return state;}}
+      state.pendingAction={callId:decision.call.id,toolName:action.toolName,input:action.input,fingerprint:action.fingerprint,executionId:action.executionId,idempotencyKey:action.idempotencyKey,iteration:state.iteration,mutatesState:action.mutatesState};
+      if(action.requiresApproval){this.deps.metric?.("agent.approval_requested",1,{tool:action.toolName});await this.save(state,"WAITING_APPROVAL");return state;}
+      await this.save(state,"EXECUTING");const execution=await this.deps.execute(action,{runId:state.runId,signal});if(!await this.observeExecution(state,execution,decision.call.id,signal))return state;
     }
     return state;
   }
+  private async observeExecution(state:AgentLoopState,execution:ActionExecutionResult,callId:string,signal?:AbortSignal){if(execution.status==="RESULT_UNKNOWN"){await this.save(state,"RESULT_UNKNOWN");return false;}await this.save(state,"OBSERVING");const observation=this.appendObservation(state,this.deps.observe(execution,callId),execution.status==="SUCCEEDED"||execution.status==="RECONCILED_SUCCESS");if(!await this.waitForExternalProgress(state,observation,signal)){const guard=this.guard(state);if(!guard.ok){this.deps.metric?.("agent.loop_detected",1,{kind:"observation"});state.finalResponse=guard.reason;await this.save(state,"FAILED");return false;}await this.save(state,"DECIDING");}return true;}
+  private appendObservation(state:AgentLoopState,observation:AgentObservation,success:boolean){const used=state.observations.reduce((total,item)=>total+(item.encodedBytes??Buffer.byteLength(JSON.stringify(item.data))),0);if(used+(observation.encodedBytes??0)>this.limits.maxTotalObservationBytes)observation={...observation,data:{notice:"Orçamento total de observações atingido; dados omitidos.",references:observation.references},truncated:true,encodedBytes:Buffer.byteLength(JSON.stringify(observation.references??[]))};state.observations.push(observation);state.observationFingerprints.push(observationFingerprint(observation));state.messages.push({role:"tool",toolCallId:observation.toolCallId,content:JSON.stringify({source:observation.toolName,trust:observation.trust,data:observation.data,references:observation.references,summary:observation.summary}),trust:observation.trust});state.toolCallCount++;state.iteration++;state.pendingAction=undefined;state.consecutiveFailures=success?0:state.consecutiveFailures+1;return observation;}
+  private async waitForExternalProgress(state:AgentLoopState,observation:AgentObservation,signal?:AbortSignal){const policy=this.deps.tools().find(tool=>tool.name===observation.toolName)?.polling;if(!policy||!observation.progress||/^(completed|complete|done|failed|cancelled|100)$/i.test(String(observation.progress.value)))return false;const key=`${state.runId}:${observation.toolName}`,controller=this.polling.get(key)??new PollingController(policy);this.polling.set(key,controller);await this.save(state,"WAITING_EXTERNAL_PROGRESS");await controller.wait(signal);await this.save(state,"DECIDING");return true;}
+  private isPollingAction(state:AgentLoopState,toolName:string){const previous=state.observations.at(-1);return previous?.toolName===toolName&&Boolean(previous.progress)&&Boolean(this.deps.tools().find(tool=>tool.name===toolName)?.polling);}
+  private limitReached(state:AgentLoopState){return Date.now()>=Date.parse(state.deadlineAt)||state.iteration>=this.limits.maxIterations||state.toolCallCount>=this.limits.maxToolCalls;}
+  private async failAtLimit(state:AgentLoopState){const timeout=Date.now()>=Date.parse(state.deadlineAt);this.deps.metric?.(timeout?"agent.timeout":"agent.max_steps_reached",1,{runId:state.runId});state.finalResponse="Limite seguro do agent loop atingido.";await this.save(state,"FAILED");}
+  private guard(state:AgentLoopState){return new LoopGuard(this.limits.maxSameActionRepeats,this.limits.maxSameObservationRepeats).evaluate(state.actionFingerprints,state.observationFingerprints);}
+  private async save(state:AgentLoopState,status:AgentLoopState["status"]){state.status=status;state.updatedAt=new Date().toISOString();await this.deps.persistence?.save(structuredClone(state));if(["COMPLETED","FAILED","CANCELLED"].includes(status))this.deps.metric?.("agent.run_duration_ms",Date.now()-Date.parse(state.startedAt),{status});}
 }
-function fail(state: AgentLoopState, finalResponse: string): AgentLoopState { return { ...state, status: "FAILED", finalResponse }; }

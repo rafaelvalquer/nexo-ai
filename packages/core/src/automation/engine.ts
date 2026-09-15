@@ -24,13 +24,13 @@ export class AutomationEngine {
   private queuedTriggerPayload = new Map<string, Record<string, unknown>>();
   private approvalPollers = new Map<string, ReturnType<typeof setInterval>>();
 
-  constructor(private db: NexoDatabase, executeCommand: (command:string)=>Promise<unknown>, private startAutomationChat?: (input: { title: string; prompt: string; automationRunId: string }) => Promise<{ conversationId: string; taskId: string }>) {
+  constructor(private db: NexoDatabase, executeCommand: (command:string)=>Promise<unknown>, private startAutomationChat?: (input: { title: string; prompt: string; automationRunId: string }) => Promise<{ conversationId: string; taskId: string }>,executeRead: (name:string,input:Record<string,unknown>)=>Promise<import("@nexo/shared").ToolResult>=async()=>{throw new Error("Executor de leitura não configurado.");}) {
     this.repository = new AutomationRepository(db);
     this.runs = new AutomationRunRepository(db);
     this.actions = new AutomationActionExecutor(executeCommand);
     const emit=(automation:AutomationV2,payload:Record<string,unknown>)=>this.run(automation,payload);
     this.scheduler = new AutomationScheduler(emit);
-    this.smartTriggers = new AutomationTriggerRegistry(this.repository,emit);
+    this.smartTriggers = new AutomationTriggerRegistry(this.repository,emit,executeRead);
   }
 
   list(): AutomationViewModel[] { return this.repository.list().map(automation => this.toViewModel(automation)); }

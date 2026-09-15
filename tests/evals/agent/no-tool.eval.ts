@@ -1,0 +1,1 @@
+import {describe,expect,it} from "vitest";import {evalLoop} from "./eval-harness.js";describe("agent eval no tool",()=>{it("answers directly",async()=>{const h=evalLoop([{content:"hello",toolCalls:[]}]);const state=await h.loop.run("chat");expect(state.finalResponse).toBe("hello");expect(h.calls).toHaveLength(0);});});

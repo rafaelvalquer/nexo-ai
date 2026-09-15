@@ -1,5 +1,4 @@
 import type { AutomationV2, ToolResult } from "@nexo/shared";
-import { getActiveToolRegistry } from "../../tools/registry.js";
 import { AutomationRepository } from "../repository.js";
 import type { AutomationTriggerEmitter } from "../scheduler.js";
 
@@ -7,7 +6,7 @@ export class AutomationTriggerRegistry {
   private pollers = new Map<string, ReturnType<typeof setInterval>>();
   private inFlight = new Set<string>();
 
-  constructor(private repository: AutomationRepository, private emit: AutomationTriggerEmitter) {}
+  constructor(private repository: AutomationRepository, private emit: AutomationTriggerEmitter,private readonly executeRead:(name:string,input:Record<string,unknown>)=>Promise<ToolResult>) {}
 
   install(automation: AutomationV2): void {
     this.uninstall(automation.id);
@@ -51,7 +50,7 @@ export class AutomationTriggerRegistry {
     const matches=compare(value,trigger.operator,trigger.threshold);const state=this.repository.getTriggerState(automation.id);const wasActive=state.thresholdActive===true;if(matches&&!wasActive)await this.emit(automation,{source:"system",metric:trigger.metric,value,threshold:trigger.threshold});this.repository.setTriggerState(automation.id,{thresholdActive:matches,lastValue:value,lastProbeAt:new Date().toISOString()});
   }
 
-  private async readTool(name:string,input:Record<string,unknown>):Promise<ToolResult>{const registry=getActiveToolRegistry();const tool=registry?.get(name);if(!tool)throw new Error(`Ferramenta de leitura indisponível para automação: ${name}`);if(tool.risk!=="READ"||(tool.mutatesState??false))throw new Error(`Trigger tentou usar ferramenta mutável: ${name}`);const parsed=tool.inputSchema.parse(input);return tool.execute(parsed);}
+  private readTool(name:string,input:Record<string,unknown>):Promise<ToolResult>{return this.executeRead(name,input);}
 }
 
 type EmailProbe={id:string;receivedAt?:string;[key:string]:unknown};

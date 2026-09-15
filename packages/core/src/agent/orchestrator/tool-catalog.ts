@@ -16,6 +16,7 @@ export type AgentToolDescriptor = {
   requiresConfirmation: boolean;
   permissions: string[];
   parameters?: unknown;
+  metadata?: { category?: string; outputTrust: "trusted_local" | "untrusted_external" | "sensitive_local"; hidden?: boolean; supportsPolling: boolean; supportsIdempotency: boolean; polling?: {allowed:true;minIntervalMs:number;maxDurationMs:number;maxAttempts:number;progressFields?:string[]} };
 };
 
 export class CapabilityAwareToolCatalog {
@@ -23,6 +24,7 @@ export class CapabilityAwareToolCatalog {
 
   list(): AgentToolDescriptor[] {
     return this.registry.definitions().filter(tool => {
+      if(tool.agent?.hidden)return false;
       for (const permission of tool.permissions) {
         if (!connectionCapabilities.has(permission as ConnectionCapability)) continue;
         if (this.connections?.resolveForCapability(permission as ConnectionCapability).status !== "ready") return false;
@@ -37,7 +39,8 @@ export class CapabilityAwareToolCatalog {
       mutatesState: tool.mutatesState ?? tool.risk !== "READ",
       requiresConfirmation: tool.mutatesState ?? tool.risk !== "READ",
       permissions: [...tool.permissions],
-      parameters: this.registry.agentSchema(tool.name)
+      parameters: this.registry.agentSchema(tool.name),
+      metadata: tool.agent ? { category: tool.agent.category, outputTrust: tool.agent.outputTrust, hidden: tool.agent.hidden, supportsPolling: Boolean(tool.agent.polling), supportsIdempotency: Boolean(tool.supportsIdempotency || tool.mutationSafety?.idempotency !== "none"),polling:tool.agent.polling } : undefined
     }));
   }
 }

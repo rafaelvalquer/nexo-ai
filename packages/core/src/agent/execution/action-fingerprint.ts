@@ -1,0 +1,4 @@
+import { createHash } from "node:crypto";
+export function actionFingerprint(toolName:string,input:Record<string,unknown>){return createHash("sha256").update(`${toolName}\n${canonicalJson(JSON.parse(JSON.stringify(input)))}`).digest("hex");}
+export function canonicalJson(value:unknown):string{if(Array.isArray(value))return`[${value.map(canonicalJson).join(",")}]`;if(value&&typeof value==="object")return`{${Object.keys(value as object).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson((value as Record<string,unknown>)[key])}`).join(",")}}`;return JSON.stringify(value);}
+export function createIdempotencyKey(runId:string|undefined,executionId:string,fingerprint:string){return createHash("sha256").update(`${runId??"standalone"}:${executionId}:${fingerprint}`).digest("hex");}

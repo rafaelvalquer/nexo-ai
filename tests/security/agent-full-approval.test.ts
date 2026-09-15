@@ -1,0 +1,20 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import {afterEach,describe,expect,it} from "vitest";
+import {z} from "zod";
+import {NexoDatabase} from "../../packages/core/src/database/db.js";
+import {ToolRegistry} from "../../packages/core/src/tools/registry.js";
+import {PermissionEngine} from "../../packages/core/src/permissions/policy.js";
+import {AuditService} from "../../packages/core/src/audit/audit.js";
+import {ActionExecutor} from "../../packages/core/src/agent/execution/action-executor.js";
+import {ExecutionRecordRepository} from "../../packages/core/src/agent/execution/execution-record-repository.js";
+import {AgentRuntime} from "../../packages/core/src/agent/runtime/runtime.js";
+import {CapabilityAwareToolCatalog} from "../../packages/core/src/agent/orchestrator/tool-catalog.js";
+import {AgentLoopRunner} from "../../packages/core/src/agent/loop/agent-loop-runner.js";
+import {ApprovalService} from "../../packages/core/src/permissions/approvals.js";
+import {ApprovalCoordinator} from "../../packages/core/src/agent/approval/approval-coordinator.js";
+import {ApprovalConsumptionRepository} from "../../packages/core/src/agent/approval/approval-consumption-repository.js";
+
+const dirs:string[]=[];afterEach(async()=>{for(const dir of dirs.splice(0))await fs.rm(dir,{recursive:true,force:true});});
+describe("Agent V2 full approval",()=>{it("executes the persisted mutation once and does not infer again before dispatch",async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),"nexo-agent-full-"));dirs.push(dir);const db=new NexoDatabase(dir);await db.ready();const registry=new ToolRegistry();let calls=0;registry.register({name:"test_mutation",description:"Mutation",risk:"SAFE_WRITE",permissions:[],mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"none"},inputSchema:z.object({value:z.string()}),execute:async()=>{calls++;return{ok:true,summary:"mutated",data:{id:"done"}};}});let turns=0;const llm:any={agentTurn:async()=>{turns++;return turns===1?{toolCalls:[{id:"call",name:"test_mutation",arguments:{value:"x"}}]}:{content:"finished",toolCalls:[]};}};const permissions=new PermissionEngine(()=>({allowedRoots:[dir],autonomy:"balanced"} as any)),records=new ExecutionRecordRepository(db),runtime=new AgentRuntime(db),executor=new ActionExecutor(registry,permissions,new AuditService(db),{records});const runner=new AgentLoopRunner(llm,new CapabilityAwareToolCatalog(registry),registry,executor,undefined,runtime);const waiting=await runner.run("mutate",{mode:"full"});expect(waiting.status).toBe("WAITING_APPROVAL");expect(calls).toBe(0);const approvals=new ApprovalService(db),pending=waiting.pendingAction!,approval=approvals.create(pending.toolName,pending.input,"SAFE_WRITE","test",{agentRunId:waiting.runId,checkpointId:waiting.runId});pending.approvalId=approval.id;runtime.saveLoopState(waiting.runId,waiting);approvals.resolve(approval.id,true);const coordinator=new ApprovalCoordinator(approvals,new ApprovalConsumptionRepository(db));const done=await runner.resumeApproved(waiting,approval.id,coordinator);expect(done.status).toBe("COMPLETED");expect(calls).toBe(1);expect(turns).toBe(2);expect(records.get(pending.executionId)?.status).toBe("SUCCEEDED");});});

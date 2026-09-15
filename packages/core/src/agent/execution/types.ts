@@ -4,7 +4,7 @@ import type { ToolExecutionContext } from "../../tools/types.js";
 export type ActionExecutionStatus =
   | "PREPARED" | "WAITING_APPROVAL" | "APPROVED" | "DISPATCHING"
   | "SUCCEEDED" | "FAILED" | "RESULT_UNKNOWN" | "RECONCILED_SUCCESS"
-  | "RECONCILED_FAILURE" | "CANCELLED";
+  | "RECONCILING" | "RECONCILED_FAILURE" | "UNRESOLVED" | "CANCELLED";
 
 export type PreparedAction = {
   executionId: string;

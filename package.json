@@ -11,6 +11,7 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
+    "eval:agent": "vitest run --config vitest.agent-evals.config.ts",
     "package:win": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && pnpm --filter @nexo/desktop package:win && node scripts/verify-installer.mjs",
     "test:installer": "node scripts/verify-installer.mjs",
     "setup": "node scripts/setup.mjs",
