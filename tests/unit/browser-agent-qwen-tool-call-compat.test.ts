@@ -64,16 +64,17 @@ describe("Browser Agent Qwen tool-call compatibility", () => {
 
   it("reports only sanitized metadata and never raw reasoning or arguments", () => {
     const secret = "SUPER-SECRET-REASONING";
+    const content = "Resposta sem ferramenta";
     const result = inspectOllamaToolCalls({
-      content:"Resposta sem ferramenta",
+      content,
       thinking:secret,
       tool_calls:[]
     }, new Set(["browser_navigate"]));
     const diagnostic = formatSanitizedToolCallDiagnostic(result.diagnostic);
 
     expect(diagnostic).toContain(`thinkingLength=${secret.length}`);
-    expect(diagnostic).toContain("contentLength=23");
+    expect(diagnostic).toContain(`contentLength=${content.length}`);
     expect(diagnostic).not.toContain(secret);
-    expect(diagnostic).not.toContain("Resposta sem ferramenta");
+    expect(diagnostic).not.toContain(content);
   });
 });
