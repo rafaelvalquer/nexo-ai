@@ -15,7 +15,7 @@ const DOMAIN_RULES: DomainRule[] = [
 ];
 
 const READ_HINT = /\b(liste|listar|mostre|mostrar|veja|ver|procure|procurar|pesquise|pesquisar|busque|buscar|analise|analisar|resuma|resumir|compare|comparar|quais|qual|quanto|quantos|[uú]ltim|recente)\b/i;
-const MUTATION_HINT = /\b(crie|criar|envie|enviar|mande|mandar|apague|apagar|delete|deletar|remova|remover|mova|mover|renomeie|renomear|edite|editar|arquive|arquivar|marque|marcar|salve|salvar)\b/i;
+const MUTATION_HINT = /\b(crie|criar|envie|enviar|mande|mandar|apague|apagar|delete|deletar|remova|remover|mova|mover|renomeie|renomear|edite|editar|arquive|arquivar|marque|marcar|salve|salvar|mutate|mutation|modify|update|create|write|move|rename|send|delete)\b/i;
 
 const TOOL_HINTS: Array<[RegExp, string[]]> = [
   [/\b(analise|analisar).*(computador|pc)|\b(computador|pc).*(desempenho|lento|an[aá]lise)\b/i, ["daily_summary", "system_info", "memory_usage", "disk_usage", "process_list"]],
@@ -23,7 +23,7 @@ const TOOL_HINTS: Array<[RegExp, string[]]> = [
   [/\b(ram|mem[oó]ria).*(total|tem|possui)|\bquanto.*(ram|mem[oó]ria)\b/i, ["system_info", "memory_usage"]],
   [/\bdisco.*(uso|ocupad|espa[cç]o)|\b(espa[cç]o|uso).*\bdisco\b/i, ["disk_usage"]],
   [/\bprocessos?|cpu\b/i, ["process_list", "system_info"]],
-  [/\b([uú]ltim[oa]|mais recente).*(e-?mail|gmail)|\b(e-?mail|gmail).*(mais recente|[uú]ltim[oa])\b/i, ["email_latest", "email_search", "email_get"]],
+  [/([uú]ltim[oa]|mais recente).*(e-?mail|gmail)|(e-?mail|gmail).*(mais recente|[uú]ltim[oa])/i, ["email_latest", "email_search", "email_get"]],
   [/\b(resuma|resumir|liste|listar|mostre|mostrar|procure|pesquise).*(e-?mail|gmail)|\b(e-?mail|gmail).*(resuma|liste|mostre|procure|pesquise)\b/i, ["email_search", "email_get_many", "email_get", "email_latest"]],
   [/\b(envie|enviar|mande|mandar).*(e-?mail)|\be-?mail.*(envie|enviar|mande|mandar)\b/i, ["email_send_composed", "email_create_draft", "email_send"]],
   [/\b(liste|listar|mostre|mostrar|quais).*(arquivo|pasta|download)|\b(arquivo|pasta|download).*(liste|listar|mostre|mostrar|quais)\b/i, ["list_files", "file_info", "search_files"]],
@@ -54,9 +54,12 @@ export class ToolCandidateSelector {
     const ranked = tools.map((tool, index) => {
       let score = preferred.get(tool.name) ?? 0;
       if (domains.has(tool.domain)) score += 100;
-      if (!domains.size && tokens.some(token => tool.name.toLowerCase().includes(token))) score += 45;
       const haystack = `${tool.name} ${tool.description} ${tool.operation} ${tool.domain}`.toLowerCase();
-      for (const token of tokens) if (token.length >= 3 && haystack.includes(token)) score += 4;
+      if (!domains.size && tokens.some(token => haystack.includes(token) || (token.length >= 5 && haystack.includes(token.slice(0, 5))))) score += 45;
+      for (const token of tokens) {
+        if (token.length >= 3 && haystack.includes(token)) score += 4;
+        else if (token.length >= 5 && haystack.includes(token.slice(0, 5))) score += 10;
+      }
       if (tool.mutatesState && readRequested) score -= 120;
       if (tool.mutatesState && mutationRequested) score += 15;
       if (!tool.mutatesState) score += 3;
