@@ -5,6 +5,7 @@ import { LoopGuard, observationFingerprint } from "./loop-guard.js";
 import { PollingController } from "./polling-policy.js";
 import type { ActionExecutionResult, PreparedAction } from "../execution/types.js";
 import { sanitizeAssistantContent } from "../../llm/agent/sanitize-assistant-content.js";
+import { modelVisiblePresentationData } from "../../chat/presentation/internal-metadata.js";
 
 export type AgentLoopRunOptions = {
   runId?: string;
@@ -211,7 +212,7 @@ export class AgentLoop {
       role: "tool",
       toolCallId: observation.toolCallId,
       toolName: observation.toolName,
-      content: JSON.stringify({ source: observation.toolName, trust: observation.trust, data: observation.data, references: observation.references, summary: observation.summary }),
+      content: JSON.stringify({ source: observation.toolName, trust: observation.trust, data: modelVisiblePresentationData(observation.data), references: observation.references, summary: observation.summary }),
       trust: observation.trust
     });
     state.toolCallCount++;

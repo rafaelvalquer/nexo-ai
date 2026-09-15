@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Approval, RiskLevel } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
+import { defaultApprovalPresentation, isGenericApprovalReason } from "./approval-presentation.js";
 
 export type ApprovalMetadata={domain?:string;actionType?:string;preview?:string;affectedCount?:number;consequence?:string;expiresInMs?:number};
 
@@ -9,11 +10,12 @@ export class ApprovalService {
   constructor(private db: NexoDatabase,private readonly metrics?:LocalMetricsService) { this.ensureColumns(); }
 
   create(toolName:string,input:Record<string,unknown>,risk:RiskLevel,reason:string,run?:{agentRunId:string;checkpointId:string;visualRunId?:string;taskId?:string;executionId?:string},metadata:ApprovalMetadata={}):Approval {
+    const fallback=defaultApprovalPresentation(toolName,input,risk),effectiveMetadata={...fallback.metadata,...metadata},effectiveReason=isGenericApprovalReason(reason)?fallback.title:reason;
     const createdAt=new Date().toISOString();
-    const expiresAt=new Date(Date.now()+(metadata.expiresInMs??(risk==="CRITICAL"?5*60_000:10*60_000))).toISOString();
+    const expiresAt=new Date(Date.now()+(effectiveMetadata.expiresInMs??(risk==="CRITICAL"?5*60_000:10*60_000))).toISOString();
     const fingerprint=fingerprintFor(toolName,input);
-    const approval:Approval={id:randomUUID(),createdAt,toolName,input,risk,reason,status:"pending",...run,executionId:run?.executionId??randomUUID(),domain:metadata.domain,actionType:metadata.actionType,preview:metadata.preview,affectedCount:metadata.affectedCount,consequence:metadata.consequence,fingerprint,expiresAt};
-    this.db.run("INSERT INTO approvals(id,tool_name,input_json,risk,reason,status,created_at,agent_run_id,checkpoint_id,visual_run_id,task_id,action_type,domain,preview,affected_count,consequence,fingerprint,execution_id,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[approval.id,toolName,JSON.stringify(input),risk,reason,approval.status,createdAt,approval.agentRunId??null,approval.checkpointId??null,approval.visualRunId??null,approval.taskId??null,approval.actionType??null,approval.domain??null,approval.preview??null,approval.affectedCount??null,approval.consequence??null,fingerprint,approval.executionId,expiresAt]);
+    const approval:Approval={id:randomUUID(),createdAt,toolName,input,risk,reason:effectiveReason,status:"pending",...run,executionId:run?.executionId??randomUUID(),domain:effectiveMetadata.domain,actionType:effectiveMetadata.actionType,preview:effectiveMetadata.preview,affectedCount:effectiveMetadata.affectedCount,consequence:effectiveMetadata.consequence,fingerprint,expiresAt};
+    this.db.run("INSERT INTO approvals(id,tool_name,input_json,risk,reason,status,created_at,agent_run_id,checkpoint_id,visual_run_id,task_id,action_type,domain,preview,affected_count,consequence,fingerprint,execution_id,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",[approval.id,toolName,JSON.stringify(input),risk,effectiveReason,approval.status,createdAt,approval.agentRunId??null,approval.checkpointId??null,approval.visualRunId??null,approval.taskId??null,approval.actionType??null,approval.domain??null,approval.preview??null,approval.affectedCount??null,approval.consequence??null,fingerprint,approval.executionId,expiresAt]);
     this.metrics?.record("agent.approval_requested",1,{tool:toolName,risk});
     return approval;
   }

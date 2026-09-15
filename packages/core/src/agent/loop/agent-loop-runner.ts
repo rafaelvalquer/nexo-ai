@@ -17,6 +17,10 @@ import { randomUUID } from "node:crypto";
 import type { LocalMetricsService } from "../../observability/metrics.js";
 import type {AgentReconciliationCoordinator} from "../execution/reconciliation/agent-reconciliation-coordinator.js";
 import { V2FastPathRouter } from "./v2-fast-path.js";
+import { modelVisiblePresentationData, wrapPresentationData } from "../../chat/presentation/internal-metadata.js";
+import { emailSendCapabilityRemediation, isEmailSendRequest } from "../orchestrator/email-capability-remediation.js";
+
+const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
 /** Bridges provider, a bounded capability catalog and the sole execution authority. */
 export class AgentLoopRunner {
@@ -29,6 +33,8 @@ export class AgentLoopRunner {
     const available = this.availableForMode(options.mode);
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
+    const remediation=this.emailSendRemediation(userRequest);
+    if(remediation)return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});
 
     const fast=this.fastPath.resolve(userRequest,available);
     if(fast){const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;}
@@ -76,7 +82,7 @@ export class AgentLoopRunner {
     await this.runtime?.saveLoopState(state.runId,state);
     const execution=await this.executor.executePrepared(preflight.action,{runId:state.runId,conversationId:state.conversationId,taskId:state.taskId,signal:options.signal});
     if(execution.status!=="SUCCEEDED"||!execution.result){this.metrics?.record("agent.fast_path_failed",1,{tool:toolName,status:execution.status});return undefined;}
-    const observation=this.toObservation(execution,`fast-${randomUUID()}`);state.observations.push(observation);state.messages.push({role:"assistant",content:"",toolCalls:[{id:observation.toolCallId,name:toolName,arguments:preflight.action.input}],trust:"TRUSTED_LOCAL"});state.messages.push({role:"tool",toolCallId:observation.toolCallId,toolName,content:JSON.stringify({source:observation.toolName,summary:observation.summary,data:observation.data,references:observation.references}),trust:observation.trust});state.toolCallCount=1;state.iteration=1;state.executionSafetyState="READ_ONLY_EXECUTED";state.finalResponse=execution.result.summary;state.status="COMPLETED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_hit",1,{tool:toolName});return state;
+    const observation=this.toObservation(execution,`fast-${randomUUID()}`);state.observations.push(observation);state.messages.push({role:"assistant",content:"",toolCalls:[{id:observation.toolCallId,name:toolName,arguments:sanitizeAgentArguments(preflight.action.input)}],trust:"TRUSTED_LOCAL"});state.messages.push({role:"tool",toolCallId:observation.toolCallId,toolName,content:JSON.stringify({source:observation.toolName,summary:observation.summary,data:modelVisiblePresentationData(observation.data),references:observation.references}),trust:observation.trust});state.toolCallCount=1;state.iteration=1;state.executionSafetyState="READ_ONLY_EXECUTED";state.finalResponse=execution.result.summary;state.status="COMPLETED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_hit",1,{tool:toolName});return state;
   }
 
   private createLoop(schemas:ReturnType<typeof createAgentToolSchemas>,allowed:Set<string>){return new AgentLoop({
@@ -88,7 +94,12 @@ export class AgentLoopRunner {
       metric:(name,value=1,labels)=>this.metrics?.record(name,value,labels)
     });}
 
-  private toObservation(execution:Awaited<ReturnType<ActionExecutor["executePrepared"]>>,callId:string){const tool=this.registry.get(execution.action.toolName),declared=tool?.agent?.outputTrust,trust=declared==="trusted_local"?"TRUSTED_LOCAL":declared==="sensitive_local"?"SENSITIVE_LOCAL":declared==="untrusted_external"||/^(email|calendar|browser)_/.test(tool?.name??"")?"UNTRUSTED_CONTENT":tool?.name.startsWith("memory_")||tool?.pathFields?.length?"SENSITIVE_LOCAL":"TRUSTED_LOCAL";return encodeObservation(callId,execution.action.toolName,execution.result??{ok:false,summary:"A execução não retornou resultado.",error:execution.error},trust);}
+  private toObservation(execution:Awaited<ReturnType<ActionExecutor["executePrepared"]>>,callId:string){
+    const tool=this.registry.get(execution.action.toolName),declared=tool?.agent?.outputTrust,trust=declared==="trusted_local"?"TRUSTED_LOCAL":declared==="sensitive_local"?"SENSITIVE_LOCAL":declared==="untrusted_external"||/^(email|calendar|browser)_/.test(tool?.name??"")?"UNTRUSTED_CONTENT":tool?.name.startsWith("memory_")||tool?.pathFields?.length?"SENSITIVE_LOCAL":"TRUSTED_LOCAL";
+    const observation=encodeObservation(callId,execution.action.toolName,execution.result??{ok:false,summary:"A execução não retornou resultado.",error:execution.error},trust);
+    if(PRESENTATION_INPUT_TOOLS.has(execution.action.toolName)&&typeof execution.action.input.connectionId==="string")observation.data=wrapPresentationData(observation.data,execution.action.input);
+    return observation;
+  }
 
   private ensureTool(selected:AgentToolDescriptor[],available:AgentToolDescriptor[],name:string){if(selected.some(tool=>tool.name===name))return selected;const required=available.find(tool=>tool.name===name);return required?[required,...selected].slice(0,10):selected;}
 
@@ -99,4 +110,14 @@ export class AgentLoopRunner {
     const requested = typeof input.connectionId === "string" ? this.connections.get(input.connectionId)?.capabilities.includes(permission as ConnectionCapability) : this.connections.resolveForCapability(permission as ConnectionCapability).status === "ready";
     return Boolean(requested);
   }
+
+  private emailSendRemediation(userRequest:string){if(!this.connections||!isEmailSendRequest(userRequest))return undefined;return emailSendCapabilityRemediation(this.connections.resolveForCapability("email.send"));}
+
+  private async completeWithoutExecution(userRequest:string,finalResponse:string,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"]}){
+    const now=new Date().toISOString();
+    const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[],observationFingerprints:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"COMPLETED",executionSafetyState:"NO_ACTION",finalResponse};
+    await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.capability_remediation",1,{capability:"email.send"});return state;
+  }
 }
+
+function sanitizeAgentArguments(arguments_:Record<string,unknown>){const sanitized={...arguments_};delete sanitized.connectionId;return sanitized;}

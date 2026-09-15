@@ -10,6 +10,7 @@ import { safeArraySummaryAdapter } from "./adapters/generic.js";
 import { clarificationAdapter } from "./adapters/clarification.js";
 import { browserAgentAdapter } from "./adapters/browser-agent.js";
 import { emailComposeReviewAdapter } from "./adapters/email-compose.js";
+import { unwrapPresentationData } from "./internal-metadata.js";
 
 export function defaultPresentationRegistry() {
   return new PresentationRegistry()
@@ -26,7 +27,10 @@ export class ChatPresentationBuilder {
   constructor(private registry = defaultPresentationRegistry()) {}
   fromToolResult(toolName: string, result: ToolResult, input: Record<string, unknown> = {}): PresentationRecord {
     const adapter = this.registry.get(toolName) ?? this.registry.getFallback();
-    const projected = result.ok ? adapter?.(result, { toolName, input }) : undefined;
+    const internal = unwrapPresentationData(result.data);
+    const effectiveInput = { ...input, ...(internal.input ?? {}) };
+    const effectiveResult = internal.input ? { ...result, data: internal.data } : result;
+    const projected = effectiveResult.ok ? adapter?.(effectiveResult, { toolName, input: effectiveInput }) : undefined;
     if (projected) return projected;
     return { presentation: { version: 1, blocks: [{ id: randomUUID(), version: 1, type: "text", content: result.summary }] }, bindings: [] };
   }
