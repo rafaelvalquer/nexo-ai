@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { BrowserRun, BrowserRunEvent } from "@nexo/shared/browser-agent";
 
-export type StoredEvent={id:string;browser_run_id:string;type:string;label:string|null;url:string|null;created_at:string};
+export type StoredEvent={id:string;browser_run_id:string;type:string;label:string|null;url:string|null;metadata_json?:string|null;created_at:string};
 export type BrowserRunState={
   runs:Record<string,BrowserRun>;
   events:Record<string,BrowserRunEvent[]>;
@@ -33,9 +33,11 @@ function applyEvent(run:BrowserRun,event:BrowserRunEvent):BrowserRun{
     case "browser.navigation":return{...run,currentUrl:event.url,pageTitle:event.title};
     case "browser.step":return{...run,currentStep:event.label,stepCount:Math.max(run.stepCount,event.step)};
     case "browser.status":return{...run,status:event.status};
+    case "browser.phase":return{...run,phase:event.phase,phaseStartedAt:event.timestamp};
+    case "browser.diagnostic":return run;
     case "browser.approval_requested":return{...run,status:"waiting_approval"};
     case "browser.completed":return{...run,status:"completed",finishedAt:event.timestamp,finalResult:event.result??run.finalResult};
-    case "browser.failed":return{...run,status:"failed",error:event.error,finishedAt:event.timestamp};
+    case "browser.failed":return{...run,status:"failed",error:event.error,errorCode:event.errorCode??run.errorCode,finishedAt:event.timestamp};
     case "browser.cancelled":return{...run,status:"cancelled",finishedAt:event.timestamp};
     default:return run;
   }
@@ -49,7 +51,7 @@ export const useBrowserRunsStore=create<BrowserRunState>((set,get)=>({
   },
   handleEvent:event=>set(state=>{
     const existing=state.runs[event.runId];
-    const events=[...(state.events[event.runId]??[]),event].slice(-80);
+    const events=[...(state.events[event.runId]??[]),event].slice(-120);
     return{events:{...state.events,[event.runId]:events},runs:existing?{...state.runs,[event.runId]:applyEvent(existing,event)}:state.runs};
   }),
   control:async(runId,action)=>{await window.nexo.controlBrowserRun({runId,action} as any);await get().load(runId);},
