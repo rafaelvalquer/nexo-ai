@@ -3,6 +3,7 @@ import type { BrowserAgentErrorCode, BrowserResearchResult, BrowserRunPhase } fr
 import { BrowserPublicEventMapper } from "./event-adapter.js";
 import { createFirstResponseTelemetry } from "./first-response-telemetry.js";
 import { BrowserAgentPreflightError, NexoBrowserModelAdapter } from "./model-adapter.js";
+import { createOllamaNativeStreamFn } from "./ollama-native-transport.js";
 import { BrowserAgentPolicy } from "./policy.js";
 import type { BrowserWorkerMessage, BrowserWorkerRunConfig } from "./types.js";
 
@@ -40,7 +41,8 @@ export class BrowserAgentRunner {
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_request_completed", durationMs:preflight.compatibilityLatencyMs });
 
       const { models, model } = await adapter.createModels(undefined, preflight);
-      this.emit({ type:"log", runId:config.runId, level:"info", message:`Ollama e tool calling validados em ${Date.now() - preflightStarted} ms.` });
+      const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, config.model);
+      this.emit({ type:"log", runId:config.runId, level:"info", message:`Ollama nativo e tool calling validados em ${Date.now() - preflightStarted} ms.` });
 
       this.phase(config.runId, "loading_agent");
       this.emit({ type:"diagnostic", runId:config.runId, event:"agent_loading" });
@@ -50,6 +52,7 @@ export class BrowserAgentRunner {
         agent = await BrowserUse.create({
           model,
           models,
+          streamFn,
           browser: Browser.chrome({ cdpUrl: config.cdpUrl }),
           workspace: config.workspace,
           allowedDomains: domains.length ? domains : undefined,
