@@ -98,3 +98,5 @@ export class NexoCore{
   backup(){return this.db.backup();}shutdown(){if(this.ollamaHealthTimer)clearInterval(this.ollamaHealthTimer);this.automation.stop();void this.browserSessions.closeAll();this.logger.info("Nexo Core stopped");}
 }
 export { startCoreServer } from "./server/server.js";export * from "./permissions/policy.js";export * from "./connections/types.js";export * from "./conversations/service.js";export * from "./agents/agent-pool.js";export * from "./runtime/agent-scheduler.js";export * from "./runtime/resource-manager.js";
+export * from "./agent/execution/index.js";
+export * from "./agent/loop/index.js";

@@ -1,0 +1,12 @@
+import { describe, expect, it } from "vitest";
+import { AgentLoop } from "../../packages/core/src/agent/loop/agent-loop.js";
+import { encodeObservation } from "../../packages/core/src/agent/loop/observation-encoder.js";
+import type { AgentLoopDependencies } from "../../packages/core/src/agent/loop/types.js";
+import type { PreparedAction } from "../../packages/core/src/agent/execution/types.js";
+
+const action: PreparedAction = { executionId: "execution-1", toolName: "lookup", input: { id: "42" }, fingerprint: "f", mutatesState: false, risk: "READ", requiresApproval: false, status: "PREPARED" };
+function deps(turns: Array<{ content?: string; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> }>): AgentLoopDependencies { let cursor = 0; return { agentTurn: async () => turns[cursor++], tools: () => [{ name: "lookup", description: "Lookup" }], preflight: async () => ({ ok: true, action }), execute: async () => ({ status: "SUCCEEDED", action, result: { ok: true, summary: "Found", data: { id: "42" } } }), observe: (result, id) => encodeObservation(id, "lookup", result.result!, "UNTRUSTED_CONTENT") }; }
+describe("AgentLoop protocol", () => {
+  it("executes exactly one tool then completes", async () => { const loop = new AgentLoop(deps([{ toolCalls: [{ id: "call-1", name: "lookup", arguments: { id: "42" } }] }, { content: "Done", toolCalls: [] }])); const state = await loop.run("find 42"); expect(state.status).toBe("COMPLETED"); expect(state.toolCallCount).toBe(1); expect(state.finalResponse).toBe("Done"); });
+  it("never executes a multi-tool turn and fails after the repair limit", async () => { let executions = 0; const source = deps([{ toolCalls: [{ id: "a", name: "lookup", arguments: {} }, { id: "b", name: "lookup", arguments: {} }] }, { toolCalls: [{ id: "a", name: "lookup", arguments: {} }, { id: "b", name: "lookup", arguments: {} }] }, { toolCalls: [{ id: "a", name: "lookup", arguments: {} }, { id: "b", name: "lookup", arguments: {} }] }]); const loop = new AgentLoop({ ...source, execute: async prepared => { executions++; return { status: "SUCCEEDED", action: prepared, result: { ok: true, summary: "unexpected" } }; } }); const state = await loop.run("do two things"); expect(state.status).toBe("FAILED"); expect(state.protocolRepairCount).toBe(3); expect(state.finalResponse).toContain("PROTOCOL_ERROR"); expect(executions).toBe(0); });
+});

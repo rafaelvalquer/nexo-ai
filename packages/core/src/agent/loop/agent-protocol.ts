@@ -1,0 +1,3 @@
+import type { AgentModelTurn } from "./types.js";
+export type ProtocolDecision = { kind: "final"; content: string } | { kind: "tool"; call: AgentModelTurn["toolCalls"][number] } | { kind: "repair"; error: string };
+export function validateAgentTurn(turn: AgentModelTurn): ProtocolDecision { if (turn.toolCalls.length === 0) return { kind: "final", content: turn.content ?? "" }; if (turn.toolCalls.length === 1) return { kind: "tool", call: turn.toolCalls[0] }; return { kind: "repair", error: `PROTOCOL_ERROR: Você retornou ${turn.toolCalls.length} chamadas de ferramenta. Esta versão do agente permite exatamente uma próxima ação por turno. Escolha somente a próxima ação necessária.` }; }
