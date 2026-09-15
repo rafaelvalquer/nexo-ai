@@ -1,7 +1,7 @@
 const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const GOOGLE_TOKENINFO_TIMEOUT_MS = 15_000;
 
-export type GoogleScopeSource = "token-response" | "unknown";
+export type GoogleScopeSource = "token-response" | "tokeninfo" | "unknown";
 
 export type GoogleGrantSnapshot = {
   clientId?: string;
@@ -60,9 +60,7 @@ export async function inspectGoogleGrant(options: {
   return {
     clientId: inspected.clientId,
     scopes: inspected.scopes,
-    // Existing persistence contracts use "token-response" for provider-reported
-    // scope evidence. tokeninfo is also authoritative provider-reported evidence.
-    scopeSource: "token-response",
+    scopeSource: "tokeninfo",
     expiresIn: inspected.expiresIn,
     accountEmail: inspected.accountEmail,
     clientMatches: inspected.clientId ? inspected.clientId === options.configuredClientId : undefined
