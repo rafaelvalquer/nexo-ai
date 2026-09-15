@@ -6,20 +6,17 @@ import {
 } from "../../packages/browser-agent/src/model-adapter";
 
 const toolCallResponse = () => ({
-  choices:[{
-    message:{
-      role:"assistant",
-      content:"",
-      tool_calls:[{
-        id:"call-1",
-        type:"function",
-        function:{
-          name:"nexo_browser_preflight",
-          arguments:JSON.stringify({url:"https://example.com"})
-        }
-      }]
-    }
-  }]
+  message:{
+    role:"assistant",
+    content:"",
+    tool_calls:[{
+      type:"function",
+      function:{
+        name:"nexo_browser_preflight",
+        arguments:{url:"https://example.com"}
+      }
+    }]
+  }
 });
 
 describe("Browser Agent Ollama model adapter", () => {
@@ -27,7 +24,7 @@ describe("Browser Agent Ollama model adapter", () => {
     vi.unstubAllGlobals();
   });
 
-  it("resolves a non-empty local compatibility API key for pi-ai", async () => {
+  it("resolves a non-empty local compatibility API key for pi-ai model catalog", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ capabilities: ["tools"] }),
       { status: 200, headers: { "content-type": "application/json" } }
@@ -63,13 +60,13 @@ describe("Browser Agent Ollama model adapter", () => {
     }
   });
 
-  it("validates Ollama and requires an actual tool call before browser startup", async () => {
+  it("validates tool calling through native /api/chat before browser startup", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools","vision"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify(toolCallResponse()), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const adapter = new NexoBrowserModelAdapter("http://127.0.0.1:11434", "qwen3:8b");
+    const adapter = new NexoBrowserModelAdapter("http://127.0.0.1:11434", "qwen3:4b");
     const result = await adapter.preflight();
 
     expect(result.available).toBe(true);
@@ -77,20 +74,24 @@ describe("Browser Agent Ollama model adapter", () => {
     expect(result.toolCallingValidated).toBe(true);
     expect(result.capabilities).toContain("vision");
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/v1/chat/completions");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/chat");
 
     const request = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body)) as {
+      think?:boolean;
+      stream?:boolean;
       tools?: Array<{function?:{name?:string}}>;
       messages?: Array<{content?:string}>;
     };
+    expect(request.think).toBe(false);
+    expect(request.stream).toBe(false);
     expect(request.tools?.[0]?.function?.name).toBe("nexo_browser_preflight");
     expect(request.messages?.at(-1)?.content).toContain("https://example.com");
   });
 
-  it("rejects a model that responds with text but does not emit tool_calls", async () => {
+  it("rejects a native response that does not emit tool_calls", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools"] }), { status:200, headers:{"content-type":"application/json"} }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ choices:[{message:{role:"assistant",content:"Vou abrir a página."}}] }), { status:200, headers:{"content-type":"application/json"} }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message:{role:"assistant",content:"Vou abrir a página."} }), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
 
     const adapter = new NexoBrowserModelAdapter("http://127.0.0.1:11434", "qwen3:4b");
@@ -99,9 +100,9 @@ describe("Browser Agent Ollama model adapter", () => {
     });
   });
 
-  it("rejects a tool call with unexpected arguments", async () => {
+  it("rejects a native tool call with unexpected arguments", async () => {
     const response = toolCallResponse();
-    response.choices[0].message.tool_calls[0].function.arguments = JSON.stringify({url:"https://wrong.example"});
+    response.message.tool_calls[0].function.arguments = {url:"https://wrong.example"};
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify(response), { status:200, headers:{"content-type":"application/json"} }));
@@ -125,7 +126,7 @@ describe("Browser Agent Ollama model adapter", () => {
     await expect(adapter.preflight()).rejects.toMatchObject<Partial<BrowserAgentPreflightError>>({ code:"BROWSER_OLLAMA_UNAVAILABLE" });
   });
 
-  it("reports an incompatible OpenAI endpoint explicitly", async () => {
+  it("reports an incompatible native endpoint explicitly", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response("bad gateway", { status:502 }));

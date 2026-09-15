@@ -58,7 +58,7 @@ export async function runBrowserToolCallingDiagnostic({
     }
   }];
 
-  const openAiCompatible = await probe(fetchImpl, {
+  const openaiCompatible = await probe(fetchImpl, {
     endpoint: `${base}/v1/chat/completions`,
     headers: {
       "content-type": "application/json",
@@ -105,7 +105,7 @@ export async function runBrowserToolCallingDiagnostic({
     },
     openaiCompatible,
     nativeApi,
-    comparison: classify(openAiCompatible.toolCallDetected, nativeApi.toolCallDetected)
+    comparison: classify(openaiCompatible.toolCallDetected, nativeApi.toolCallDetected)
   };
 }
 
