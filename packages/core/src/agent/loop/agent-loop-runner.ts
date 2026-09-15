@@ -18,7 +18,7 @@ import type { LocalMetricsService } from "../../observability/metrics.js";
 import type {AgentReconciliationCoordinator} from "../execution/reconciliation/agent-reconciliation-coordinator.js";
 import { V2FastPathRouter } from "./v2-fast-path.js";
 import { modelVisiblePresentationData, wrapPresentationData } from "../../chat/presentation/internal-metadata.js";
-import { emailSendCapabilityRemediation, isEmailSendRequest } from "../orchestrator/email-capability-remediation.js";
+import { emailSendCapabilityRemediation, isEmailSendRequest, resolveEmailSendCapability } from "../orchestrator/email-capability-remediation.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
@@ -33,7 +33,7 @@ export class AgentLoopRunner {
     const available = this.availableForMode(options.mode);
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
-    const remediation=this.emailSendRemediation(userRequest);
+    const remediation=await this.emailSendRemediation(userRequest);
     if(remediation)return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});
 
     const fast=this.fastPath.resolve(userRequest,available);
@@ -115,7 +115,11 @@ export class AgentLoopRunner {
     return Boolean(requested);
   }
 
-  private emailSendRemediation(userRequest:string){if(!this.connections||!isEmailSendRequest(userRequest))return undefined;return emailSendCapabilityRemediation(this.connections.resolveForCapability("email.send"));}
+  private async emailSendRemediation(userRequest:string){
+    if(!this.connections||!isEmailSendRequest(userRequest))return undefined;
+    const resolution=await resolveEmailSendCapability(this.connections);
+    return emailSendCapabilityRemediation(resolution);
+  }
 
   private async completeWithoutExecution(userRequest:string,finalResponse:string,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"]}){
     const now=new Date().toISOString();
