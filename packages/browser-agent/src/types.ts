@@ -1,4 +1,10 @@
-import type { BrowserAgentMode, BrowserResearchResult } from "@nexo/shared/browser-agent";
+import type {
+  BrowserAgentErrorCode,
+  BrowserAgentMode,
+  BrowserDiagnosticEventName,
+  BrowserResearchResult,
+  BrowserRunPhase
+} from "@nexo/shared/browser-agent";
 
 export type BrowserWorkerRunConfig = {
   runId: string;
@@ -24,9 +30,11 @@ export type BrowserWorkerCommand =
 export type BrowserWorkerMessage =
   | { type: "ready"; nodeVersion: string }
   | { type: "started"; runId: string }
-  | { type: "step"; runId: string; label: string; step: number }
+  | { type: "phase"; runId: string; phase: BrowserRunPhase }
+  | { type: "diagnostic"; runId: string; event: BrowserDiagnosticEventName; durationMs?: number }
+  | { type: "step"; runId: string; label: string; step: number; action?: boolean }
   | { type: "status"; runId: string; status: "paused" | "running" }
   | { type: "approval.requested"; runId: string; requestId: string; reason: string; preview: string }
   | { type: "completed"; runId: string; result: BrowserResearchResult; steps: number; durationMs: number }
-  | { type: "failed"; runId: string; error: string; cancelled?: boolean }
-  | { type: "log"; runId?: string; level: "warn" | "error"; message: string };
+  | { type: "failed"; runId: string; error: string; errorCode?: BrowserAgentErrorCode; cancelled?: boolean }
+  | { type: "log"; runId?: string; level: "info" | "warn" | "error"; message: string };
