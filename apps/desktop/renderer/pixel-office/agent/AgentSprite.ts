@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Texture } from "../pixi-runtime";
 import { OCTOPUS_SPRITE, type OctopusAnimation } from "../data/sprite-manifest";
 
 export class AgentSprite extends Container {

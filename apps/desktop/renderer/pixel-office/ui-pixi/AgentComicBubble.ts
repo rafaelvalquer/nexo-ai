@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Graphics, Text } from "../pixi-runtime";
 import type { AgentHudSnapshot } from "../agent/OfficeAgent";
 
 function clip(value: string, max: number) {

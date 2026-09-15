@@ -1,4 +1,4 @@
-import type { Container } from "pixi.js";
+import type { Container } from "../pixi-runtime";
 import { OFFICE_HEIGHT,OFFICE_WIDTH,type WorldPoint } from "../data/office-layout";
 
 export type OfficeZoom="fit"|1|1.25|1.5;

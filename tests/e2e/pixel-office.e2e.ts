@@ -62,6 +62,10 @@ test("Electron abre o Pixel Office e recebe evento real", async () => {
     await page.getByRole("button", { name: "Escritório", exact: true }).click();
     await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Pixel Office", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Hoje", exact: true }).click();
+    await expect(page.locator(".todayPage")).toBeVisible();
+    await page.getByRole("button", { name: "Escritório", exact: true }).click();
+    await expect(page.locator("canvas")).toHaveCount(1);
     const task = await page.evaluate(() => window.nexo.startChatTask("responda apenas oi"));
     await expect.poll(() => page.evaluate(() => window.nexo.getVisualSnapshot().then(snapshot => snapshot.recent.some(event => event.type === "response.streaming"))), { timeout: 15_000 }).toBe(true);
     await expect.poll(() => page.evaluate(id => window.nexo.getTask(id).then(item => item?.status), task.id), { timeout: 15_000 }).toBe("completed");

@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container } from "../pixi-runtime";
 
 export class WorldLayers{
   readonly depth=new Container();

@@ -1,4 +1,4 @@
-import { Container, Point, type Texture } from "pixi.js";
+import { Container, Point, type Texture } from "../pixi-runtime";
 import type { AgentVisualEvent, OfficeStationId } from "@nexo/shared";
 import { AgentSprite } from "./AgentSprite";
 import { AgentMovement } from "./AgentMovement";

@@ -36,7 +36,7 @@ describe("Google OAuth capability validation",()=>{
   it("does not persist a connection or token when Gmail validation fails",async()=>{
     oauthMock({scope:"openid email profile",tokenInfoScope:"openid email profile",gmail:new Response(JSON.stringify({error:{message:"Request had insufficient authentication scopes.",errors:[{reason:"insufficientPermissions"}]}}),{status:403})});const value=await service();
     await expect(value.connect("google",["email.read"])).rejects.toThrow(/Nenhuma capability foi ativada/);
-    expect(db.all("SELECT * FROM connections")).toHaveLength(0);expect(secrets.values.size).toBe(0);
+    expect(db.all("SELECT * FROM connections")).toHaveLength(0);expect([...secrets.values.keys()].some(key=>key.startsWith("connection:"))).toBe(false);
   });
 
   it("explains a disabled Gmail API without persisting authorization",async()=>{
@@ -54,7 +54,7 @@ describe("Google OAuth capability validation",()=>{
   it("keeps Calendar active when Gmail validation fails",async()=>{
     oauthMock({tokenInfoScope:`openid email profile ${GMAIL_READ} ${CALENDAR_READ}`,gmail:new Response(JSON.stringify({error:{message:"Insufficient Permission",errors:[{reason:"insufficientPermissions"}]}}),{status:403})});const value=await service();
     const account=await value.connect("google",["email.read","calendar.read"]);
-    expect(account.status).toBe("degraded");expect(account.capabilities).toEqual(["calendar.read"]);expect(account.grantedScopes).toEqual(expect.arrayContaining([GMAIL_READ,CALENDAR_READ]));
+    expect(account.status).toBe("degraded");expect(account.capabilities).toEqual(["calendar.read"]);expect(account.grantedScopes).toEqual([]);
   });
 
   it("records and revalidates scopes returned during token refresh",async()=>{

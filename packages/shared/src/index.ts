@@ -69,6 +69,10 @@ export type CapabilityGrant = {
   httpStatus?:number;
   lastValidatedAt?:string;
 };
+/** A capability may be used only after it was requested, granted and validated. */
+export function isCapabilityOperational(grant:CapabilityGrant|undefined):boolean {
+  return Boolean(grant?.requested&&grant.granted&&grant.validated&&grant.status==="validated");
+}
 export type ConnectionAccount = {
   id:string;provider:ConnectionProvider;accountEmail?:string;displayName?:string;capabilities:ConnectionCapability[];requestedCapabilities?:ConnectionCapability[];grantedScopes?:string[];
   capabilityGrants?:CapabilityGrant[];oauthClientId?:string;scopeSource?:"token-response"|"unknown";

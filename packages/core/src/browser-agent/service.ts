@@ -22,13 +22,13 @@ import { BrowserAgentSessionManager, type BrowserAgentSession } from "./session-
 import { BrowserAgentWorkerController, type BrowserWorkerFactory } from "./worker-controller.js";
 
 type RunContext = {
+  deadline?: ReturnType<typeof setTimeout>;
   run: BrowserRun;
   session: BrowserAgentSession;
   live: LiveViewService;
   worker: BrowserAgentWorkerController;
   lastFrame?: BrowserFrame;
   approvalRequests: Map<string,string>;
-  detachAbort?: () => void;
 };
 
 export type BrowserAgentServiceOptions = {
@@ -79,6 +79,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
     if (!request) throw new Error("Informe o que o Browser Agent deve fazer.");
     if (signal?.aborted) throw signal.reason ?? new DOMException("Execução cancelada.", "AbortError");
     const mode = input.mode ?? "research";
+    const timeoutMs = clamp(input.timeoutMs ?? (mode === "research" ? 600_000 : 120_000), 10_000, 600_000);
     this.policy.assertMode(mode, this.repository.personalProfileEnabled());
     const configured = this.policy.normalizeDomains(input.allowedDomains?.length ? input.allowedDomains : []);
     const inferred = this.policy.domainsFromRequest(request);
@@ -92,16 +93,19 @@ export class BrowserAgentService implements BrowserAgentProvider {
       request,
       status:"starting",
       mode,
+      timeoutMs,
       allowedDomains,
       stepCount:0,
       startedAt:new Date().toISOString()
     };
     this.repository.create(run);
+    this.repository.update(run.id, {timeoutMs});
     this.emit({ type:"browser.started", runId:run.id, timestamp:new Date().toISOString() });
 
     let session:BrowserAgentSession|undefined;
     try {
       session = await this.sessions.create(run.id, mode);
+      signal?.throwIfAborted();
       const worker = new BrowserAgentWorkerController(this.options.workerFactory);
       const live = new LiveViewService(
         run.id,
@@ -112,6 +116,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
       const context:RunContext = { run, session, live, worker, approvalRequests:new Map() };
       this.active.set(run.id, context);
       await live.start();
+      signal?.throwIfAborted();
       await worker.start(
         message => { void this.handleWorkerMessage(run.id, message).catch(error => {
           const text = error instanceof Error ? error.message : String(error);
@@ -120,13 +125,18 @@ export class BrowserAgentService implements BrowserAgentProvider {
         code => void this.handleWorkerExit(run.id, code)
       );
       run.status = "running";
+      signal?.throwIfAborted();
+      context.deadline = setTimeout(() => {
+        context.run.cancelReason = "timeout";
+        context.run.errorCode = "BROWSER_TIMEOUT";
+        void this.finish(run.id, "failed", "A pesquisa atingiu o limite de tempo (BROWSER_TIMEOUT).");
+      }, timeoutMs);
+      context.deadline.unref?.();
       this.repository.update(run.id, {status:"running"});
       this.emit({ type:"browser.status", runId:run.id, status:"running", timestamp:new Date().toISOString() });
-      const abort = () => void this.cancel(run.id).catch(() => undefined);
-      if (signal) {
-        signal.addEventListener("abort", abort, {once:true});
-        context.detachAbort = () => signal.removeEventListener("abort", abort);
-      }
+      // The chat/tool signal is only valid while bootstrapping the Browser Agent.
+      // Once the worker is running, this background run owns its lifecycle and is
+      // stopped only by explicit browser cancellation, its own timeout or shutdown.
       worker.send({
         type:"run",
         config:{
@@ -139,11 +149,13 @@ export class BrowserAgentService implements BrowserAgentProvider {
           mode,
           allowedDomains,
           maxSteps:clamp(input.maxSteps ?? 30, 1, 80),
-          timeoutMs:clamp(input.timeoutMs ?? 120_000, 10_000, 600_000)
+          timeoutMs
         }
       });
       return structuredClone(run);
     } catch (error) {
+      const context = this.active.get(run.id);
+      if (context) { clearTimeout(context.deadline); await context.live.stop().catch(() => undefined); context.worker.stop(); }
       this.active.delete(run.id);
       if (session) await session.close().catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
@@ -166,7 +178,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
   }
   async pause(runId:string) { this.requireActive(runId).worker.send({type:"pause", runId}); }
   async resume(runId:string) { this.requireActive(runId).worker.send({type:"resume", runId}); }
-  async cancel(runId:string) { const context = this.active.get(runId); if (context) context.worker.send({type:"cancel", runId}); }
+  async cancel(runId:string) { const context = this.active.get(runId); if (context) { context.run.cancelReason = "user"; await this.finish(runId, "cancelled", "Execução cancelada pelo usuário."); } }
   async steer(runId:string, instruction:string) {
     const value = instruction.trim();
     if (!value) throw new Error("A orientação não pode estar vazia.");
@@ -192,6 +204,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
   }
 
   get(runId:string) { const active = this.active.get(runId)?.run; return active ? structuredClone(active) : this.repository.get(runId); }
+  latestFrame(runId:string) { return this.active.get(runId)?.lastFrame; }
   list(conversationId?:string) { return this.repository.list(conversationId); }
   eventsFor(runId:string) { return this.repository.events(runId); }
   activeForConversation(conversationId:string) {
@@ -202,7 +215,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
   setPersonalProfileEnabled(enabled:boolean) { return this.repository.setPersonalProfileEnabled(enabled); }
 
   async shutdown() {
-    await Promise.all([...this.active.keys()].map(runId => this.finish(runId, "failed", "Execução interrompida pelo encerramento do aplicativo.")));
+    await Promise.all([...this.active.values()].map(context => { context.run.cancelReason="shutdown"; return this.finish(context.run.id, "failed", "Execução interrompida pelo encerramento do aplicativo."); }));
   }
 
   private async handleWorkerMessage(runId:string, message:BrowserWorkerMessage) {
@@ -271,7 +284,8 @@ export class BrowserAgentService implements BrowserAgentProvider {
     const context = this.active.get(runId);
     if (!context) return;
     this.active.delete(runId);
-    context.detachAbort?.();
+    this.repository.update(runId, {errorCode:context.run.errorCode,cancelReason:context.run.cancelReason,timeoutMs:context.run.timeoutMs});
+    clearTimeout(context.deadline);
     context.run.status = status;
     context.run.error = error;
     context.run.finalResult = result ?? context.run.finalResult;
@@ -294,7 +308,7 @@ export class BrowserAgentService implements BrowserAgentProvider {
     else this.emit({type:"browser.failed", runId, error:error ?? "Falha no Browser Agent.", timestamp:context.run.finishedAt});
   }
 
-  private emit(event:BrowserRunEvent) { this.repository.recordEvent(event); this.events.publish(event); }
+  private emit(event:BrowserRunEvent) { const identified = {...event,id:event.id ?? randomUUID()}; this.repository.recordEvent(identified); this.events.publish(identified); }
   private requireActive(runId:string) { const context = this.active.get(runId); if (!context) throw new Error("Execução do Browser Agent não está ativa."); return context; }
 }
 

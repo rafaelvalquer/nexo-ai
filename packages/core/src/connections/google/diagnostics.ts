@@ -1,4 +1,4 @@
-import type { CapabilityGrant, ConnectionCapability, ConnectionStatus } from "@nexo/shared";
+import { isCapabilityOperational, type CapabilityGrant, type ConnectionCapability, type ConnectionStatus } from "@nexo/shared";
 import type { GoogleGrantSnapshot } from "./grant-inspector.js";
 import { capabilityLabel } from "./scope-policy.js";
 
@@ -21,7 +21,7 @@ export type GoogleConnectionDiagnostic = {
 
 export function connectionStatusFromGrants(requested: ConnectionCapability[], grants: CapabilityGrant[]): ConnectionStatus {
   if (!requested.length) return "error";
-  const validated = grants.filter(grant => grant.requested && grant.validated).length;
+  const validated = grants.filter(isCapabilityOperational).length;
   if (validated === requested.length) return "connected";
   if (validated > 0) return "degraded";
   return "reauthorization-required";

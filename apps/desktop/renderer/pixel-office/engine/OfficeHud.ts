@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container } from "../pixi-runtime";
 import type { OfficeScene } from "./OfficeScene";
 import { AgentHudLayer } from "../ui-pixi/AgentHudLayer";
 

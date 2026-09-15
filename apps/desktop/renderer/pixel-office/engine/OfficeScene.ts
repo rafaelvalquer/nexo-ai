@@ -1,4 +1,4 @@
-import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from "pixi.js";
+import { Container, Graphics, Rectangle, Sprite, Text, type Texture } from "../pixi-runtime";
 import type { AgentVisualEvent, OfficeStationId } from "@nexo/shared";
 import { OfficeAgent } from "../agent/OfficeAgent";
 import { Grid } from "../navigation/Grid";

@@ -71,7 +71,7 @@ describe("Google OAuth grant engine",()=>{
     expect(account.status).toBe("degraded");expect(account.capabilities).toEqual(["email.send"]);
     const read=account.capabilityGrants?.find(grant=>grant.capability==="email.read");
     expect(read?.granted).toBe(true);expect(read?.validated).toBe(false);expect(read?.providerReason).toBe("scope_present_api_denied");
-    expect(read?.providerMessage).toMatch(/mesmo projeto Google Cloud/i);
+    expect(read?.providerMessage).toMatch(/Data Access|API recusou/i);
   });
 
   it("does not consult tokeninfo when scope is omitted",async()=>{

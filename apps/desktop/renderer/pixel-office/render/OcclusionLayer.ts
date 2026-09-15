@@ -1,4 +1,4 @@
-import { Container,Rectangle,Sprite,Texture } from "pixi.js";
+import { Container,Rectangle,Sprite,Texture } from "../pixi-runtime";
 import { OCCLUSION_BANDS } from "../data/occlusion-manifest";
 
 export class OcclusionLayer{

@@ -1,4 +1,4 @@
-import { Container,Graphics,Text } from "pixi.js";
+import { Container,Graphics,Text } from "../pixi-runtime";
 import type { OfficeStationId } from "@nexo/shared";
 import { OFFICE_STATIONS } from "../data/office-layout";
 export class StationLabel extends Container{

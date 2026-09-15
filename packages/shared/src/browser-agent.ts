@@ -16,6 +16,9 @@ export type BrowserResearchResult = {
 };
 
 export type BrowserRun = {
+  errorCode?: string;
+  cancelReason?: "user" | "timeout" | "shutdown" | "parent_startup_abort" | "internal";
+  timeoutMs?: number;
   id: string;
   taskId: string;
   conversationId: string;
@@ -34,7 +37,7 @@ export type BrowserRun = {
   error?: string;
 };
 
-export type BrowserRunEvent =
+export type BrowserRunEvent = { id?: string } & (
   | { type: "browser.started"; runId: string; timestamp: string }
   | { type: "browser.navigation"; runId: string; url: string; title?: string; timestamp: string }
   | { type: "browser.step"; runId: string; label: string; step: number; timestamp: string }
@@ -42,7 +45,7 @@ export type BrowserRunEvent =
   | { type: "browser.approval_requested"; runId: string; approvalId: string; label: string; preview?: string; timestamp: string }
   | { type: "browser.completed"; runId: string; result?: BrowserResearchResult; timestamp: string }
   | { type: "browser.failed"; runId: string; error: string; timestamp: string }
-  | { type: "browser.cancelled"; runId: string; timestamp: string };
+  | { type: "browser.cancelled"; runId: string; timestamp: string });
 
 export type BrowserFrame = {
   runId: string;

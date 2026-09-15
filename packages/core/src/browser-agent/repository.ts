@@ -14,9 +14,10 @@ export class BrowserRunRepository {
     );
   }
 
-  update(runId: string, patch: { status?: BrowserRunStatus; finalUrl?: string; steps?: number; result?: BrowserResearchResult; error?: string; finishedAt?: string; finalThumbnail?: string }) {
+  update(runId: string, patch: { errorCode?:string; cancelReason?:BrowserRun["cancelReason"]; timeoutMs?:number; status?: BrowserRunStatus; finalUrl?: string; steps?: number; result?: BrowserResearchResult; error?: string; finishedAt?: string; finalThumbnail?: string }) {
     const current = this.get(runId);
     if (!current) return;
+    this.db.run("UPDATE browser_runs SET error_code=?,cancel_reason=?,timeout_ms=? WHERE id=?", [patch.errorCode??current.errorCode??null,patch.cancelReason??current.cancelReason??null,patch.timeoutMs??current.timeoutMs??null,runId]);
     this.db.run(
       "UPDATE browser_runs SET status=?,final_url=?,steps=?,result_json=?,error=?,finished_at=?,final_thumbnail=? WHERE id=?",
       [
@@ -37,7 +38,7 @@ export class BrowserRunRepository {
     const url = event.type === "browser.navigation" ? event.url : null;
     this.db.run(
       "INSERT INTO browser_run_events(id,browser_run_id,type,label,url,created_at) VALUES(?,?,?,?,?,?)",
-      [randomUUID(), event.runId, event.type, label, url, event.timestamp]
+      [event.id ?? randomUUID(), event.runId, event.type, label, url, event.timestamp]
     );
   }
 
@@ -70,6 +71,9 @@ export class BrowserRunRepository {
   private map(row: any): BrowserRun {
     return {
       id: row.id,
+      errorCode: row.error_code ?? undefined,
+      cancelReason: row.cancel_reason ?? undefined,
+      timeoutMs: row.timeout_ms ?? undefined,
       taskId: row.task_id,
       conversationId: row.conversation_id,
       request: row.request,
@@ -89,6 +93,8 @@ export class BrowserRunRepository {
   private ensureSchema() {
     this.db.run(`CREATE TABLE IF NOT EXISTS browser_runs (id TEXT PRIMARY KEY,task_id TEXT,conversation_id TEXT,request TEXT NOT NULL,status TEXT NOT NULL,start_url TEXT,final_url TEXT,allowed_domains_json TEXT,mode TEXT NOT NULL,steps INTEGER DEFAULT 0,result_json TEXT,error TEXT,started_at TEXT NOT NULL,finished_at TEXT,final_thumbnail TEXT)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS browser_run_events (id TEXT PRIMARY KEY,browser_run_id TEXT NOT NULL,type TEXT NOT NULL,label TEXT,url TEXT,created_at TEXT NOT NULL)`);
+    const columns = new Set(this.db.all<{name:string}>("PRAGMA table_info(browser_runs)").map(row=>row.name));
+    for (const [name,type] of [["error_code","TEXT"],["cancel_reason","TEXT"],["timeout_ms","INTEGER"]]) if (!columns.has(name)) this.db.run(`ALTER TABLE browser_runs ADD COLUMN ${name} ${type}`);
     this.db.run("CREATE INDEX IF NOT EXISTS idx_browser_runs_conversation ON browser_runs(conversation_id,started_at)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_browser_run_events_run ON browser_run_events(browser_run_id,created_at)");
   }

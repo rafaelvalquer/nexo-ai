@@ -1,4 +1,4 @@
-import { Texture } from "pixi.js";
+import { Texture } from "../pixi-runtime";
 import { clearExteriorMatte } from "./sprite-background";
 
 /** Normalize each generated pose to the same height and foot anchor once at load. */

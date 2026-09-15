@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import type { CapabilityGrant, ConnectionDiagnosticSnapshot, ConnectionResolution, OAuthConfiguration } from "@nexo/shared";
+import { isCapabilityOperational, type CapabilityGrant, type ConnectionDiagnosticSnapshot, type ConnectionResolution, type OAuthConfiguration } from "@nexo/shared";
 import type { NexoDatabase } from "../database/db.js";
 import type { ConnectionAccount, ConnectionCapability, ConnectionProvider, ConnectionStatus, OAuthHost, SecretStore } from "./types.js";
 import { TokenManager } from "../auth/token-manager.js";
@@ -216,7 +216,12 @@ export class ConnectionService {
       return this.get(id)!;
     }
 
-    const reauthorized=await this.connect(existing.provider,desired);
+    let reauthorized:ConnectionAccount;
+    try { reauthorized=await this.connect(existing.provider,desired); }
+    catch(error) {
+      const reason=error instanceof Error?error.message:String(error);
+      throw new Error(`A reautorização não substituiu a conexão atual: ${reason}`);
+    }
     if(!reauthorized.capabilities.length){
       const reason=reauthorized.lastError??reauthorized.reauthorizationReason??"Nenhuma das permissões solicitadas ficou operacional.";
       await this.disconnect(reauthorized.id);
@@ -370,7 +375,7 @@ export class ConnectionService {
 
   private recomputeConnectionStatus(id:string) {
     const row=this.db.get<ConnectionRow>("SELECT * FROM connections WHERE id=?",[id]);if(!row)return;
-    const grants=this.readCapabilityGrants(id),requested=safeCapabilities(row.requested_capabilities_json??row.capabilities_json),operational=grants.filter(grant=>grant.validated).map(grant=>grant.capability);
+    const grants=this.readCapabilityGrants(id),requested=safeCapabilities(row.requested_capabilities_json??row.capabilities_json),operational=grants.filter(isCapabilityOperational).map(grant=>grant.capability);
     const status=connectionStatusFromGrants(requested,grants),lastError=summarizeGrantFailures(grants);
     this.db.run("UPDATE connections SET capabilities_json=?,status=?,last_error=?,reauthorization_reason=?,updated_at=? WHERE id=?",[JSON.stringify(operational),status,lastError??null,status==="reauthorization-required"?lastError??"A autorização precisa ser refeita.":null,new Date().toISOString(),id]);
   }

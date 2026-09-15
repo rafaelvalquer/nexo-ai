@@ -56,6 +56,8 @@ export function registerBrowserAgentIpc(core:NexoCore, options:BrowserAgentDeskt
     frameSubscriptions.set(key, { webContents:event.sender, port:port1 });
     port1.start();
     event.sender.postMessage("nexo:browser-agent:frame-port", {runId:id}, [port2]);
+    const lastFrame = service.latestFrame(id);
+    if (lastFrame) port1.postMessage(framePayload(lastFrame));
     event.sender.once("destroyed", () => {
       const current = frameSubscriptions.get(key);
       current?.port.close();

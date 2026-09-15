@@ -1,4 +1,4 @@
-import { Application,Assets,Container,TextureStyle,type Texture } from "pixi.js";
+import { Application,Assets,Container,TextureStyle,type Texture,loadPixiRuntime } from "../pixi-runtime";
 import type { AgentVisualEvent,OfficeStationId } from "@nexo/shared";
 import { OfficeCamera,type OfficeZoom } from "./OfficeCamera";
 import { OfficeScene } from "./OfficeScene";

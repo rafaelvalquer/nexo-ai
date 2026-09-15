@@ -14,8 +14,11 @@ export class LiveViewService {
   private targetSessionId?: string;
   private stopped = false;
   private fallbackTimer?: ReturnType<typeof setInterval>;
+  private frameWatchdog?: ReturnType<typeof setTimeout>;
   private pending = new Map<number, { resolve:(value:Record<string,unknown>)=>void; reject:(error:Error)=>void; timeout:ReturnType<typeof setTimeout> }>();
   private lastFrameAt = 0;
+  private captureSessions = new Set<string>();
+  private captureFailures = 0;
   private switchChain:Promise<void> = Promise.resolve();
 
   constructor(private readonly runId:string, private readonly endpoint:string, private readonly onFrame:FrameHandler, private readonly onNavigation:NavigationHandler) {}
@@ -34,14 +37,16 @@ export class LiveViewService {
     const targets = await this.send("Target.getTargets");
     const pages = ((targets.targetInfos ?? []) as TargetInfo[]).filter(target => target.type === "page" && !target.url?.startsWith("devtools://"));
     const initial = pages.at(-1);
-    if (initial) await this.switchToTarget(initial.targetId);
+    if (initial) await this.queueSwitch(initial.targetId);
   }
 
   async stop() {
     if (this.stopped) return;
     this.stopped = true;
     if (this.fallbackTimer) clearInterval(this.fallbackTimer);
+    if (this.frameWatchdog) clearTimeout(this.frameWatchdog);
     this.fallbackTimer = undefined;
+    this.frameWatchdog = undefined;
     await this.stopCurrentTarget();
     this.socket?.close();
     this.socket = undefined;
@@ -75,10 +80,11 @@ export class LiveViewService {
       if (Number.isFinite(frameSessionId)) void this.send("Page.screencastFrameAck", { sessionId:frameSessionId }, this.targetSessionId).catch(() => undefined);
       const now = Date.now();
       if (now - this.lastFrameAt < 250) return; // 4 FPS max.
-      this.lastFrameAt = now;
       const data = typeof params.data === "string" ? params.data : "";
       const metadata = (params.metadata ?? {}) as Record<string,unknown>;
       if (data) {
+        this.lastFrameAt = now;
+        if (this.fallbackTimer) { clearInterval(this.fallbackTimer); this.fallbackTimer = undefined; }
         this.onFrame({
           runId:this.runId,
           sequence:++this.sequence,
@@ -97,7 +103,8 @@ export class LiveViewService {
   }
 
   private queueSwitch(targetId:string) {
-    this.switchChain = this.switchChain.then(() => this.switchToTarget(targetId)).catch(() => undefined);
+    this.switchChain = this.switchChain.then(() => this.switchToTarget(targetId)).catch(() => { console.warn(`[BrowserLiveView] run=${this.runId} target_attach_failed`); });
+    return this.switchChain;
   }
 
   private async switchToTarget(targetId:string) {
@@ -109,11 +116,19 @@ export class LiveViewService {
     if (!sessionId) throw new Error("CDP não retornou uma sessão para a página do Browser Agent.");
     this.targetId = targetId;
     this.targetSessionId = sessionId;
+    this.lastFrameAt = 0;
     await this.send("Page.enable", {}, sessionId);
     await this.send("Runtime.enable", {}, sessionId).catch(() => undefined);
     await this.emitLocation();
     try {
       await this.send("Page.startScreencast", { format:"jpeg", quality:60, maxWidth:960, maxHeight:540, everyNthFrame:1 }, sessionId);
+      // Some Chrome targets accept screencast but never emit frames. Do not leave
+      // the renderer on an indefinite black placeholder in that case.
+      this.frameWatchdog = setInterval(() => {
+        if (!this.stopped && this.targetSessionId === sessionId && Date.now() - this.lastFrameAt > 1_500) this.startFallback();
+      }, 500);
+      this.frameWatchdog.unref?.();
+      void this.captureFallback();
     } catch {
       this.startFallback();
     }
@@ -121,7 +136,9 @@ export class LiveViewService {
 
   private async stopCurrentTarget() {
     if (this.fallbackTimer) clearInterval(this.fallbackTimer);
+    if (this.frameWatchdog) clearTimeout(this.frameWatchdog);
     this.fallbackTimer = undefined;
+    this.frameWatchdog = undefined;
     const sessionId = this.targetSessionId;
     this.targetSessionId = undefined;
     this.targetId = undefined;
@@ -149,17 +166,24 @@ export class LiveViewService {
 
   private startFallback() {
     if (this.fallbackTimer) return;
-    this.fallbackTimer = setInterval(() => void this.captureFallback(), 650);
+    this.fallbackTimer = setInterval(() => void this.captureFallback(), 500);
     this.fallbackTimer.unref?.();
     void this.captureFallback();
   }
   private async captureFallback() {
     if (this.stopped || !this.targetSessionId) return;
+    const sessionId = this.targetSessionId;
+    if (this.captureSessions.has(sessionId)) return;
+    this.captureSessions.add(sessionId);
     try {
-      const result = await this.send("Page.captureScreenshot", { format:"jpeg", quality:60, captureBeyondViewport:false }, this.targetSessionId);
+      const result = await this.send("Page.captureScreenshot", { format:"jpeg", quality:60, captureBeyondViewport:false }, sessionId);
+      if (this.stopped || this.targetSessionId !== sessionId) return;
       const data = typeof result.data === "string" ? result.data : "";
+      if (!data) throw new Error("Empty screenshot");
+      this.captureFailures = 0;
       if (data) this.onFrame({ runId:this.runId, sequence:++this.sequence, width:960, height:540, timestamp:Date.now(), bytes:Uint8Array.from(Buffer.from(data, "base64")) });
-    } catch {}
+    } catch { if (!this.stopped && this.targetSessionId === sessionId) console.warn(`[BrowserLiveView] run=${this.runId} screenshot_failed count=${++this.captureFailures}`); }
+    finally { this.captureSessions.delete(sessionId); }
   }
 
   private send(method:string, params:Record<string,unknown> = {}, sessionId?:string) {

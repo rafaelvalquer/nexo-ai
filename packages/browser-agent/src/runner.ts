@@ -16,12 +16,14 @@ type ApprovalGate = (request: { reason: string; preview: string }, signal?: Abor
 export class BrowserAgentRunner {
   private agent?: Awaited<ReturnType<typeof BrowserUse.create>>;
   private activeRunId?: string;
+  private cancelledByUser = false;
 
   constructor(private readonly emit: (message: BrowserWorkerMessage) => void, private readonly approvalGate: ApprovalGate) {}
 
   async run(config: BrowserWorkerRunConfig) {
     if (this.activeRunId) throw new Error("O Browser Agent já possui uma execução ativa neste worker.");
     this.activeRunId = config.runId;
+    this.cancelledByUser = false;
     const mapper = new BrowserPublicEventMapper();
     const adapter = new NexoBrowserModelAdapter(config.ollamaUrl, config.model);
     const { models, model } = await adapter.createModels();
@@ -72,8 +74,9 @@ export class BrowserAgentRunner {
       }
       this.emit({ type: "completed", runId: config.runId, result: result.output as BrowserResearchResult, steps: result.steps, durationMs: result.durationMs });
     } catch (error) {
-      const value = error as Error & { cancelled?: boolean };
-      this.emit({ type: "failed", runId: config.runId, error: value.message || String(error), cancelled: Boolean(value.cancelled) });
+      const value = error as Error & { cancelled?: boolean; name?: string };
+      const aborted = value.cancelled || value.name === "AbortError" || /operation was aborted|aborterror/i.test(value.message ?? "");
+      this.emit({ type: "failed", runId: config.runId, error: aborted ? (this.cancelledByUser ? "Execução cancelada pelo usuário." : "A execução do navegador foi interrompida internamente (BROWSER_ABORT_INTERNAL).") : value.message || String(error), cancelled: this.cancelledByUser });
     } finally {
       await this.agent?.close().catch(() => undefined);
       this.agent = undefined;
@@ -84,7 +87,7 @@ export class BrowserAgentRunner {
   async pause(runId: string) { this.assertRun(runId); await this.agent!.pause(); this.emit({ type: "status", runId, status: "paused" }); }
   async resume(runId: string) { this.assertRun(runId); await this.agent!.resume(); this.emit({ type: "status", runId, status: "running" }); }
   steer(runId: string, instruction: string) { this.assertRun(runId); this.agent!.steer(instruction); }
-  cancel(runId: string) { if (this.activeRunId === runId) this.agent?.cancel(); }
+  cancel(runId: string) { if (this.activeRunId === runId) { this.cancelledByUser = true; this.agent?.cancel(); } }
   private assertRun(runId: string) { if (this.activeRunId !== runId || !this.agent) throw new Error("Execução do navegador não está ativa."); }
 }
 

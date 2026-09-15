@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics } from "../pixi-runtime";
 import type { OfficeAgent } from "../agent/OfficeAgent";
 import { AgentComicBubble } from "./AgentComicBubble";
 import { BubbleLayoutManager } from "./BubbleLayoutManager";

@@ -1,4 +1,4 @@
-import type { CapabilityGrant, ConnectionCapability } from "@nexo/shared";
+import { isCapabilityOperational, type CapabilityGrant, type ConnectionCapability } from "@nexo/shared";
 import type { GoogleScopeSource } from "./grant-inspector.js";
 import { capabilityLabel, expectedGoogleScopes, supportingGoogleScope } from "./scope-policy.js";
 
@@ -109,7 +109,7 @@ export async function validateGoogleCapabilities(options: {
 
   return {
     grants,
-    operationalCapabilities: grants.filter(grant => grant.validated).map(grant => grant.capability)
+    operationalCapabilities: grants.filter(isCapabilityOperational).map(grant => grant.capability)
   };
 }
 
