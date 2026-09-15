@@ -39,10 +39,13 @@ export type ResourceCollectionBlock = ChatBlockBase & {
   title: string; subtitle?: string; total?: number; items: ResourceItem[];
   pagination?: { hasMore: boolean; cursor?: string };
 };
+export type EditableEmailApproval = { to: string[]; subject: string; bodyText: string };
 export type ApprovalBlock = ChatBlockBase & {
   type: "approval"; approvalId: string; title: string; preview?: string;
   consequence?: string; affectedCount?: number; expiresAt?: string;
   status: "pending" | "approved" | "rejected" | "expired";
+  /** Present only for email_send_composed. Internal connection identifiers are intentionally excluded. */
+  editableEmail?: EditableEmailApproval;
 };
 export type ClarificationOption = {
   id: string; label: string; value: unknown; description?: string; icon?: string;
