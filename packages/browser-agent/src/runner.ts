@@ -3,6 +3,7 @@ import type { BrowserAgentErrorCode, BrowserResearchResult, BrowserRunPhase } fr
 import { BrowserPublicEventMapper } from "./event-adapter.js";
 import { createFirstResponseTelemetry } from "./first-response-telemetry.js";
 import { BrowserAgentPreflightError, NexoBrowserModelAdapter } from "./model-adapter.js";
+import { resolveBrowserAgentModel } from "./model-selection.js";
 import { createOllamaNativeStreamFn } from "./ollama-native-transport.js";
 import { BrowserAgentPolicy } from "./policy.js";
 import type { BrowserWorkerMessage, BrowserWorkerRunConfig } from "./types.js";
@@ -27,7 +28,8 @@ export class BrowserAgentRunner {
     this.activeRunId = config.runId;
     this.cancelledByUser = false;
     const mapper = new BrowserPublicEventMapper();
-    const adapter = new NexoBrowserModelAdapter(config.ollamaUrl, config.model);
+    const browserModel = resolveBrowserAgentModel(config.model);
+    const adapter = new NexoBrowserModelAdapter(config.ollamaUrl, browserModel);
     const domains = BrowserAgentPolicy.normalizeDomains(config.allowedDomains);
     let firstActionEmitted = false;
 
@@ -41,8 +43,13 @@ export class BrowserAgentRunner {
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_request_completed", durationMs:preflight.compatibilityLatencyMs });
 
       const { models, model } = await adapter.createModels(undefined, preflight);
-      const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, config.model);
-      this.emit({ type:"log", runId:config.runId, level:"info", message:`Ollama nativo e tool calling validados em ${Date.now() - preflightStarted} ms.` });
+      const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, browserModel);
+      this.emit({
+        type:"log",
+        runId:config.runId,
+        level:"info",
+        message:`Ollama nativo e tool calling validados em ${Date.now() - preflightStarted} ms com ${browserModel} (${preflight.toolCallSource}).`
+      });
 
       this.phase(config.runId, "loading_agent");
       this.emit({ type:"diagnostic", runId:config.runId, event:"agent_loading" });
