@@ -3,9 +3,9 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import type { BrowserAgentErrorCode } from "@nexo/shared/browser-agent";
 
 /**
- * pi-ai's OpenAI-compatible transport requires a non-empty API key (or auth header)
- * before it sends a request. Ollama itself does not require authentication, so Nexo
- * supplies a deterministic compatibility token that never represents a real secret.
+ * The model catalog still needs a provider entry, but Browser Agent requests are
+ * overridden with the native Ollama streamFn. This token is only a local catalog
+ * compatibility value and is never a real secret.
  */
 export const NEXO_OLLAMA_COMPAT_API_KEY = "nexo-local-ollama";
 const PREFLIGHT_TOOL_NAME = "nexo_browser_preflight";
@@ -65,12 +65,9 @@ export class NexoBrowserModelAdapter {
     const compatibilityStarted = Date.now();
     let compatibilityResponse: Response;
     try {
-      compatibilityResponse = await fetch(`${base}/v1/chat/completions`, {
+      compatibilityResponse = await fetch(`${base}/api/chat`, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${NEXO_OLLAMA_COMPAT_API_KEY}`
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model: this.modelId,
           messages: [
@@ -97,22 +94,22 @@ export class NexoBrowserModelAdapter {
             }
           }],
           stream: false,
-          temperature: 0,
-          max_tokens: 256
+          think: false,
+          options: { temperature: 0, num_predict: 256 }
         }),
         signal: boundedSignal(signal, 20_000)
       });
     } catch (error) {
-      throw classifyFetchError(error, "O Ollama não concluiu o preflight de tool calling do Browser Agent.");
+      throw classifyFetchError(error, "O Ollama não concluiu o preflight nativo de tool calling do Browser Agent.");
     }
 
     if (!compatibilityResponse.ok) {
       if (compatibilityResponse.status === 404) {
-        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado durante o teste de tool calling.`);
+        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado durante o teste nativo de tool calling.`);
       }
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_INCOMPATIBLE",
-        `O endpoint OpenAI-compatible do Ollama respondeu com HTTP ${compatibilityResponse.status} durante o teste de tool calling.`
+        `O endpoint nativo /api/chat do Ollama respondeu com HTTP ${compatibilityResponse.status} durante o teste de tool calling.`
       );
     }
 
@@ -122,7 +119,7 @@ export class NexoBrowserModelAdapter {
     } catch (error) {
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_INVALID_RESPONSE",
-        "O endpoint OpenAI-compatible do Ollama retornou uma resposta inválida durante o preflight de tool calling.",
+        "O endpoint nativo /api/chat do Ollama retornou uma resposta inválida durante o preflight de tool calling.",
         { cause:error }
       );
     }
@@ -130,7 +127,7 @@ export class NexoBrowserModelAdapter {
     if (!hasExpectedToolCall(compatibility)) {
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_TOOL_CALL_UNSUPPORTED",
-        `O modelo ${this.modelId} respondeu ao endpoint OpenAI-compatible, mas não produziu o tool call exigido pelo Browser Agent.`
+        `O modelo ${this.modelId} respondeu ao endpoint nativo /api/chat, mas não produziu o tool call exigido pelo Browser Agent.`
       );
     }
 
@@ -206,23 +203,18 @@ export class NexoBrowserModelAdapter {
 
 function hasExpectedToolCall(value: unknown) {
   if (!value || typeof value !== "object") return false;
-  const choices = (value as { choices?: unknown }).choices;
-  if (!Array.isArray(choices)) return false;
-  for (const choice of choices) {
-    if (!choice || typeof choice !== "object") continue;
-    const message = (choice as { message?: unknown }).message;
-    if (!message || typeof message !== "object") continue;
-    const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
-    if (!Array.isArray(toolCalls)) continue;
-    for (const call of toolCalls) {
-      if (!call || typeof call !== "object") continue;
-      const fn = (call as { function?: unknown }).function;
-      if (!fn || typeof fn !== "object") continue;
-      const name = (fn as { name?: unknown }).name;
-      if (name !== PREFLIGHT_TOOL_NAME) continue;
-      const args = parseToolArguments((fn as { arguments?: unknown }).arguments);
-      if (args?.url === PREFLIGHT_URL) return true;
-    }
+  const message = (value as { message?: unknown }).message;
+  if (!message || typeof message !== "object") return false;
+  const toolCalls = (message as { tool_calls?: unknown }).tool_calls;
+  if (!Array.isArray(toolCalls)) return false;
+  for (const call of toolCalls) {
+    if (!call || typeof call !== "object") continue;
+    const fn = (call as { function?: unknown }).function;
+    if (!fn || typeof fn !== "object") continue;
+    const name = (fn as { name?: unknown }).name;
+    if (name !== PREFLIGHT_TOOL_NAME) continue;
+    const args = parseToolArguments((fn as { arguments?: unknown }).arguments);
+    if (args?.url === PREFLIGHT_URL) return true;
   }
   return false;
 }
