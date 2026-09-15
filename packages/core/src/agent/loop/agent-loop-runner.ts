@@ -97,7 +97,11 @@ export class AgentLoopRunner {
   private toObservation(execution:Awaited<ReturnType<ActionExecutor["executePrepared"]>>,callId:string){
     const tool=this.registry.get(execution.action.toolName),declared=tool?.agent?.outputTrust,trust=declared==="trusted_local"?"TRUSTED_LOCAL":declared==="sensitive_local"?"SENSITIVE_LOCAL":declared==="untrusted_external"||/^(email|calendar|browser)_/.test(tool?.name??"")?"UNTRUSTED_CONTENT":tool?.name.startsWith("memory_")||tool?.pathFields?.length?"SENSITIVE_LOCAL":"TRUSTED_LOCAL";
     const observation=encodeObservation(callId,execution.action.toolName,execution.result??{ok:false,summary:"A execução não retornou resultado.",error:execution.error},trust);
-    if(PRESENTATION_INPUT_TOOLS.has(execution.action.toolName)&&typeof execution.action.input.connectionId==="string")observation.data=wrapPresentationData(observation.data,execution.action.input);
+    if(PRESENTATION_INPUT_TOOLS.has(execution.action.toolName)&&typeof execution.action.input.connectionId==="string"){
+      const connectionId=execution.action.input.connectionId;
+      const account=this.connections?.get(connectionId);
+      observation.data=wrapPresentationData(observation.data,{...execution.action.input,__connectionCapabilities:account?.capabilities??[]});
+    }
     return observation;
   }
 
