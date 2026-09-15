@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
+    "diagnose:browser-model": "node scripts/diagnose-browser-tool-calling.mjs",
     "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
     "eval:agent": "vitest run --config vitest.agent-evals.config.ts",
     "eval:agent:model": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-agent-model-backed.mjs",
