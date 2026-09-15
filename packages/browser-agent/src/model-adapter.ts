@@ -102,7 +102,7 @@ export class NexoBrowserModelAdapter {
             }
           }],
           stream: false,
-          options: { temperature: 0, num_predict: 256 }
+          options: { temperature: 0 }
         }),
         signal: boundedSignal(signal, 20_000)
       });
