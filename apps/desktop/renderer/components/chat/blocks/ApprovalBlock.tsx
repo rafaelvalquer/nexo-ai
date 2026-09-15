@@ -3,20 +3,22 @@ import { ShieldCheck } from "lucide-react";
 import type { ApprovalBlock as ApprovalModel,EmailComposeReviewBlock as EmailComposeReviewModel } from "@nexo/shared";
 import { useAssistantStore } from "../../../stores/assistant";
 import { EmailComposeReviewBlock } from "./email/EmailComposeReviewBlock";
+import { editableEmailReviewInitialStatus } from "./email/approval-review-state";
 
 export function ApprovalBlock({block,conversationId,messageId}:{block:ApprovalModel;conversationId?:string;messageId?:string}) {
   const resolve=useAssistantStore(store=>store.resolveInlineApproval),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const expired=block.status==="expired" || block.status==="pending" && Boolean(block.expiresAt&&Date.parse(block.expiresAt)<=Date.now());
   const pending=block.status==="pending"&&!expired;
+  const editableEmailStatus=editableEmailReviewInitialStatus(block,expired);
 
-  if(block.editableEmail&&pending){
+  if(block.editableEmail&&editableEmailStatus){
     const review:EmailComposeReviewModel={
       id:block.id,
       version:1,
       type:"email_compose_review",
       draftId:block.approvalId,
       approvalId:block.approvalId,
-      status:"review",
+      status:editableEmailStatus,
       fields:{...block.editableEmail,to:[...block.editableEmail.to]},
       expiresAt:block.expiresAt
     };
