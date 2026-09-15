@@ -42,12 +42,16 @@ function diagnosticLabel(event:BrowserDiagnosticEventName,durationMs?:number){
     cdp_connected:"CDP conectado",
     ollama_check_started:"Verificando Ollama",
     ollama_check_completed:"Ollama verificado",
-    ollama_request_started:"Testando compatibilidade do modelo",
-    ollama_request_completed:"Modelo respondeu ao preflight",
+    ollama_request_started:"Testando tool calling do modelo",
+    ollama_request_completed:"Tool calling validado",
     agent_loading:"Carregando Browser Use",
     agent_loaded:"Browser Use carregado",
     agent_created:"Browser Agent criado",
     first_turn_started:"Primeiro turno iniciado",
+    first_model_response_started:"Primeira resposta do modelo iniciada",
+    first_model_response_delta:"Primeiro delta do modelo recebido",
+    first_model_response_completed:"Primeira resposta do modelo concluída",
+    first_model_tool_call_received:"Primeiro tool call recebido",
     first_action_started:"Primeira ação iniciada",
     first_navigation:"Primeira navegação concluída"
   };
