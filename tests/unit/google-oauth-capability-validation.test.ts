@@ -32,7 +32,7 @@ describe("Google OAuth capability validation",()=>{
     oauthMock({tokenInfoScope:`openid email profile ${GMAIL_READ}`});const value=await service();const account=await value.connect("google",["email.read"]);
     expect(account.capabilities).toEqual(["email.read"]);
     expect(account.grantedScopes).toContain(GMAIL_READ);
-    expect(account.scopeSource).toBe("token-response");
+    expect(account.scopeSource).toBe("tokeninfo");
   });
 
   it("does not persist a connection or token when Gmail validation fails",async()=>{
