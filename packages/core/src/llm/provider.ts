@@ -1,7 +1,7 @@
 export type LLMMessage = { role: "system" | "user" | "assistant"; content: string };
-export type AgentModelMessage = { role: "system" | "user" | "assistant" | "tool"; content: string; toolCallId?: string };
-export type AgentToolSchema = { name: string; description: string; parameters?: unknown };
 export type AgentToolCall = { id: string; name: string; arguments: Record<string, unknown> };
+export type AgentModelMessage = { role: "system" | "user" | "assistant" | "tool"; content: string; toolCallId?: string; toolName?: string; toolCalls?: AgentToolCall[] };
+export type AgentToolSchema = { name: string; description: string; parameters?: unknown };
 export type AgentModelTurn = { content?: string; toolCalls: AgentToolCall[] };
 export type AgentTurnRequest = { messages: AgentModelMessage[]; tools: AgentToolSchema[]; model?: string };
 
