@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { BrowserAgentMode, BrowserResearchResult, BrowserRun, BrowserRunEvent, BrowserRunStatus } from "@nexo/shared/browser-agent";
+import type { BrowserAgentMode, BrowserResearchResult, BrowserRun, BrowserRunEvent, BrowserRunPhase, BrowserRunStatus } from "@nexo/shared/browser-agent";
 import type { NexoDatabase } from "../database/db.js";
 
 const PERSONAL_PROFILE_SETTING = "browser-agent:personal-profile-enabled";
@@ -9,15 +9,25 @@ export class BrowserRunRepository {
 
   create(run: BrowserRun, startUrl?: string) {
     this.db.run(
-      "INSERT INTO browser_runs(id,task_id,conversation_id,request,status,start_url,final_url,allowed_domains_json,mode,steps,result_json,error,started_at,finished_at,final_thumbnail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [run.id, run.taskId, run.conversationId, run.request, run.status, startUrl ?? null, null, JSON.stringify(run.allowedDomains), run.mode, run.stepCount, null, null, run.startedAt, null, null]
+      "INSERT INTO browser_runs(id,task_id,conversation_id,request,status,phase,phase_started_at,start_url,final_url,allowed_domains_json,mode,steps,result_json,error,started_at,finished_at,final_thumbnail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [run.id, run.taskId, run.conversationId, run.request, run.status, run.phase ?? null, run.phaseStartedAt ?? null, startUrl ?? null, null, JSON.stringify(run.allowedDomains), run.mode, run.stepCount, null, null, run.startedAt, null, null]
     );
   }
 
-  update(runId: string, patch: { errorCode?:string; cancelReason?:BrowserRun["cancelReason"]; timeoutMs?:number; status?: BrowserRunStatus; finalUrl?: string; steps?: number; result?: BrowserResearchResult; error?: string; finishedAt?: string; finalThumbnail?: string }) {
+  update(runId: string, patch: { errorCode?:string; cancelReason?:BrowserRun["cancelReason"]; timeoutMs?:number; status?: BrowserRunStatus; phase?:BrowserRunPhase; phaseStartedAt?:string; finalUrl?: string; steps?: number; result?: BrowserResearchResult; error?: string; finishedAt?: string; finalThumbnail?: string }) {
     const current = this.get(runId);
     if (!current) return;
-    this.db.run("UPDATE browser_runs SET error_code=?,cancel_reason=?,timeout_ms=? WHERE id=?", [patch.errorCode??current.errorCode??null,patch.cancelReason??current.cancelReason??null,patch.timeoutMs??current.timeoutMs??null,runId]);
+    this.db.run(
+      "UPDATE browser_runs SET error_code=?,cancel_reason=?,timeout_ms=?,phase=?,phase_started_at=? WHERE id=?",
+      [
+        patch.errorCode??current.errorCode??null,
+        patch.cancelReason??current.cancelReason??null,
+        patch.timeoutMs??current.timeoutMs??null,
+        patch.phase??current.phase??null,
+        patch.phaseStartedAt??current.phaseStartedAt??null,
+        runId
+      ]
+    );
     this.db.run(
       "UPDATE browser_runs SET status=?,final_url=?,steps=?,result_json=?,error=?,finished_at=?,final_thumbnail=? WHERE id=?",
       [
@@ -34,11 +44,26 @@ export class BrowserRunRepository {
   }
 
   recordEvent(event: BrowserRunEvent) {
-    const label = event.type === "browser.step" ? event.label : event.type === "browser.failed" ? event.error : event.type === "browser.approval_requested" ? event.label : null;
+    const label = event.type === "browser.step"
+      ? event.label
+      : event.type === "browser.failed"
+        ? event.error
+        : event.type === "browser.approval_requested"
+          ? event.label
+          : event.type === "browser.phase"
+            ? event.phase
+            : event.type === "browser.diagnostic"
+              ? event.event
+              : null;
     const url = event.type === "browser.navigation" ? event.url : null;
+    const metadata = event.type === "browser.diagnostic"
+      ? JSON.stringify({ event:event.event, ...(event.durationMs === undefined ? {} : {durationMs:event.durationMs}) })
+      : event.type === "browser.phase"
+        ? JSON.stringify({ phase:event.phase })
+        : null;
     this.db.run(
-      "INSERT INTO browser_run_events(id,browser_run_id,type,label,url,created_at) VALUES(?,?,?,?,?,?)",
-      [event.id ?? randomUUID(), event.runId, event.type, label, url, event.timestamp]
+      "INSERT INTO browser_run_events(id,browser_run_id,type,label,url,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)",
+      [event.id ?? randomUUID(), event.runId, event.type, label, url, metadata, event.timestamp]
     );
   }
 
@@ -57,7 +82,7 @@ export class BrowserRunRepository {
     this.db.run("UPDATE browser_runs SET status='failed',error='Execução interrompida pelo encerramento do aplicativo.',finished_at=? WHERE status IN ('starting','running','paused','waiting_approval')", [new Date().toISOString()]);
   }
   events(runId: string) {
-    return this.db.all<{ id:string; browser_run_id:string; type:string; label:string|null; url:string|null; created_at:string }>("SELECT * FROM browser_run_events WHERE browser_run_id=? ORDER BY created_at", [runId]);
+    return this.db.all<{ id:string; browser_run_id:string; type:string; label:string|null; url:string|null; metadata_json:string|null; created_at:string }>("SELECT * FROM browser_run_events WHERE browser_run_id=? ORDER BY created_at", [runId]);
   }
 
   personalProfileEnabled() {
@@ -78,6 +103,8 @@ export class BrowserRunRepository {
       conversationId: row.conversation_id,
       request: row.request,
       status: row.status as BrowserRunStatus,
+      phase: row.phase as BrowserRunPhase | undefined,
+      phaseStartedAt: row.phase_started_at ?? undefined,
       mode: row.mode as BrowserAgentMode,
       allowedDomains: JSON.parse(row.allowed_domains_json ?? "[]"),
       currentUrl: row.final_url ?? row.start_url ?? undefined,
@@ -94,7 +121,9 @@ export class BrowserRunRepository {
     this.db.run(`CREATE TABLE IF NOT EXISTS browser_runs (id TEXT PRIMARY KEY,task_id TEXT,conversation_id TEXT,request TEXT NOT NULL,status TEXT NOT NULL,start_url TEXT,final_url TEXT,allowed_domains_json TEXT,mode TEXT NOT NULL,steps INTEGER DEFAULT 0,result_json TEXT,error TEXT,started_at TEXT NOT NULL,finished_at TEXT,final_thumbnail TEXT)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS browser_run_events (id TEXT PRIMARY KEY,browser_run_id TEXT NOT NULL,type TEXT NOT NULL,label TEXT,url TEXT,created_at TEXT NOT NULL)`);
     const columns = new Set(this.db.all<{name:string}>("PRAGMA table_info(browser_runs)").map(row=>row.name));
-    for (const [name,type] of [["error_code","TEXT"],["cancel_reason","TEXT"],["timeout_ms","INTEGER"]]) if (!columns.has(name)) this.db.run(`ALTER TABLE browser_runs ADD COLUMN ${name} ${type}`);
+    for (const [name,type] of [["error_code","TEXT"],["cancel_reason","TEXT"],["timeout_ms","INTEGER"],["phase","TEXT"],["phase_started_at","TEXT"]]) if (!columns.has(name)) this.db.run(`ALTER TABLE browser_runs ADD COLUMN ${name} ${type}`);
+    const eventColumns = new Set(this.db.all<{name:string}>("PRAGMA table_info(browser_run_events)").map(row=>row.name));
+    if (!eventColumns.has("metadata_json")) this.db.run("ALTER TABLE browser_run_events ADD COLUMN metadata_json TEXT");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_browser_runs_conversation ON browser_runs(conversation_id,started_at)");
     this.db.run("CREATE INDEX IF NOT EXISTS idx_browser_run_events_run ON browser_run_events(browser_run_id,created_at)");
   }

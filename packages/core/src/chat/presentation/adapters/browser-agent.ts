@@ -16,7 +16,7 @@ export const browserAgentAdapter:PresentationAdapter = result => {
         type:"browser_run",
         runId:run.id,
         title:run.request.length > 72 ? `${run.request.slice(0, 69)}…` : run.request,
-        status:run.status === "starting" ? "running" : run.status,
+        status:run.status,
         url:run.currentUrl,
         pageTitle:run.pageTitle,
         step:run.currentStep,

@@ -2,18 +2,21 @@
 export class BrowserPublicEventMapper {
   private step = 0;
 
-  map(event: unknown): { label: string; step: number } | undefined {
+  map(event: unknown): { label: string; step: number; action: boolean } | undefined {
     if (!event || typeof event !== "object") return undefined;
     const data = event as Record<string, unknown>;
     const type = typeof data.type === "string" ? data.type : "";
     if (type === "message_update" || type === "agent_end") return undefined;
     const text = safeMetadata(data);
     let label: string | undefined;
-    if (/tool.*start|tool_execution_start|tool_call/i.test(type)) label = this.fromToolText(text);
-    else if (/tool.*end|tool_execution_end/i.test(type)) label = "Etapa concluída";
+    let action = false;
+    if (/tool.*start|tool_execution_start|tool_call/i.test(type)) {
+      label = this.fromToolText(text);
+      action = true;
+    } else if (/tool.*end|tool_execution_end/i.test(type)) label = "Etapa concluída";
     else if (/turn_start|agent_start/i.test(type)) label = "Analisando a página…";
     if (!label) return undefined;
-    return { label, step: ++this.step };
+    return { label, step: ++this.step, action };
   }
 
   private fromToolText(text: string) {
