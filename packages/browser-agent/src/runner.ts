@@ -44,8 +44,9 @@ export class BrowserAgentRunner {
       this.phase(config.runId, "loading_agent");
       this.emit({ type:"diagnostic", runId:config.runId, event:"agent_loading" });
       const agentStarted = Date.now();
+      let agent: Awaited<ReturnType<typeof BrowserUse.create>>;
       try {
-        this.agent = await BrowserUse.create({
+        agent = await BrowserUse.create({
           model,
           models,
           browser: Browser.chrome({ cdpUrl: config.cdpUrl }),
@@ -70,6 +71,7 @@ export class BrowserAgentRunner {
             "Prefira interações reversíveis e não modifique estado quando a tarefa puder ser concluída por leitura."
           ].join("\n")
         });
+        this.agent = agent;
       } catch (error) {
         throw withCode(error, "BROWSER_AGENT_LOAD_FAILED", "Falha ao criar o Browser Agent.");
       }
@@ -78,7 +80,7 @@ export class BrowserAgentRunner {
       this.phase(config.runId, "waiting_model");
       this.emit({ type:"diagnostic", runId:config.runId, event:"first_turn_started" });
 
-      const result = await this.agent.run(config.request, {
+      const result = await agent.run(config.request, {
         schema: resultSchema,
         maxSteps: config.maxSteps,
         timeoutMs: config.timeoutMs,
