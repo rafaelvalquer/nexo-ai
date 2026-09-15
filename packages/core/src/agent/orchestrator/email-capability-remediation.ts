@@ -2,8 +2,8 @@ import type { ConnectionResolution } from "@nexo/shared";
 
 export function isEmailSendRequest(userRequest: string) {
   const normalized = userRequest.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-  const mentionsEmail = /\b(e-?mail|emails)\b/.test(normalized);
-  const asksToSend = /\b(envie|enviar|envia|mande|mandar|send|enviar-me|encaminhe)\b/.test(normalized);
+  const mentionsEmail = /\b(e-?mail|emails)\b/.test(normalized) || /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(normalized);
+  const asksToSend = /\b(envie|enviar|envia|mande|mandar|send|enviar-me|encaminhe|encaminhar|responda|responder)\b/.test(normalized);
   return mentionsEmail && asksToSend;
 }
 
