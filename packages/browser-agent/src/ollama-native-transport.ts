@@ -8,6 +8,7 @@ import {
   type SimpleStreamOptions,
   type ToolCall
 } from "@earendil-works/pi-ai";
+import { inspectOllamaToolCalls } from "./tool-call-compat.js";
 
 const DEFAULT_MODEL_TIMEOUT_MS = 300_000;
 
@@ -83,13 +84,12 @@ export function createOllamaNativeStreamFn(ollamaUrl: string, configuredModelId:
           throw new Error("O endpoint nativo /api/chat do Ollama não retornou uma mensagem de assistente.");
         }
 
-        const text = typeof message.content === "string" ? message.content : "";
-        if (text.length > 0) emitText(stream, output, text);
+        const allowedToolNames = new Set((context.tools ?? []).map(tool => tool.name));
+        const inspection = inspectOllamaToolCalls(message, allowedToolNames);
+        if (inspection.sanitizedContent.length > 0) emitText(stream, output, inspection.sanitizedContent);
+        for (const call of inspection.calls) emitToolCall(stream, output, call);
 
-        const toolCalls = parseNativeToolCalls(message.tool_calls);
-        for (const call of toolCalls) emitToolCall(stream, output, call);
-
-        output.stopReason = toolCalls.length > 0
+        output.stopReason = inspection.calls.length > 0
           ? "toolUse"
           : payload.done_reason === "length" ? "length" : "stop";
 
@@ -129,7 +129,6 @@ function buildRequest(modelId:string, model:Model<any>, context:Context, options
       }
     })),
     stream:false,
-    think:false,
     options:nativeOptions
   };
 }
@@ -188,34 +187,6 @@ function flattenContent(content:Context["messages"][number]["content"]) {
     else if (block.type === "image") images.push(block.data);
   }
   return { text:text.join("\n"), images };
-}
-
-function parseNativeToolCalls(value:unknown):Array<{name:string;arguments:Record<string,unknown>}> {
-  if (!Array.isArray(value)) return [];
-  const calls:Array<{name:string;arguments:Record<string,unknown>}> = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object") continue;
-    const fn = (item as {function?:unknown}).function;
-    if (!fn || typeof fn !== "object") continue;
-    const name = (fn as {name?:unknown}).name;
-    if (typeof name !== "string" || !name) continue;
-    calls.push({
-      name,
-      arguments:normalizeArguments((fn as {arguments?:unknown}).arguments)
-    });
-  }
-  return calls;
-}
-
-function normalizeArguments(value:unknown):Record<string,unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string,unknown>;
-  if (typeof value !== "string") return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string,unknown> : {};
-  } catch {
-    return {};
-  }
 }
 
 function emitText(stream:ReturnType<typeof createAssistantMessageEventStream>, output:AssistantMessage, text:string) {
