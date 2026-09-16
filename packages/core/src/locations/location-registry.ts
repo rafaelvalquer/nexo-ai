@@ -47,7 +47,7 @@ export class LocationRegistry {
   constructor(systemPaths: SystemLocationPaths = {}, aliases: LocationAlias[] = []) {
     const configuredHome = systemPaths.home ?? envPath("home");
     const home = canonical(configuredHome ?? os.homedir());
-    for (const [id, definition] of Object.entries(DEFINITIONS) as Array<[SystemLocation, typeof DEFINITIONS[SystemLocation]]>) {
+    for (const [id, definition] of Object.entries(DEFINITIONS) as Array<[SystemLocation, (typeof DEFINITIONS)[SystemLocation]]>) {
       const configured = systemPaths[id] ?? envPath(id);
       const resolvedPath = canonical(configured ?? (id === "home" ? home : path.join(home, definition.directory!)));
       const location: ResolvedLocation = { id, label: definition.label, path: resolvedPath, source: "system" };
