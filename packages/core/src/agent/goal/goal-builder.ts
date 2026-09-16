@@ -80,7 +80,12 @@ function destinationAfter(objective: string, token: string) {
 }
 
 function portableBasename(value: string) { return value.split(/[\\/]+/).filter(Boolean).at(-1) ?? value; }
-function cleanDestination(value: string) { return value.trim().replace(/^["']|["']$/g, "").replace(/[.!?]+$/g, "").trim(); }
+function cleanDestination(value: string) {
+  let cleaned = value.trim().replace(/^["']|["']$/g, "").replace(/[.!?]+$/g, "").trim();
+  const contentClause = cleaned.search(/\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+(?:escreva|grave|salve|coloque|adicione))\b/i);
+  if (contentClause >= 0) cleaned = cleaned.slice(0, contentClause).trim();
+  return cleaned.replace(/[,:;]+$/g, "").trim();
+}
 function isAbsolutePortable(value: string) { return path.isAbsolute(value) || path.win32.isAbsolute(value); }
 function extractPaths(value: string) { return [...new Set([...value.matchAll(/[A-Za-z]:\\[^\r\n"',;]+?\.(?:txt|md|docx|pdf)\b|\b[\wÀ-ÿ_-]+\.(?:txt|md|docx|pdf)\b/gi)].map(match => match[0]))]; }
 function isOutputPath(objective: string, target: string) { const index = objective.toLowerCase().lastIndexOf(target.toLowerCase()); const context = objective.slice(Math.max(0, index - 90), index + target.length + 30); return /(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever|exporte|exportar|produza|produzir|vers[aã]o)(?:.|\s){0,90}$/i.test(context.slice(0, Math.max(0, context.toLowerCase().lastIndexOf(target.toLowerCase())))) || /\b(?:em|como|para)\s+["']?$/i.test(context.slice(0, Math.max(0, context.toLowerCase().lastIndexOf(target.toLowerCase())))) && /(?:crie|gere|salve|grave|escreva|exporte|produza)/i.test(objective); }
