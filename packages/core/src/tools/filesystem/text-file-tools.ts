@@ -22,19 +22,27 @@ export function textFileTools(): ToolDefinition[] {
 }
 
 export async function atomicTextWrite(target: string, content: string, create: boolean, executionId = "local") {
+  const absoluteTarget = path.resolve(target);
+  const parentDirectory = path.dirname(absoluteTarget);
   const bytes = Buffer.from(content, "utf8");
   let previousHash: string | undefined;
   try {
-    const stat = await fs.stat(target);
+    const stat = await fs.stat(absoluteTarget);
     if (!stat.isFile()) throw new Error("TARGET_NOT_FILE");
     if (create) throw new Error("FILE_ALREADY_EXISTS");
-    previousHash = sha256(await fs.readFile(target));
+    previousHash = sha256(await fs.readFile(absoluteTarget));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     if (!create) throw new Error("FILE_NOT_FOUND");
   }
-  await fs.access(path.dirname(path.resolve(target)));
-  const temporary = path.join(path.dirname(target), `.nexo-temp-${executionId}-${path.basename(target)}`);
+
+  // The ActionValidator/PathPolicy authorizes the canonical target before tool
+  // execution. Only after that preflight/revalidation may missing parents be
+  // created as part of this single logical mutation.
+  if (create) await fs.mkdir(parentDirectory, { recursive: true });
+  else await fs.access(parentDirectory);
+
+  const temporary = path.join(parentDirectory, `.nexo-temp-${executionId}-${path.basename(absoluteTarget)}`);
   const handle = await fs.open(temporary, "wx");
   try {
     await handle.writeFile(bytes);
@@ -46,17 +54,17 @@ export async function atomicTextWrite(target: string, content: string, create: b
     const expectedHash = sha256(bytes);
     if (sha256(await fs.readFile(temporary)) !== expectedHash) throw new Error("TEMPORARY_CONTENT_HASH_MISMATCH");
     if (create) {
-      try { await fs.link(temporary, target); }
+      try { await fs.link(temporary, absoluteTarget); }
       catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("FILE_ALREADY_EXISTS"); throw error; }
       await fs.unlink(temporary);
     } else {
-      const currentHash = sha256(await fs.readFile(target));
+      const currentHash = sha256(await fs.readFile(absoluteTarget));
       if (currentHash !== previousHash) throw new Error("FILE_CHANGED_DURING_WRITE");
-      await fs.rename(temporary, target);
+      await fs.rename(temporary, absoluteTarget);
     }
-    if (sha256(await fs.readFile(target)) !== expectedHash) throw new Error("DESTINATION_CONTENT_HASH_MISMATCH");
+    if (sha256(await fs.readFile(absoluteTarget)) !== expectedHash) throw new Error("DESTINATION_CONTENT_HASH_MISMATCH");
     crashAfterCommitForTest();
-    return { ok: true, summary: `${create ? "Arquivo criado" : "Arquivo atualizado"}: ${target}`, data: { path: target, bytesWritten: bytes.length, sha256: expectedHash, created: create } };
+    return { ok: true, summary: `${create ? "Arquivo criado" : "Arquivo atualizado"}: ${absoluteTarget}`, data: { path: absoluteTarget, bytesWritten: bytes.length, sha256: expectedHash, created: create } };
   } finally {
     await fs.rm(temporary, { force: true }).catch(() => undefined);
   }
