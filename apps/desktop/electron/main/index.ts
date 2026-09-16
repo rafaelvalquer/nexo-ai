@@ -25,13 +25,13 @@ let httpServer:any=null;
 let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
 
 function configureSystemLocations(){
-  process.env.NEXO_SYSTEM_HOME=app.getPath("home");
-  process.env.NEXO_SYSTEM_DOWNLOADS=app.getPath("downloads");
-  process.env.NEXO_SYSTEM_DOCUMENTS=app.getPath("documents");
-  process.env.NEXO_SYSTEM_DESKTOP=app.getPath("desktop");
-  process.env.NEXO_SYSTEM_PICTURES=app.getPath("pictures");
-  process.env.NEXO_SYSTEM_VIDEOS=app.getPath("videos");
-  process.env.NEXO_SYSTEM_MUSIC=app.getPath("music");
+  process.env.NEXO_SYSTEM_HOME??=app.getPath("home");
+  process.env.NEXO_SYSTEM_DOWNLOADS??=app.getPath("downloads");
+  process.env.NEXO_SYSTEM_DOCUMENTS??=app.getPath("documents");
+  process.env.NEXO_SYSTEM_DESKTOP??=app.getPath("desktop");
+  process.env.NEXO_SYSTEM_PICTURES??=app.getPath("pictures");
+  process.env.NEXO_SYSTEM_VIDEOS??=app.getPath("videos");
+  process.env.NEXO_SYSTEM_MUSIC??=app.getPath("music");
 }
 
 async function createWindow(){
