@@ -104,7 +104,8 @@ export class OllamaProvider implements LLMProvider {
   }
 
   private signal(signal: AbortSignal | undefined, timeoutMs: number) {
-    return signal ?? AbortSignal.timeout(timeoutMs);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    return signal ? AbortSignal.any([signal, timeout]) : timeout;
   }
 
   private handleError(e: any, phase: string, timeoutMs: number, external?: AbortSignal): never {
