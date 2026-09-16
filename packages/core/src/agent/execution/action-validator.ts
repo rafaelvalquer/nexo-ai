@@ -40,8 +40,12 @@ export class ActionValidator {
 
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
-    normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], this.locations);
-    bindGoalControlledArguments(tool.name, candidate, context.userRequest, this.locations);
+    try {
+      normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], this.locations);
+      bindGoalControlledArguments(tool.name, candidate, context.userRequest, this.locations);
+    } catch (error) {
+      return failure("PATH_DENIED", message(error));
+    }
 
     for (const capability of tool.permissions) {
       if (isConnectionCapability(capability) && this.connections) {
@@ -72,6 +76,9 @@ export class ActionValidator {
 function bindGoalControlledArguments(toolName: string, input: Record<string, unknown>, userRequest: string | undefined, locations: LocationRegistry) {
   if (!userRequest || !["create_text_file", "create_folder"].includes(toolName)) return;
   const taskState = new GoalBuilder(new PathIntentResolver(locations)).build(userRequest);
+  const deliverable = taskState.goal.deliverables.find(item => item.required);
+  if (deliverable?.pathResolutionStatus === "needs_confirmation") throw new Error("PATH_CONFIRMATION_REQUIRED");
+  if (deliverable?.pathResolutionStatus === "unresolved" && /[\\/]/.test(deliverable.requestedPath ?? "")) throw new Error("PATH_UNRESOLVED");
   const resolved = new ToolArgumentResolver().resolve(toolName, input, taskState);
   Object.assign(input, resolved);
 }
