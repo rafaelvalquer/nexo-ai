@@ -43,6 +43,32 @@ describe("authorized filesystem roots", () => {
     });
   });
 
+  it("routes listing through an arbitrary authorized-root alias", () => {
+    const locations = new LocationRegistry({}, [], [projects]);
+    const result = new V2FastPathRouter(locations).resolve(
+      "Liste os arquivos em Projetos\\Nexo",
+      [{ name: "list_files" } as any],
+    );
+
+    expect(result).toMatchObject({
+      name: "list_files",
+      arguments: { path: path.join(projects, "Nexo") },
+    });
+  });
+
+  it("routes folder creation through an arbitrary authorized-root alias", () => {
+    const locations = new LocationRegistry({}, [], [projects]);
+    const result = new V2FastPathRouter(locations).resolve(
+      "Crie a pasta NovaPasta em Projetos\\Nexo",
+      [{ name: "create_folder" } as any],
+    );
+
+    expect(result).toMatchObject({
+      name: "create_folder",
+      arguments: { path: path.join(projects, "Nexo", "NovaPasta") },
+    });
+  });
+
   it("accepts absolute destinations independently of known-folder names", () => {
     const locations = new LocationRegistry({}, [], [projects]);
     const destination = path.join(projects, "Absoluto");
