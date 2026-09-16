@@ -28,6 +28,11 @@ export class ActionExecutor {
     private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository;connections?:ConnectionService;locations?:LocationRegistry } = {}
   ) { this.validator = new ActionValidator(registry, permissions, options.security, options.connections, options.locations); }
 
+  /** The same roots used by PermissionEngine/PathPolicy. Agent intent resolution must never maintain a second authority list. */
+  allowedFilesystemRoots() {
+    return this.permissions.allowedRoots();
+  }
+
   async preflight(toolName: string, rawInput: Record<string, unknown>, context: ActionExecutionContext = {}): Promise<ActionPreflightResult> {
     const validation = await this.validator.validateCurrent(toolName, rawInput, context);
     if (!validation.ok) {
