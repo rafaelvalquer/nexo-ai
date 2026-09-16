@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { nearestExistingAncestor } from "./nearest-existing-ancestor.js";
 
 const BLOCKED_WINDOWS_FRAGMENTS = ["\\windows", "\\program files", "\\appdata"];
 
@@ -10,10 +11,17 @@ export class PathPolicy {
   isAllowed(target: string): boolean {
     try {
       const physicalTarget = this.physicalTarget(target);
-      if (process.platform === "win32" && BLOCKED_WINDOWS_FRAGMENTS.some(fragment => physicalTarget.includes(fragment))) return false;
       return this.allowedRoots().some(root => {
         const physicalRoot = this.realpathWithMissingSuffix(root);
-        return physicalTarget === physicalRoot || physicalTarget.startsWith(`${physicalRoot}${path.sep}`);
+        const insideRoot = physicalTarget === physicalRoot || physicalTarget.startsWith(`${physicalRoot}${path.sep}`);
+        if (!insideRoot) return false;
+
+        // Sensitive Windows areas remain blocked when they are merely nested under
+        // a broader root (for example HOME -> AppData). An explicitly configured
+        // root inside that area is authoritative and may be used safely; this is
+        // required for legitimate app/test workspaces under the OS temp directory.
+        if (isBlockedWindowsPath(physicalTarget) && !isBlockedWindowsPath(physicalRoot)) return false;
+        return true;
       });
     } catch {
       return false;
@@ -25,17 +33,19 @@ export class PathPolicy {
   }
 
   private physicalTarget(target: string): string {
-    const resolved = path.resolve(target);
-    return this.realpathWithMissingSuffix(resolved);
+    return this.realpathWithMissingSuffix(path.resolve(target));
   }
 
   private realpathExisting(target: string): string {
     return fs.realpathSync.native(path.resolve(target)).toLowerCase();
   }
 
-  private realpathWithMissingSuffix(target:string):string{
-    let cursor=path.resolve(target);const suffix:string[]=[];
-    while(!fs.existsSync(cursor)){const parent=path.dirname(cursor);if(parent===cursor)throw new Error(`Nenhum ancestral existente para ${target}`);suffix.unshift(path.basename(cursor));cursor=parent;}
-    return path.join(this.realpathExisting(cursor),...suffix).toLowerCase();
+  private realpathWithMissingSuffix(target: string): string {
+    const { existingPath, missingSegments } = nearestExistingAncestor(target);
+    return path.join(this.realpathExisting(existingPath), ...missingSegments).toLowerCase();
   }
+}
+
+function isBlockedWindowsPath(value: string) {
+  return process.platform === "win32" && BLOCKED_WINDOWS_FRAGMENTS.some(fragment => value.includes(fragment));
 }

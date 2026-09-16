@@ -15,6 +15,7 @@ import { createDesktopStoragePaths,migrateLegacySecrets } from "../storage/stora
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const envCandidates=[path.resolve(process.cwd(),".env"),path.resolve(process.cwd(),"../../.env")];
 if(!app.isPackaged){for(const candidate of envCandidates){if(fs.existsSync(candidate)){process.loadEnvFile(candidate);break;}}}
+configureSystemLocations();
 const storage=createDesktopStoragePaths();
 let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
@@ -22,6 +23,16 @@ let quitting=false;
 const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost()});
 let httpServer:any=null;
 let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
+
+function configureSystemLocations(){
+  process.env.NEXO_SYSTEM_HOME??=app.getPath("home");
+  process.env.NEXO_SYSTEM_DOWNLOADS??=app.getPath("downloads");
+  process.env.NEXO_SYSTEM_DOCUMENTS??=app.getPath("documents");
+  process.env.NEXO_SYSTEM_DESKTOP??=app.getPath("desktop");
+  process.env.NEXO_SYSTEM_PICTURES??=app.getPath("pictures");
+  process.env.NEXO_SYSTEM_VIDEOS??=app.getPath("videos");
+  process.env.NEXO_SYSTEM_MUSIC??=app.getPath("music");
+}
 
 async function createWindow(){
   await core.ready();

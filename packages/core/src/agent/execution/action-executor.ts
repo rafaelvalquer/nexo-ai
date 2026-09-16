@@ -8,6 +8,7 @@ import type { SecurityPolicyService } from "../../security/policy.js";
 import type { AuditService } from "../../audit/audit.js";
 import type { LocalMetricsService } from "../../observability/metrics.js";
 import type { ResourceManager } from "../../runtime/resource-manager.js";
+import type { LocationRegistry } from "../../locations/location-registry.js";
 import type { ActionExecutionContext, ActionExecutionResult, ActionPreflightResult, PreparedAction } from "./types.js";
 import type { ExecutionRecordRepository } from "./execution-record-repository.js";
 import type { ConnectionService } from "../../connections/service.js";
@@ -24,8 +25,8 @@ export class ActionExecutor {
     private readonly registry: ToolRegistry,
     private readonly permissions: PermissionEngine,
     private readonly audit: AuditService,
-    private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository;connections?:ConnectionService } = {}
-  ) { this.validator = new ActionValidator(registry, permissions, options.security, options.connections); }
+    private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository;connections?:ConnectionService;locations?:LocationRegistry } = {}
+  ) { this.validator = new ActionValidator(registry, permissions, options.security, options.connections, options.locations); }
 
   async preflight(toolName: string, rawInput: Record<string, unknown>, context: ActionExecutionContext = {}): Promise<ActionPreflightResult> {
     const validation = await this.validator.validateCurrent(toolName, rawInput, context);

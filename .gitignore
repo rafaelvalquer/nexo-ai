@@ -13,3 +13,6 @@ coverage/
 playwright-report/
 test-results/
 .nexo-data/
+.nexo-agent-v2-*/
+.nexo-current-*/
+.nexo-other-*/
