@@ -41,6 +41,44 @@ describe("Agent V2 location filesystem binding", () => {
     await expect(fs.stat(outside)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("binds create_folder to the canonical known-folder destination", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "nexo-location-e2e-"));
+    temporaryDirectories.push(root);
+    const downloads = path.join(root, "Downloads");
+    const expected = path.join(downloads, "Projeto");
+    const request = "Crie uma pasta Projeto em Downloads";
+    const executor = new ActionExecutor(
+      new ToolRegistry(),
+      new PermissionEngine(() => ({ allowedRoots: [root], autonomy: "balanced" } as any)),
+      audit,
+      { locations: new LocationRegistry({ home: root, downloads }) },
+    );
+
+    const preflight = await executor.preflight("create_folder", { path: path.join(root, "wrong-folder") }, { userRequest: request });
+    expect(preflight.ok).toBe(true);
+    if (!preflight.ok) return;
+    expect(preflight.action.input.path).toBe(expected);
+
+    const execution = await executor.executePrepared(preflight.action, { userRequest: request, dispatchAuthorized: true });
+    expect(execution.status).toBe("SUCCEEDED");
+    expect((await fs.stat(expected)).isDirectory()).toBe(true);
+  });
+
+  it("blocks medium-confidence locations instead of trusting the model path", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "nexo-location-e2e-"));
+    temporaryDirectories.push(root);
+    const downloads = path.join(root, "Downloads");
+    const executor = new ActionExecutor(
+      new ToolRegistry(),
+      new PermissionEngine(() => ({ allowedRoots: [root], autonomy: "balanced" } as any)),
+      audit,
+      { locations: new LocationRegistry({ home: root, downloads }) },
+    );
+
+    const preflight = await executor.preflight("create_text_file", { path: path.join(root, "model-choice", "teste.txt"), content: "não escrever" }, { userRequest: "Crie teste.txt em doxxload" });
+    expect(preflight).toMatchObject({ ok: false, code: "PATH_DENIED", message: "PATH_CONFIRMATION_REQUIRED" });
+  });
+
   it("does not overwrite an existing create target", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "nexo-location-e2e-"));
     temporaryDirectories.push(root);
