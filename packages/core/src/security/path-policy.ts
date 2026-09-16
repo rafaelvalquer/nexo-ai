@@ -11,10 +11,17 @@ export class PathPolicy {
   isAllowed(target: string): boolean {
     try {
       const physicalTarget = this.physicalTarget(target);
-      if (process.platform === "win32" && BLOCKED_WINDOWS_FRAGMENTS.some(fragment => physicalTarget.includes(fragment))) return false;
       return this.allowedRoots().some(root => {
         const physicalRoot = this.realpathWithMissingSuffix(root);
-        return physicalTarget === physicalRoot || physicalTarget.startsWith(`${physicalRoot}${path.sep}`);
+        const insideRoot = physicalTarget === physicalRoot || physicalTarget.startsWith(`${physicalRoot}${path.sep}`);
+        if (!insideRoot) return false;
+
+        // Sensitive Windows areas remain blocked when they are merely nested under
+        // a broader root (for example HOME -> AppData). An explicitly configured
+        // root inside that area is authoritative and may be used safely; this is
+        // required for legitimate app/test workspaces under the OS temp directory.
+        if (isBlockedWindowsPath(physicalTarget) && !isBlockedWindowsPath(physicalRoot)) return false;
+        return true;
       });
     } catch {
       return false;
@@ -37,4 +44,8 @@ export class PathPolicy {
     const { existingPath, missingSegments } = nearestExistingAncestor(target);
     return path.join(this.realpathExisting(existingPath), ...missingSegments).toLowerCase();
   }
+}
+
+function isBlockedWindowsPath(value: string) {
+  return process.platform === "win32" && BLOCKED_WINDOWS_FRAGMENTS.some(fragment => value.includes(fragment));
 }
