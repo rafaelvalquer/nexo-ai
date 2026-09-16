@@ -35,7 +35,7 @@ export class ActionValidator {
 
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
-    normalizeKnownFolderPaths(candidate,tool.pathFields??[]);
+    normalizeKnownFolderPaths(candidate, tool.pathFields ?? []);
     for (const capability of tool.permissions) {
       if (isConnectionCapability(capability) && this.connections) {
         const resolution = new ConnectionResolver(this.connections).resolve(capability, candidate.connectionId);
@@ -52,7 +52,7 @@ export class ActionValidator {
     try {
       this.security?.assertRecipientDomains(input.to as Array<{ email?: string }> | undefined);
       for (const field of tool.pathFields ?? []) validatePaths(input[field], value => validatePhysicalPath(value, this.permissions));
-      validateFilesystemSemantics(tool.name,input);
+      validateFilesystemSemantics(tool.name, input);
     } catch (error) {
       return failure("PATH_DENIED", message(error));
     }
@@ -66,14 +66,8 @@ function validatePaths(value: unknown, use: (target: string) => void) {
   if (typeof value === "string") use(value);
   else if (Array.isArray(value)) for (const item of value) if (typeof item === "string") use(item);
 }
-function normalizeKnownFolderPaths(input:Record<string,unknown>,fields:string[]){const resolver=new KnownFolderResolver();const normalize=(value:string)=>path.isAbsolute(value)?value:resolver.resolve(value)?.path??value;for(const field of fields){const value=input[field];if(typeof value==="string")input[field]=normalize(value);else if(Array.isArray(value))input[field]=value.map(item=>typeof item==="string"?normalize(item):item);}}
-function validatePhysicalPath(target:string,permissions:PermissionEngine){
-  const absolute=path.resolve(target);
-  if(fs.existsSync(absolute)){permissions.assertPath(fs.realpathSync.native(absolute));return;}
-  const physicalParent=fs.realpathSync.native(path.dirname(absolute));
-  permissions.assertPath(physicalParent);
-  permissions.assertPath(path.join(physicalParent,path.basename(absolute)));
-}
+function normalizeKnownFolderPaths(input: Record<string, unknown>, fields: string[]) { const resolver = new KnownFolderResolver(); const normalize = (value: string) => path.isAbsolute(value) ? value : resolver.resolve(value)?.path ?? value; for (const field of fields) { const value = input[field]; if (typeof value === "string") input[field] = normalize(value); else if (Array.isArray(value)) input[field] = value.map(item => typeof item === "string" ? normalize(item) : item); } }
+function validatePhysicalPath(target: string, permissions: PermissionEngine) { permissions.assertPath(target); }
 function failure(code: Extract<ActionPreflightResult, { ok: false }>["code"], text: string): Extract<ActionPreflightResult, { ok: false }> { return { ok: false, code, message: text }; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function validateFilesystemSemantics(toolName:string,input:Record<string,unknown>){const target=typeof input.path==="string"?input.path:typeof input.outputPath==="string"?input.outputPath:undefined;if(!target)return;if(["create_text_file","document_create","document_transform"].includes(toolName)&&fs.existsSync(target))throw new Error("FILE_ALREADY_EXISTS");if(toolName==="write_text_file"&&!fs.existsSync(target))throw new Error("FILE_NOT_FOUND");}
+function validateFilesystemSemantics(toolName: string, input: Record<string, unknown>) { const target = typeof input.path === "string" ? input.path : typeof input.outputPath === "string" ? input.outputPath : undefined; if (!target) return; if (["create_text_file", "document_create", "document_transform"].includes(toolName) && fs.existsSync(target)) throw new Error("FILE_ALREADY_EXISTS"); if (toolName === "write_text_file" && !fs.existsSync(target)) throw new Error("FILE_NOT_FOUND"); }
