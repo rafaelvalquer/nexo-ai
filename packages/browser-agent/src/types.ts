@@ -2,6 +2,7 @@ import type {
   BrowserAgentErrorCode,
   BrowserAgentMode,
   BrowserDiagnosticEventName,
+  BrowserModelTurnTelemetry,
   BrowserResearchResult,
   BrowserRunPhase
 } from "@nexo/shared/browser-agent";
@@ -31,7 +32,7 @@ export type BrowserWorkerMessage =
   | { type: "ready"; nodeVersion: string }
   | { type: "started"; runId: string }
   | { type: "phase"; runId: string; phase: BrowserRunPhase }
-  | { type: "diagnostic"; runId: string; event: BrowserDiagnosticEventName; durationMs?: number }
+  | { type: "diagnostic"; runId: string; event: BrowserDiagnosticEventName; durationMs?: number; metadata?:BrowserModelTurnTelemetry }
   | { type: "step"; runId: string; label: string; step: number; action?: boolean }
   | { type: "status"; runId: string; status: "paused" | "running" }
   | { type: "approval.requested"; runId: string; requestId: string; reason: string; preview: string }

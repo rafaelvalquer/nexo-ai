@@ -33,8 +33,26 @@ export type BrowserDiagnosticEventName =
   | "first_model_response_delta"
   | "first_model_response_completed"
   | "first_model_tool_call_received"
+  | "model_turn_completed"
   | "first_action_started"
   | "first_navigation";
+
+export type BrowserModelTurnTelemetry = {
+  model:string;
+  durationMs:number;
+  firstChunkMs:number|null;
+  contentLength:number;
+  thinkingLength:number;
+  structuredToolCallCount:number;
+  qwenMarkupToolCallCount:number;
+  invalidMarkupCount:number;
+  toolNames:string[];
+  doneReason:string;
+  promptTokens:number;
+  completionTokens:number;
+  totalTokens:number;
+  recoveryAttempt:boolean;
+};
 
 export type BrowserAgentErrorCode =
   | "BROWSER_CHROME_NOT_FOUND"
@@ -43,10 +61,14 @@ export type BrowserAgentErrorCode =
   | "BROWSER_CDP_CONNECTION_FAILED"
   | "BROWSER_OLLAMA_UNAVAILABLE"
   | "BROWSER_OLLAMA_TIMEOUT"
+  | "BROWSER_MODEL_CONFIG_INVALID"
   | "BROWSER_MODEL_NOT_FOUND"
   | "BROWSER_MODEL_INVALID_RESPONSE"
   | "BROWSER_MODEL_INCOMPATIBLE"
   | "BROWSER_MODEL_TOOL_CALL_UNSUPPORTED"
+  | "BROWSER_MODEL_NO_TOOL_CALL"
+  | "BROWSER_PROVIDER_FIRST_CHUNK_TIMEOUT"
+  | "BROWSER_MODEL_TURN_TIMEOUT"
   | "BROWSER_AGENT_LOAD_FAILED"
   | "BROWSER_AGENT_INIT_TIMEOUT"
   | "BROWSER_FIRST_ACTION_TIMEOUT"
@@ -92,7 +114,7 @@ export type BrowserRunEvent = { id?: string } & (
   | { type: "browser.step"; runId: string; label: string; step: number; timestamp: string }
   | { type: "browser.status"; runId: string; status: BrowserRunStatus; timestamp: string }
   | { type: "browser.phase"; runId: string; phase: BrowserRunPhase; timestamp: string }
-  | { type: "browser.diagnostic"; runId: string; event: BrowserDiagnosticEventName; durationMs?: number; timestamp: string }
+  | { type: "browser.diagnostic"; runId: string; event: BrowserDiagnosticEventName; durationMs?: number; metadata?:BrowserModelTurnTelemetry; timestamp: string }
   | { type: "browser.approval_requested"; runId: string; approvalId: string; label: string; preview?: string; timestamp: string }
   | { type: "browser.completed"; runId: string; result?: BrowserResearchResult; timestamp: string }
   | { type: "browser.failed"; runId: string; error: string; errorCode?: BrowserAgentErrorCode; timestamp: string }

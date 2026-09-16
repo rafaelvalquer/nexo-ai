@@ -253,7 +253,10 @@ export class BrowserAgentService implements BrowserAgentProvider {
         this.transitionPhase(context.run, message.phase);
         return;
       case "diagnostic":
-        this.emitDiagnostic(runId, message.event, message.durationMs);
+        if(message.event==="first_action_started")this.markFirstAction(context);
+        else if(message.event==="first_model_response_started")this.suspendFirstActionWatchdog(context);
+        else if(message.event==="first_model_response_completed"&&!context.firstActionAt)this.startFirstActionWatchdog(context);
+        this.emitDiagnostic(runId, message.event, message.durationMs,message.metadata);
         return;
       case "started":
         context.run.status = "running";
@@ -356,6 +359,11 @@ export class BrowserAgentService implements BrowserAgentProvider {
     this.transitionPhase(context.run, "executing");
   }
 
+  private suspendFirstActionWatchdog(context:RunContext){
+    if(context.firstActionTimer)clearTimeout(context.firstActionTimer);
+    context.firstActionTimer=undefined;
+  }
+
   private transitionPhase(run:BrowserRun, phase:BrowserRunPhase) {
     if (run.phase === phase) return;
     const timestamp = new Date().toISOString();
@@ -365,8 +373,8 @@ export class BrowserAgentService implements BrowserAgentProvider {
     this.emit({type:"browser.phase", runId:run.id, phase, timestamp});
   }
 
-  private emitDiagnostic(runId:string, event:BrowserDiagnosticEventName, durationMs?:number) {
-    this.emit({type:"browser.diagnostic", runId, event, ...(durationMs === undefined ? {} : {durationMs}), timestamp:new Date().toISOString()});
+  private emitDiagnostic(runId:string, event:BrowserDiagnosticEventName, durationMs?:number,metadata?:import("@nexo/shared/browser-agent").BrowserModelTurnTelemetry) {
+    this.emit({type:"browser.diagnostic", runId, event, ...(durationMs === undefined ? {} : {durationMs}),...(metadata?{metadata}:{}), timestamp:new Date().toISOString()});
   }
 
   private async finish(runId:string, status:"completed"|"failed"|"cancelled", error?:string, result?:BrowserResearchResult) {

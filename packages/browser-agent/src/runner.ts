@@ -28,12 +28,12 @@ export class BrowserAgentRunner {
     this.activeRunId = config.runId;
     this.cancelledByUser = false;
     const mapper = new BrowserPublicEventMapper();
-    const browserModel = resolveBrowserAgentModel(config.model);
-    const adapter = new NexoBrowserModelAdapter(config.ollamaUrl, browserModel);
     const domains = BrowserAgentPolicy.normalizeDomains(config.allowedDomains);
     let firstActionEmitted = false;
 
     try {
+      const browserModel = resolveBrowserAgentModel(config.model);
+      const adapter = new NexoBrowserModelAdapter(config.ollamaUrl, browserModel.model,browserModel.source);
       this.phase(config.runId, "checking_model");
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_check_started" });
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_request_started" });
@@ -43,12 +43,14 @@ export class BrowserAgentRunner {
       this.emit({ type:"diagnostic", runId:config.runId, event:"ollama_request_completed", durationMs:preflight.compatibilityLatencyMs });
 
       const { models, model } = await adapter.createModels(undefined, preflight);
-      const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, browserModel);
+      const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, browserModel.model,{
+        onTelemetry:metadata=>this.emit({type:"diagnostic",runId:config.runId,event:"model_turn_completed",durationMs:metadata.durationMs,metadata})
+      });
       this.emit({
         type:"log",
         runId:config.runId,
         level:"info",
-        message:`Ollama nativo e tool calling validados em ${Date.now() - preflightStarted} ms com ${browserModel} (${preflight.toolCallSource}).`
+        message:`Ollama nativo e tool calling validados em ${Date.now() - preflightStarted} ms com modelo ${browserModel.model}, origem ${browserModel.source} (${preflight.toolCallSource}).`
       });
 
       this.phase(config.runId, "loading_agent");
@@ -68,6 +70,7 @@ export class BrowserAgentRunner {
           highlightActions: true,
           researchTools: false,
           log: false,
+          modelTimeoutMs:300_000,
           beforeToolCall: async ({ toolCall, args }, signal) => {
             const sensitive = BrowserAgentPolicy.sensitiveAction(toolCall.name, args);
             if (!sensitive) return undefined;
@@ -128,7 +131,7 @@ export class BrowserAgentRunner {
     } catch (error) {
       const value = error as Error & { cancelled?: boolean; name?: string; code?: BrowserAgentErrorCode };
       const aborted = value.cancelled || value.name === "AbortError" || /operation was aborted|aborterror/i.test(value.message ?? "");
-      const errorCode = value instanceof BrowserAgentPreflightError ? value.code : value.code;
+      const errorCode = value instanceof BrowserAgentPreflightError ? value.code : value.code??runtimeErrorCode(value.message);
       this.emit({
         type:"failed",
         runId:config.runId,
@@ -151,6 +154,11 @@ export class BrowserAgentRunner {
   cancel(runId: string) { if (this.activeRunId === runId) { this.cancelledByUser = true; this.agent?.cancel(); } }
   private assertRun(runId: string) { if (this.activeRunId !== runId || !this.agent) throw new Error("Execução do navegador não está ativa."); }
   private phase(runId:string, phase:BrowserRunPhase) { this.emit({ type:"phase", runId, phase }); }
+}
+
+function runtimeErrorCode(message:string|undefined):BrowserAgentErrorCode|undefined{
+  const match=message?.match(/BROWSER_(?:MODEL_NO_TOOL_CALL|PROVIDER_FIRST_CHUNK_TIMEOUT|MODEL_TURN_TIMEOUT)/)?.[0];
+  return match as BrowserAgentErrorCode|undefined;
 }
 
 function validateWorkerResult(output: unknown, allowedDomains: string[]) {

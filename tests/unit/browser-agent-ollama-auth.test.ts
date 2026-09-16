@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BrowserAgentPreflightError,
+  buildBrowserToolCallingProbeRequest,
   NEXO_OLLAMA_COMPAT_API_KEY,
   NexoBrowserModelAdapter
 } from "../../packages/browser-agent/src/model-adapter";
@@ -18,6 +19,7 @@ const toolCallResponse = () => ({
     }]
   }
 });
+const tagsResponse = (model="qwen3:4b") => new Response(JSON.stringify({models:[{name:model,model}]}),{status:200,headers:{"content-type":"application/json"}});
 
 describe("Browser Agent Ollama model adapter", () => {
   afterEach(() => {
@@ -62,6 +64,7 @@ describe("Browser Agent Ollama model adapter", () => {
 
   it("validates tool calling through native /api/chat without forcing think", async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(tagsResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools","vision"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify(toolCallResponse()), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
@@ -74,10 +77,10 @@ describe("Browser Agent Ollama model adapter", () => {
     expect(result.toolCallingValidated).toBe(true);
     expect(result.toolCallSource).toBe("structured");
     expect(result.capabilities).toContain("vision");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/api/chat");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/api/chat");
 
-    const request = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body)) as {
+    const request = JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body)) as {
       think?:boolean;
       stream?:boolean;
       tools?: Array<{function?:{name?:string}}>;
@@ -95,6 +98,7 @@ describe("Browser Agent Ollama model adapter", () => {
       arguments:{url:"https://example.com"}
     })}</tool_call>`;
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(tagsResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools","thinking"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ message:{role:"assistant",content:markup} }), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
@@ -114,6 +118,7 @@ describe("Browser Agent Ollama model adapter", () => {
     const rawContent = "Vou abrir a página com um segredo local.";
     const rawThinking = "RACIOCINIO-PRIVADO-NAO-LOGAR";
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(tagsResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools","thinking"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ message:{role:"assistant",content:rawContent,thinking:rawThinking} }), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
@@ -138,6 +143,7 @@ describe("Browser Agent Ollama model adapter", () => {
     const response = toolCallResponse();
     response.message.tool_calls[0].function.arguments = {url:"https://wrong.example"};
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(tagsResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response(JSON.stringify(response), { status:200, headers:{"content-type":"application/json"} }));
     vi.stubGlobal("fetch", fetchMock);
@@ -149,7 +155,7 @@ describe("Browser Agent Ollama model adapter", () => {
   });
 
   it("reports a missing Ollama model explicitly", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("not found", { status:404 })));
+    vi.stubGlobal("fetch", vi.fn(async () => tagsResponse("another:latest")));
     const adapter = new NexoBrowserModelAdapter("http://127.0.0.1:11434", "missing:latest");
     await expect(adapter.preflight()).rejects.toMatchObject<Partial<BrowserAgentPreflightError>>({ code:"BROWSER_MODEL_NOT_FOUND" });
   });
@@ -162,6 +168,7 @@ describe("Browser Agent Ollama model adapter", () => {
 
   it("reports an incompatible native endpoint explicitly", async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(tagsResponse("qwen3:8b"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools"] }), { status:200, headers:{"content-type":"application/json"} }))
       .mockResolvedValueOnce(new Response("bad gateway", { status:502 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -173,5 +180,21 @@ describe("Browser Agent Ollama model adapter", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new DOMException("Timed out", "TimeoutError"); }));
     const adapter = new NexoBrowserModelAdapter("http://127.0.0.1:11434", "qwen3:8b");
     await expect(adapter.preflight()).rejects.toMatchObject<Partial<BrowserAgentPreflightError>>({ code:"BROWSER_OLLAMA_TIMEOUT" });
+  });
+
+  it("builds probes with think omitted, false and true without conflating the modes",()=>{
+    const omitted=buildBrowserToolCallingProbeRequest("qwen3:4b");
+    expect(Object.hasOwn(omitted,"think")).toBe(false);
+    expect(buildBrowserToolCallingProbeRequest("qwen3:4b",false)).toMatchObject({think:false});
+    expect(buildBrowserToolCallingProbeRequest("qwen3:4b",true)).toMatchObject({think:true});
+  });
+
+  it("classifies /api/show HTTP 400 with sanitized Ollama detail and model source",async()=>{
+    const fetchMock=vi.fn().mockResolvedValueOnce(tagsResponse("bad:tag")).mockResolvedValueOnce(new Response(JSON.stringify({error:"invalid model configuration\nsecret-free"}),{status:400,headers:{"content-type":"application/json"}}));
+    vi.stubGlobal("fetch",fetchMock);
+    const adapter=new NexoBrowserModelAdapter("http://127.0.0.1:11434","bad:tag","environment:NEXO_BROWSER_AGENT_MODEL");
+    const error=await adapter.preflight().catch(value=>value as BrowserAgentPreflightError);
+    expect(error).toMatchObject<Partial<BrowserAgentPreflightError>>({code:"BROWSER_MODEL_CONFIG_INVALID",metadata:{model:"bad:tag",source:"environment:NEXO_BROWSER_AGENT_MODEL",httpStatus:400}});
+    expect(error.message).toContain("invalid model configuration secret-free");
   });
 });

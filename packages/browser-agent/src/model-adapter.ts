@@ -1,6 +1,7 @@
 import { createModels, createProvider, type Model } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import type { BrowserAgentErrorCode } from "@nexo/shared/browser-agent";
+import type { BrowserAgentModelSource } from "./model-selection.js";
 import {
   formatSanitizedToolCallDiagnostic,
   inspectOllamaToolCalls,
@@ -17,6 +18,18 @@ export const NEXO_OLLAMA_COMPAT_API_KEY = "nexo-local-ollama";
 const PREFLIGHT_TOOL_NAME = "nexo_browser_preflight";
 const PREFLIGHT_URL = "https://example.com";
 
+export function buildBrowserToolCallingProbeRequest(model:string,think:"omitted"|boolean="omitted") {
+  const request:{model:string;messages:Array<{role:string;content:string}>;tools:unknown[];stream:false;options:{temperature:number};think?:boolean}={
+    model,
+    messages:[{role:"system",content:"You are a capability probe. You must call the provided function. Do not answer with natural language."},{role:"user",content:`Call ${PREFLIGHT_TOOL_NAME} with url exactly ${PREFLIGHT_URL}.`}],
+    tools:[{type:"function",function:{name:PREFLIGHT_TOOL_NAME,description:"Capability probe for Browser Agent tool calling.",parameters:{type:"object",properties:{url:{type:"string"}},required:["url"],additionalProperties:false}}}],
+    stream:false,
+    options:{temperature:0}
+  };
+  if(think!=="omitted")request.think=think;
+  return request;
+}
+
 export type OllamaPreflightResult = {
   available: true;
   modelExists: true;
@@ -29,7 +42,7 @@ export type OllamaPreflightResult = {
 };
 
 export class BrowserAgentPreflightError extends Error {
-  constructor(public readonly code: BrowserAgentErrorCode, message: string, options?: ErrorOptions) {
+  constructor(public readonly code: BrowserAgentErrorCode, message: string, options?: ErrorOptions, public readonly metadata?:{model:string;source:BrowserAgentModelSource;httpStatus?:number}) {
     super(message, options);
     this.name = "BrowserAgentPreflightError";
   }
@@ -37,10 +50,11 @@ export class BrowserAgentPreflightError extends Error {
 
 /** Adapts the Nexo Ollama endpoint to Pi's model catalog without any cloud dependency. */
 export class NexoBrowserModelAdapter {
-  constructor(private readonly ollamaUrl: string, private readonly modelId: string) {}
+  constructor(private readonly ollamaUrl: string, private readonly modelId: string, private readonly modelSource:BrowserAgentModelSource="global_setting") {}
 
   async preflight(signal?: AbortSignal): Promise<OllamaPreflightResult> {
     const base = this.ollamaUrl.replace(/\/$/, "");
+    await this.assertModelInstalled(base,signal);
     const showStarted = Date.now();
     let response: Response;
     try {
@@ -51,15 +65,10 @@ export class NexoBrowserModelAdapter {
         signal: boundedSignal(signal, 10_000)
       });
     } catch (error) {
-      throw classifyFetchError(error, "Não foi possível conectar ao Ollama local.");
+      throw classifyFetchError(error, "Não foi possível conectar ao Ollama local.",this.modelId,this.modelSource);
     }
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado no Ollama.`);
-      }
-      throw new BrowserAgentPreflightError("BROWSER_OLLAMA_UNAVAILABLE", `O Ollama respondeu com HTTP ${response.status} ao verificar o modelo.`);
-    }
+    if (!response.ok) throw await this.classifyModelResponse(response,"/api/show");
 
     let body: { capabilities?: unknown };
     try {
@@ -76,44 +85,15 @@ export class NexoBrowserModelAdapter {
       compatibilityResponse = await fetch(`${base}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model: this.modelId,
-          messages: [
-            {
-              role: "system",
-              content: "You are a capability probe. You must call the provided function. Do not answer with natural language."
-            },
-            {
-              role: "user",
-              content: `Call ${PREFLIGHT_TOOL_NAME} with url exactly ${PREFLIGHT_URL}.`
-            }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: PREFLIGHT_TOOL_NAME,
-              description: "Capability probe for Browser Agent tool calling.",
-              parameters: {
-                type: "object",
-                properties: { url: { type: "string" } },
-                required: ["url"],
-                additionalProperties: false
-              }
-            }
-          }],
-          stream: false,
-          options: { temperature: 0 }
-        }),
+        body: JSON.stringify(buildBrowserToolCallingProbeRequest(this.modelId)),
         signal: boundedSignal(signal, 20_000)
       });
     } catch (error) {
-      throw classifyFetchError(error, "O Ollama não concluiu o preflight nativo de tool calling do Browser Agent.");
+      throw classifyFetchError(error, "O Ollama não concluiu o preflight nativo de tool calling do Browser Agent.",this.modelId,this.modelSource);
     }
 
     if (!compatibilityResponse.ok) {
-      if (compatibilityResponse.status === 404) {
-        throw new BrowserAgentPreflightError("BROWSER_MODEL_NOT_FOUND", `O modelo ${this.modelId} não foi encontrado durante o teste nativo de tool calling.`);
-      }
+      if (compatibilityResponse.status === 404) throw this.error("BROWSER_MODEL_NOT_FOUND",`O modelo selecionado não foi encontrado durante o teste nativo de tool calling.`,compatibilityResponse.status);
       throw new BrowserAgentPreflightError(
         "BROWSER_MODEL_INCOMPATIBLE",
         `O endpoint nativo /api/chat do Ollama respondeu com HTTP ${compatibilityResponse.status} durante o teste de tool calling.`
@@ -155,6 +135,28 @@ export class NexoBrowserModelAdapter {
       toolCallSource:expected.source,
       diagnostic:inspection.diagnostic
     };
+  }
+
+  private async assertModelInstalled(base:string,signal?:AbortSignal) {
+    let response:Response;
+    try { response=await fetch(`${base}/api/tags`,{signal:boundedSignal(signal,10_000)}); }
+    catch(error){ throw classifyFetchError(error,"Não foi possível consultar os modelos instalados no Ollama.",this.modelId,this.modelSource); }
+    if(!response.ok)throw new BrowserAgentPreflightError("BROWSER_OLLAMA_UNAVAILABLE",`O endpoint /api/tags respondeu com HTTP ${response.status}.`,undefined,{model:this.modelId,source:this.modelSource,httpStatus:response.status});
+    let body:{models?:Array<{name?:unknown;model?:unknown}>};
+    try{body=await response.json() as typeof body;}catch(error){throw this.error("BROWSER_MODEL_INVALID_RESPONSE","O endpoint /api/tags retornou JSON inválido.",response.status,error);}
+    const installed=new Set((Array.isArray(body.models)?body.models:[]).flatMap(item=>[item.name,item.model]).filter((item):item is string=>typeof item==="string"));
+    if(!installed.has(this.modelId))throw this.error("BROWSER_MODEL_NOT_FOUND",`O modelo selecionado não está instalado no Ollama.`,undefined);
+  }
+
+  private async classifyModelResponse(response:Response,endpoint:string){
+    const detail=await readOllamaError(response);
+    if(response.status===404||/not found|does not exist|try pulling/i.test(detail))return this.error("BROWSER_MODEL_NOT_FOUND",`O modelo selecionado não foi encontrado por ${endpoint}. ${detail}`,response.status);
+    if(response.status===400)return this.error("BROWSER_MODEL_CONFIG_INVALID",`Ollama rejeitou a configuração do modelo em ${endpoint}. ${detail}`,response.status);
+    return this.error("BROWSER_OLLAMA_UNAVAILABLE",`O endpoint ${endpoint} respondeu com HTTP ${response.status}. ${detail}`,response.status);
+  }
+
+  private error(code:BrowserAgentErrorCode,message:string,httpStatus?:number,cause?:unknown){
+    return new BrowserAgentPreflightError(code,`${message} Modelo: ${this.modelId}. Origem: ${this.modelSource}.`,cause===undefined?undefined:{cause},{model:this.modelId,source:this.modelSource,...(httpStatus===undefined?{}:{httpStatus})});
   }
 
   async createModels(signal?: AbortSignal, preflight?: OllamaPreflightResult) {
@@ -222,9 +224,15 @@ function boundedSignal(signal: AbortSignal | undefined, timeoutMs: number) {
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
-function classifyFetchError(error: unknown, fallback: string) {
+function classifyFetchError(error: unknown, fallback: string, model="desconhecido", source:BrowserAgentModelSource="global_setting") {
   const value = error as Error & { name?: string };
-  if (value?.name === "TimeoutError") return new BrowserAgentPreflightError("BROWSER_OLLAMA_TIMEOUT", `${fallback} Tempo limite excedido.`, { cause:error });
-  if (value?.name === "AbortError") return new BrowserAgentPreflightError("BROWSER_OLLAMA_TIMEOUT", `${fallback} A operação foi interrompida.`, { cause:error });
-  return new BrowserAgentPreflightError("BROWSER_OLLAMA_UNAVAILABLE", fallback, { cause:error });
+  const metadata={model,source};
+  if (value?.name === "TimeoutError") return new BrowserAgentPreflightError("BROWSER_OLLAMA_TIMEOUT", `${fallback} Tempo limite excedido. Modelo: ${model}. Origem: ${source}.`, { cause:error },metadata);
+  if (value?.name === "AbortError") return new BrowserAgentPreflightError("BROWSER_OLLAMA_TIMEOUT", `${fallback} A operação foi interrompida. Modelo: ${model}. Origem: ${source}.`, { cause:error },metadata);
+  return new BrowserAgentPreflightError("BROWSER_OLLAMA_UNAVAILABLE", `${fallback} Modelo: ${model}. Origem: ${source}.`, { cause:error },metadata);
 }
+
+async function readOllamaError(response:Response){
+  try{const body=await response.json() as {error?:unknown;message?:unknown};return sanitizeError(typeof body.error==="string"?body.error:typeof body.message==="string"?body.message:"");}catch{return"Resposta sem detalhe estruturado.";}
+}
+function sanitizeError(value:string){const clean=value.replace(/[\u0000-\u001f\u007f]+/g," ").replace(/\s+/g," ").trim().slice(0,240);return clean||"Ollama não informou detalhes.";}

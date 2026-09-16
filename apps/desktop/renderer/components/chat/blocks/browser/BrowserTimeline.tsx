@@ -52,6 +52,7 @@ function diagnosticLabel(event:BrowserDiagnosticEventName,durationMs?:number){
     first_model_response_delta:"Primeiro delta do modelo recebido",
     first_model_response_completed:"Primeira resposta do modelo concluída",
     first_model_tool_call_received:"Primeiro tool call recebido",
+    model_turn_completed:"Turno do modelo concluído",
     first_action_started:"Primeira ação iniciada",
     first_navigation:"Primeira navegação concluída"
   };

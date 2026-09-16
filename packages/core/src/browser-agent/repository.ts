@@ -57,7 +57,7 @@ export class BrowserRunRepository {
               : null;
     const url = event.type === "browser.navigation" ? event.url : null;
     const metadata = event.type === "browser.diagnostic"
-      ? JSON.stringify({ event:event.event, ...(event.durationMs === undefined ? {} : {durationMs:event.durationMs}) })
+      ? JSON.stringify({ event:event.event, ...(event.durationMs === undefined ? {} : {durationMs:event.durationMs}),...(event.metadata?{metadata:event.metadata}:{}) })
       : event.type === "browser.phase"
         ? JSON.stringify({ phase:event.phase })
         : null;

@@ -11,6 +11,8 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "diagnose:browser-model": "node scripts/diagnose-browser-tool-calling.mjs",
+    "browser:doctor": "node scripts/browser-doctor.mjs",
+    "browser:stability": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && node scripts/browser-stability.mjs",
     "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
     "eval:agent": "vitest run --config vitest.agent-evals.config.ts",
     "eval:agent:model": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-agent-model-backed.mjs",
