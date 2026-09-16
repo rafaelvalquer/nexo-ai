@@ -57,7 +57,7 @@ function inferOutputTarget(objective: string, paths: string[]): OutputTarget | u
 
   const semanticPath = objective.match(/(?:downloads?|documents?|documentos?|desktop|[áa]rea de trabalho|downlaod|donwload|dowload)(?:[\\/][^\r\n"',;]+)+\.(?:txt|md|docx|pdf)\b/i)?.[0];
   if (semanticPath && /crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever|exporte|exportar|produza|produzir/i.test(objective)) {
-    return { requestedPath: semanticPath, kind: "file", consumedPaths: [path.basename(semanticPath)] };
+    return { requestedPath: semanticPath, kind: "file", consumedPaths: [portableBasename(semanticPath)] };
   }
 
   const candidate = [...paths].reverse().find(item => isOutputPath(objective, item));
@@ -79,6 +79,7 @@ function destinationAfter(objective: string, token: string) {
   return match ? cleanDestination(match[1]) : undefined;
 }
 
+function portableBasename(value: string) { return value.split(/[\\/]+/).filter(Boolean).at(-1) ?? value; }
 function cleanDestination(value: string) { return value.trim().replace(/^["']|["']$/g, "").replace(/[.!?]+$/g, "").trim(); }
 function isAbsolutePortable(value: string) { return path.isAbsolute(value) || path.win32.isAbsolute(value); }
 function extractPaths(value: string) { return [...new Set([...value.matchAll(/[A-Za-z]:\\[^\r\n"',;]+?\.(?:txt|md|docx|pdf)\b|\b[\wÀ-ÿ_-]+\.(?:txt|md|docx|pdf)\b/gi)].map(match => match[0]))]; }
