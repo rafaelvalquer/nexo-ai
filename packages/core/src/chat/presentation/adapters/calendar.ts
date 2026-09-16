@@ -12,7 +12,8 @@ export function calendarActions(joinUrl?: string): ResourceAction[] {
   ];
 }
 export const calendarAdapter: PresentationAdapter = (result, context) => {
-  const parsed = z.array(eventSchema).safeParse(Array.isArray(result.data) ? result.data : [result.data]);
+  const raw=result.data&&typeof result.data==="object"&&Array.isArray((result.data as any).events)?(result.data as any).events:result.data;
+  const parsed = z.array(eventSchema).safeParse(Array.isArray(raw) ? raw : [raw]);
   if (!parsed.success) return undefined;
   const blockId = randomUUID();
   const items: ResourceItem[] = parsed.data.map(event => {

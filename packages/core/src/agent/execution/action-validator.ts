@@ -1,5 +1,6 @@
 import type { ConnectionService } from "../../connections/service.js";
 import fs from "node:fs";
+import path from "node:path";
 import type { PermissionEngine } from "../../permissions/policy.js";
 import type { SecurityPolicyService } from "../../security/policy.js";
 import type { ToolRegistry } from "../../tools/registry.js";
@@ -48,7 +49,7 @@ export class ActionValidator {
     const input = { ...(parsed.data as Record<string, unknown>), ...evidence };
     try {
       this.security?.assertRecipientDomains(input.to as Array<{ email?: string }> | undefined);
-      for (const field of tool.pathFields ?? []) validatePaths(input[field], value => this.permissions.assertPath(value));
+      for (const field of tool.pathFields ?? []) validatePaths(input[field], value => validatePhysicalPath(value, this.permissions));
       validateFilesystemSemantics(tool.name,input);
     } catch (error) {
       return failure("PATH_DENIED", message(error));
@@ -62,6 +63,13 @@ export class ActionValidator {
 function validatePaths(value: unknown, use: (target: string) => void) {
   if (typeof value === "string") use(value);
   else if (Array.isArray(value)) for (const item of value) if (typeof item === "string") use(item);
+}
+function validatePhysicalPath(target:string,permissions:PermissionEngine){
+  const absolute=path.resolve(target);
+  if(fs.existsSync(absolute)){permissions.assertPath(fs.realpathSync.native(absolute));return;}
+  const physicalParent=fs.realpathSync.native(path.dirname(absolute));
+  permissions.assertPath(physicalParent);
+  permissions.assertPath(path.join(physicalParent,path.basename(absolute)));
 }
 function failure(code: Extract<ActionPreflightResult, { ok: false }>["code"], text: string): Extract<ActionPreflightResult, { ok: false }> { return { ok: false, code, message: text }; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }

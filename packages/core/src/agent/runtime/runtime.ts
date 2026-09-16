@@ -12,6 +12,7 @@ import { IntentMemoryStore } from "../intent-memory/store.js";
 import type { PendingClarification } from "../clarification/types.js";
 import type { AgentRun, AgentRunStatus, PersistedAgentState } from "./state.js";
 import type { AgentLoopState } from "../loop/types.js";
+import { ConversationEntityLedger } from "../context/conversation-entity-ledger.js";
 
 type RunRow={id:string;status:AgentRunStatus;state_json:string;final_response:string|null;created_at:string;updated_at:string;conversation_id?:string|null;task_id?:string|null;agent_id?:string|null};
 type ClarificationRow={id:string;conversation_id:string;domain:PendingClarification["domain"];intent:string;operation:string;original_request:string;partial_entities_json:string;questions_json:string;intent_json:string;values_json:string;status:PendingClarification["status"];created_at:string;resolved_at:string|null;expires_at:string|null};
@@ -20,10 +21,12 @@ export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
   readonly emailPreferences:EmailSearchPreferenceService;
   readonly emailDrafts:EmailComposeDraftService;
+  readonly entities:ConversationEntityLedger;
   constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
     this.emailPreferences=new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(db));
     this.emailDrafts=new EmailComposeDraftService(new EmailComposeDraftRepository(db));
+    this.entities=new ConversationEntityLedger(db);
     this.ensureClarificationSchema();
     configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
@@ -39,7 +42,7 @@ export class AgentRuntime{
   startLoop(state:AgentLoopState,context:AgentRuntimeContext={}){const now=new Date().toISOString();this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id,engine_version,state_version) VALUES(?,?,?,?,?,?,?,?,?,?,?)",[state.runId,state.userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??state.conversationId??null,context.taskId??state.taskId??null,context.agentId??null,"agent-loop-v2",2]);return state;}
   saveLoopState(runId:string,state:AgentLoopState){if(!this.db.get<{id:string}>("SELECT id FROM agent_runs WHERE id=?",[runId])){this.startLoop(state,{conversationId:state.conversationId,taskId:state.taskId});return;}this.db.run("UPDATE agent_runs SET state_json=?,status=?,updated_at=?,engine_version='agent-loop-v2',state_version=2 WHERE id=?",[JSON.stringify(state),state.status,new Date().toISOString(),runId]);}
   loadLoopState(runId:string){const row=this.db.get<{state_json:string;engine_version?:string}>("SELECT state_json,engine_version FROM agent_runs WHERE id=?",[runId]);if(!row||row.engine_version!=="agent-loop-v2")return undefined;return JSON.parse(row.state_json) as AgentLoopState;}
-  recoverableLoops(){const rows=this.db.all<{id:string;state_json:string}>("SELECT id,state_json FROM agent_runs WHERE engine_version='agent-loop-v2' AND status NOT IN ('COMPLETED','FAILED','CANCELLED') ORDER BY updated_at");const states:AgentLoopState[]=[];for(const row of rows){try{const state=JSON.parse(row.state_json) as AgentLoopState;if(state.status==="EXECUTING"&&state.pendingAction?.mutatesState){state.status="RESULT_UNKNOWN";state.finalResponse="Execução interrompida após despacho; reconciliação obrigatória antes de qualquer nova tentativa.";this.saveLoopState(row.id,state);}else if(["PREFLIGHT","OBSERVING"].includes(state.status)){state.status="DECIDING";this.saveLoopState(row.id,state);}states.push(state);}catch{/* Registro inválido é ignorado e permanece disponível para diagnóstico. */}}return states;}
+  recoverableLoops(){const rows=this.db.all<{id:string;state_json:string}>("SELECT id,state_json FROM agent_runs WHERE engine_version='agent-loop-v2' AND status NOT IN ('COMPLETED','FAILED','CANCELLED') ORDER BY updated_at");const states:AgentLoopState[]=[];for(const row of rows){try{const state=JSON.parse(row.state_json) as AgentLoopState;if(state.status==="EXECUTING"&&state.pendingAction?.mutatesState){state.status="RESULT_UNKNOWN";state.finalResponse="Execução interrompida após despacho; reconciliação obrigatória antes de qualquer nova tentativa.";this.saveLoopState(row.id,state);}else if(["PREFLIGHT","OBSERVING","WAITING_RESOURCE"].includes(state.status)){state.status="DECIDING";this.saveLoopState(row.id,state);}states.push(state);}catch{/* Registro inválido é ignorado e permanece disponível para diagnóstico. */}}return states;}
   resumeLoop(runId:string){const state=this.loadLoopState(runId);if(!state||["COMPLETED","FAILED","CANCELLED","RESULT_UNKNOWN"].includes(state.status))return undefined;return {...state,status:"DECIDING" as const};}
   finishLoop(runId:string,state:AgentLoopState){this.saveLoopState(runId,state);if(state.status==="COMPLETED"||state.status==="FAILED"||state.status==="CANCELLED")this.finish(runId,state.status,state.finalResponse??"");}
   getConversationActionContext(conversationId?:string):ConversationActionContextState|undefined{if(!conversationId)return undefined;const row=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`conversation-action:${conversationId}`]);if(!row)return undefined;try{return JSON.parse(row.value) as ConversationActionContextState;}catch{return undefined;}}

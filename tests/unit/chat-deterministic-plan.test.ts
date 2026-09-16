@@ -10,17 +10,16 @@ import { PermissionEngine } from "../../packages/core/src/permissions/policy";
 import { AuditService } from "../../packages/core/src/audit/audit";
 import { NexoDatabase } from "../../packages/core/src/database/db";
 
-let root: string, db: NexoDatabase, approvals: ApprovalService, runtime: AgentRuntime, engine: AgentEngine;
+let root: string, allowedRoot: string, db: NexoDatabase, approvals: ApprovalService, runtime: AgentRuntime, engine: AgentEngine;
 const execute = vi.fn(async () => ({ok: true, summary: "Movido para a lixeira"}));
 const plan = vi.fn(() => { throw new Error("Ollama must not be called for card actions"); });
-const allowedRoot = path.resolve("test-results", "card-files");
 beforeEach(async () => {
-  vi.clearAllMocks(); root = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-card-plan-"));
+  vi.clearAllMocks(); root = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-card-plan-")); allowedRoot = fs.mkdtempSync(path.join(process.cwd(), ".nexo-card-plan-files-"));
   db = new NexoDatabase(root); await db.ready(); approvals = new ApprovalService(db); runtime = new AgentRuntime(db);
   const tool = {name: "test_trash", description: "Mover arquivo", risk: "SENSITIVE", permissions: ["filesystem.write"], mutatesState: true, pathFields: ["path"], inputSchema: z.object({path: z.string()}), execute};
   engine = new AgentEngine({plan, observe: () => ({})} as any, {get: (name: string) => name === tool.name ? tool : undefined} as any, new PermissionEngine(() => ({allowedRoots: [allowedRoot]} as any)), approvals, new AuditService(db), undefined, runtime);
 });
-afterEach(() => fs.rmSync(root, {recursive: true, force: true}));
+afterEach(() => { fs.rmSync(root, {recursive: true, force: true}); if (!allowedRoot.startsWith(`${process.cwd()}${path.sep}.nexo-card-plan-files-`)) throw new Error("Unsafe test cleanup"); fs.rmSync(allowedRoot, {recursive: true, force: true}); });
 it("deterministic mutation uses approval and resumes only the exact target without Ollama", async () => {
   const target = path.join(allowedRoot, "report.csv");
   const reply = await engine.runPlan("Mover arquivo selecionado", [{tool: "test_trash", input: {path: target}}]);

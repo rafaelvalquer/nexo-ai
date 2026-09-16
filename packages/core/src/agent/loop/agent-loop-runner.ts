@@ -21,19 +21,23 @@ import { modelVisiblePresentationData, wrapPresentationData } from "../../chat/p
 import { emailSendCapabilityRemediation, isEmailSendRequest, resolveEmailSendCapability } from "../orchestrator/email-capability-remediation.js";
 import { GoalBuilder } from "../goal/goal-builder.js";
 import type { AgentResourceContext } from "../goal/goal-types.js";
+import { EntityReferenceResolver } from "../resolution/entity-reference-resolver.js";
+import { ModelRouter } from "../model/model-router.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
 /** Bridges provider, a bounded capability catalog and the sole execution authority. */
 export class AgentLoopRunner {
-  private readonly candidates = new ToolCandidateSelector(10);
+  private readonly candidates = new ToolCandidateSelector(6);
   private readonly fastPath = new V2FastPathRouter();
+  private readonly modelRouter = new ModelRouter();
   constructor(private readonly llm: LLMProvider, private readonly catalog: CapabilityAwareToolCatalog, private readonly registry: ToolRegistry, private readonly executor: ActionExecutor, private readonly connections?: ConnectionService,private readonly runtime?:AgentRuntime,private readonly contextManager=new AgentContextManager(),private readonly graph=new AgentGraph(),private readonly metrics?:LocalMetricsService,private readonly reconciliation?:AgentReconciliationCoordinator) {}
 
   async run(userRequest: string, options: { mode: "read_only" | "full"; runId?: string; conversationId?:string;taskId?:string;messages?:AgentLoopState["messages"];resources?:AgentResourceContext;signal?: AbortSignal } ): Promise<AgentLoopState> {
     if (!this.llm.agentTurn) throw new Error("O provider de LLM não implementa agentTurn().");
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
+    if(options.conversationId&&this.runtime){const entity=new EntityReferenceResolver(this.runtime.entities).resolve(options.conversationId,userRequest);if(entity){messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Referência ordinal resolvida pelo Core: ${entity.kind} id=${entity.id}${entity.path?` path=${entity.path}`:""}.`});this.metrics?.record("agent.entity_reference_resolved",1,{kind:entity.kind});}else if(/\b(primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa])\b/i.test(userRequest))this.metrics?.record("agent.entity_reference_failed",1);}
     if(options.resources?.documents.length)messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Documentos disponíveis como resources (use tools document_* para acessar conteúdo):\n${options.resources.documents.map(document=>`ID: ${document.id}\nNome: ${document.name}\nTipo: ${document.mimeType}`).join("\n\n")}`});
 
     // Capability repair may change the operational tool set. Always perform it
@@ -48,7 +52,8 @@ export class AgentLoopRunner {
 
     const loop=this.createLoop(options.mode,available);
     const taskState=new GoalBuilder().build(userRequest,options.resources);
-    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,signal:options.signal}));}
+    const route=this.modelRouter.route(userRequest,taskState.goal.steps.length);this.metrics?.record("agent.model_route",1,{profile:route.profile,reason:route.reason,model:route.model??"provider_default"});
+    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,model:route.model,signal:options.signal}));}
     catch(error){if(error&&typeof error==="object")Object.assign(error,{runId});throw error;}
   }
 
@@ -73,16 +78,17 @@ export class AgentLoopRunner {
   }
 
   async createLoopForRecovery(state:AgentLoopState){
-    const available=this.availableForMode("full");return this.graph.invoke(state.runId,previous=>this.createLoop("full",available).resume(previous??state),state);
+    const available=this.availableForMode("full");const recovered=await this.graph.invoke(state.runId,previous=>this.createLoop("full",available).resume(previous??state),state);this.metrics?.record("agent.recovery_success",1,{runId:state.runId,status:recovered.status});return recovered;
   }
 
   private availableForMode(mode:"read_only"|"full") {return this.catalog.list().filter(tool=>!tool.mutatesState||tool.risk==="READ"||mode==="full"&&Boolean(this.registry.get(tool.name)?.mutationSafety));}
 
   private async executeFastPath(userRequest:string,toolName:string,input:Record<string,unknown>,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"];signal?:AbortSignal}):Promise<AgentLoopState|undefined>{
-    const tool=this.registry.get(toolName);if(!tool||(tool.mutatesState??tool.risk!=="READ"))return undefined;
+    const tool=this.registry.get(toolName);if(!tool)return undefined;
     const preflight=await this.executor.preflight(toolName,input,{runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,signal:options.signal,capabilityResolver:permission=>this.hasCapability(permission,input)});
     if(!preflight.ok){this.metrics?.record("agent.fast_path_rejected",1,{tool:toolName,code:preflight.code});return undefined;}
     const now=new Date().toISOString();const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[preflight.action.fingerprint],observationFingerprints:[],activeToolNames:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"EXECUTING",executionSafetyState:"NO_ACTION"};
+    if(preflight.action.requiresApproval){state.pendingAction={callId:`fast-${randomUUID()}`,toolName:preflight.action.toolName,input:preflight.action.input,fingerprint:preflight.action.fingerprint,executionId:preflight.action.executionId,idempotencyKey:preflight.action.idempotencyKey,iteration:0,mutatesState:preflight.action.mutatesState,risk:preflight.action.risk,requiresApproval:true};state.status="WAITING_APPROVAL";state.executionSafetyState="WAITING_APPROVAL";await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_hit",1,{tool:toolName,approval:true});return state;}
     await this.runtime?.saveLoopState(state.runId,state);
     const execution=await this.executor.executePrepared(preflight.action,{runId:state.runId,conversationId:state.conversationId,taskId:state.taskId,signal:options.signal});
     if(execution.status!=="SUCCEEDED"||!execution.result){this.metrics?.record("agent.fast_path_failed",1,{tool:toolName,status:execution.status});return undefined;}
@@ -91,10 +97,11 @@ export class AgentLoopRunner {
 
   private createLoop(mode:"read_only"|"full",available=this.availableForMode(mode)){return new AgentLoop({
       agentTurn:(request,signal)=>this.llm.agentTurn!(request,signal),
-      toolsForTurn:async state=>{const selectionContext=state.messages.filter(message=>message.role!=="system");const selected=this.candidates.select(state.userRequest,available,selectionContext,state.taskState);this.metrics?.record("agent.candidate_tool_count",selected.length,{mode});return createAgentToolSchemas(selected);},
+      toolsForTurn:async state=>{const selectionContext=state.messages.filter(message=>message.role!=="system");const selected=this.candidates.select(state.userRequest,available,selectionContext,state.taskState);const names=selected.map(tool=>tool.name);if(state.activeToolNames.length&&names.join("|")!==state.activeToolNames.join("|"))this.metrics?.record("agent.tool_reselection",1,{mode});this.metrics?.record("agent.candidate_tool_count",selected.length,{mode});return createAgentToolSchemas(selected);},
       preflight:(name,input,context)=>this.executor.preflight(name,input,{...context,capabilityResolver:permission=>this.hasCapability(permission,input)}),
       execute:(action,context)=>this.executor.executePrepared(action,context),reconcileRun:this.reconciliation?(state,executionId,signal)=>this.reconciliation!.reconcileRun(state,executionId,signal):undefined,
       observe:(execution,callId)=>this.toObservation(execution,callId),
+      onObservation:(state,observation)=>{if(state.conversationId)this.runtime?.entities.record(state.conversationId,observation);},
       persistence:this.runtime?{save:async state=>this.runtime!.saveLoopState(state.runId,state)}:undefined,
       metric:(name,value=1,labels)=>this.metrics?.record(name,value,labels)
     });}

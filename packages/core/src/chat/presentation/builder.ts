@@ -5,7 +5,7 @@ import type { PresentationRecord } from "./types.js";
 import { emailAdapter } from "./adapters/email.js";
 import { filesystemAdapter } from "./adapters/filesystem.js";
 import { calendarAdapter } from "./adapters/calendar.js";
-import { emailStatsAdapter } from "./adapters/system.js";
+import { dailySummaryAdapter,diskUsageAdapter,emailStatsAdapter,memoryUsageAdapter,processListAdapter,systemInfoAdapter } from "./adapters/system.js";
 import { safeArraySummaryAdapter } from "./adapters/generic.js";
 import { clarificationAdapter } from "./adapters/clarification.js";
 import { browserAgentAdapter } from "./adapters/browser-agent.js";
@@ -16,8 +16,13 @@ export function defaultPresentationRegistry() {
   return new PresentationRegistry()
     .register(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"], emailAdapter)
     .register(["list_files", "search_files", "largest_files"], filesystemAdapter)
-    .register(["calendar_list", "calendar_search", "calendar_get"], calendarAdapter)
+    .register(["calendar_list", "calendar_list_agent", "calendar_search", "calendar_get"], calendarAdapter)
     .register(["email_stats"], emailStatsAdapter)
+    .register(["system_info"],systemInfoAdapter)
+    .register(["memory_usage"],memoryUsageAdapter)
+    .register(["disk_usage"],diskUsageAdapter)
+    .register(["process_list"],processListAdapter)
+    .register(["daily_summary"],dailySummaryAdapter)
     .register(["browser_agent_run"], browserAgentAdapter)
     .register(["__clarification__"], clarificationAdapter)
     .register(["__email_compose_review__"], emailComposeReviewAdapter)

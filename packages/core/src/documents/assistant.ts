@@ -44,11 +44,7 @@ export class DocumentAssistantService {
   ): Promise<DocumentAssistantResult> {
     const uniqueIds = [...new Set(documentIds)].filter(Boolean);
     if (!uniqueIds.length) throw new Error("Nenhum documento foi selecionado para análise.");
-    for (const id of uniqueIds) {
-      const document = this.documents.get(id);
-      if (!document) throw new Error("Um ou mais documentos não estão disponíveis.");
-      if (document.status !== "ready") throw new Error(`O documento ${document.name} ainda não está pronto para análise.`);
-    }
+    await this.documents.waitUntilReady(uniqueIds,{signal:options.signal});
 
     assertNotAborted(options.signal);
     const intent = this.classifyIntent(userText, uniqueIds.length);

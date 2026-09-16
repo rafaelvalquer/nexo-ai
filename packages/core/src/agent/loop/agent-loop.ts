@@ -19,6 +19,7 @@ export type AgentLoopRunOptions = {
   signal?: AbortSignal;
   resources?: AgentResourceContext;
   taskState?: AgentTaskState;
+  model?: string;
 };
 
 /** Sequential V2 state machine. Every security-relevant transition is durable. */
@@ -49,6 +50,7 @@ export class AgentLoop {
       activeToolNames: [],
       resources: options.resources,
       taskState: options.taskState,
+      model: options.model,
       startedAt: now,
       updatedAt: now,
       deadlineAt: options.deadlineAt ?? new Date(Date.now() + this.limits.maxExecutionMs).toISOString(),
@@ -95,7 +97,7 @@ export class AgentLoop {
       state.activeToolNames=this.currentTools.map(tool=>tool.name);
       if(state.taskState)state.taskState.selectedToolNames=[...state.activeToolNames];
       await this.save(state,"DECIDING");
-      const decision = validateAgentTurn(await this.deps.agentTurn({ messages: state.messages, tools: this.currentTools }, signal));
+      const decision = validateAgentTurn(await this.deps.agentTurn({ messages: state.messages, tools: this.currentTools, model:state.model }, signal));
       this.deps.metric?.("agent.turns", 1, { runId: state.runId });
       this.deps.metric?.("agent.turn_duration_ms", Date.now() - started, { runId: state.runId });
 
@@ -106,7 +108,7 @@ export class AgentLoop {
           await this.save(state, "FAILED");
           return state;
         }
-        if(state.taskState){const validation=await this.completion.validate(state.taskState);state.taskState=validation.taskState;if(!validation.complete){state.messages.push({role:"tool",content:`GOAL_INCOMPLETE: ${validation.reason} Selecione a próxima ação necessária.`,trust:"TRUSTED_LOCAL"});state.protocolRepairCount++;if(state.protocolRepairCount<=this.limits.maxProtocolRepairAttempts){await this.save(state,"DECIDING");continue;}state.finalResponse=validation.reason;await this.save(state,"FAILED");return state;}}
+        if(state.taskState){const validation=await this.completion.validate(state.taskState);state.taskState=validation.taskState;if(!validation.complete){this.deps.metric?.("agent.final_without_goal_complete",1,{runId:state.runId});state.messages.push({role:"tool",content:`GOAL_INCOMPLETE: ${validation.reason} Selecione a próxima ação necessária.`,trust:"TRUSTED_LOCAL"});state.protocolRepairCount++;if(state.protocolRepairCount<=this.limits.maxProtocolRepairAttempts){await this.save(state,"DECIDING");continue;}state.finalResponse=validation.reason;await this.save(state,"FAILED");return state;}}
         state.finalResponse = finalResponse;
         await this.save(state, "COMPLETED");
         return state;
@@ -115,6 +117,7 @@ export class AgentLoop {
       if (decision.kind === "repair") {
         state.protocolRepairCount++;
         this.deps.metric?.("agent.schema_repaired", 1, { kind: "protocol" });
+        this.deps.metric?.("agent.invalid_arguments",1,{kind:"protocol"});
         if (state.protocolRepairCount > this.limits.maxProtocolRepairAttempts) {
           state.finalResponse = decision.error;
           await this.save(state, "FAILED");
@@ -126,7 +129,7 @@ export class AgentLoop {
       }
 
       const call = { ...decision.call, arguments: sanitizeAgentArguments(decision.call.arguments) };
-      if(!state.activeToolNames.includes(call.name)){state.protocolRepairCount++;state.messages.push({role:"tool",toolCallId:call.id,toolName:call.name,content:"TOOL_NOT_AVAILABLE_THIS_TURN: escolha exatamente uma ferramenta da lista ativa.",trust:"TRUSTED_LOCAL"});if(state.protocolRepairCount>this.limits.maxProtocolRepairAttempts){state.finalResponse="TOOL_NOT_AVAILABLE_THIS_TURN";await this.save(state,"FAILED");return state;}await this.save(state,"DECIDING");continue;}
+      if(!state.activeToolNames.includes(call.name)){this.deps.metric?.("agent.invalid_tool_selection",1,{tool:call.name});state.protocolRepairCount++;state.messages.push({role:"tool",toolCallId:call.id,toolName:call.name,content:"TOOL_NOT_AVAILABLE_THIS_TURN: escolha exatamente uma ferramenta da lista ativa.",trust:"TRUSTED_LOCAL"});if(state.protocolRepairCount>this.limits.maxProtocolRepairAttempts){state.finalResponse="TOOL_NOT_AVAILABLE_THIS_TURN";await this.save(state,"FAILED");return state;}await this.save(state,"DECIDING");continue;}
       state.messages.push({ role: "assistant", content: "", toolCalls: [call], trust: "TRUSTED_LOCAL" });
       this.deps.metric?.("agent.tool_calls", 1, { tool: call.name });
       await this.save(state, "PREFLIGHT");
@@ -175,7 +178,7 @@ export class AgentLoop {
         return state;
       }
 
-      await this.save(state, "EXECUTING");
+      await this.save(state, call.name.startsWith("document_")&&call.name!=="document_import_path"&&call.name!=="document_create"?"WAITING_RESOURCE":"EXECUTING");
       const execution = await this.deps.execute(action, this.executionContext(state, signal));
       if (!await this.observeExecution(state, execution, call.id, signal)) return state;
     }
@@ -201,6 +204,8 @@ export class AgentLoop {
     await this.save(state, "OBSERVING");
     const observation = this.appendObservation(state, this.deps.observe(execution, callId), execution.status === "SUCCEEDED" || execution.status === "RECONCILED_SUCCESS");
     if(state.taskState)state.taskState=this.goalUpdater.update(state.taskState,observation);
+    await this.deps.onObservation?.(state,observation);
+    if(await this.tryAutoComplete(state,signal))return false;
     if (!await this.waitForExternalProgress(state, observation, signal)) {
       const guard = this.guard(state);
       if (!guard.ok) {
@@ -211,6 +216,20 @@ export class AgentLoop {
       }
       await this.save(state, "DECIDING");
     }
+    return true;
+  }
+
+  private async tryAutoComplete(state:AgentLoopState,signal?:AbortSignal){
+    if(!state.taskState||state.pendingAction||state.taskState.goal.steps.length===0)return false;
+    const validation=await this.completion.validate(state.taskState);
+    state.taskState=validation.taskState;
+    if(!validation.complete)return false;
+    this.deps.metric?.("agent.goal.auto_completed",1,{runId:state.runId});
+    const request:import("./types.js").AgentTurnRequest={model:state.model,tools:[],messages:[...state.messages,{role:"system",trust:"TRUSTED_LOCAL",content:"O objetivo foi comprovadamente concluído. Responda apenas com um resumo curto do resultado e, quando houver, os caminhos ou identificadores produzidos. Não proponha nem solicite novas ações."}]};
+    let finalResponse="Objetivo concluído com sucesso.";
+    try{const turn=await this.deps.agentTurn(request,signal);const content=sanitizeAssistantContent(turn.toolCalls.length===0?turn.content??"":"");if(content)finalResponse=content;}catch{/* a conclusão já foi comprovada; use resposta determinística */}
+    state.finalResponse=finalResponse;
+    await this.save(state,"COMPLETED");
     return true;
   }
 
@@ -264,6 +283,7 @@ export class AgentLoop {
   private async failAtLimit(state: AgentLoopState) {
     const timeout = Date.now() >= Date.parse(state.deadlineAt);
     this.deps.metric?.(timeout ? "agent.timeout" : "agent.max_steps_reached", 1, { runId: state.runId });
+    this.deps.metric?.("agent.loop_limit_reached",1,{runId:state.runId,timeout});
     state.finalResponse = "Limite seguro do agent loop atingido.";
     await this.save(state, "FAILED");
   }
@@ -276,7 +296,7 @@ export class AgentLoop {
     state.status = status;
     state.updatedAt = new Date().toISOString();
     await this.deps.persistence?.save(structuredClone(state));
-    if (["COMPLETED", "FAILED", "CANCELLED"].includes(status)) this.deps.metric?.("agent.run_duration_ms", Date.now() - Date.parse(state.startedAt), { status });
+    if (["COMPLETED", "FAILED", "CANCELLED"].includes(status)){this.deps.metric?.("agent.run_duration_ms", Date.now() - Date.parse(state.startedAt), { status });this.deps.metric?.(status==="COMPLETED"?"agent.task.success":"agent.task.failed",1,{status});}
   }
 }
 

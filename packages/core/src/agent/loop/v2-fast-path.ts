@@ -10,7 +10,7 @@ export type V2FastPathCall = {
 
 export class V2FastPathRouter {
   resolve(text: string, tools: AgentToolDescriptor[]): V2FastPathCall | null {
-    const available = new Map(tools.filter(tool => !tool.mutatesState || tool.risk === "READ").map(tool => [tool.name, tool]));
+    const available = new Map(tools.map(tool => [tool.name, tool]));
 
     if (/\b(analise|analisar|diagnostique|diagnosticar).*(computador|pc)\b|\b(computador|pc).*(lento|desempenho|an[aá]lise)\b/i.test(text)) {
       return this.call(available, "daily_summary", {}, "Analisando o computador…")
@@ -38,6 +38,12 @@ export class V2FastPathRouter {
       return this.call(available, "email_search", { maxResults: Math.min(50, count) }, "Consultando os e-mails…");
     }
 
+    if(/\b(agenda|calend[aá]rio|compromissos?)\b/i.test(text)&&/\b(hoje|amanh[aã]|depois de amanh[aã])\b/i.test(text)&&!/\b(crie|agende|marque)\b/i.test(text)){
+      const naturalDate=/depois de amanh[aã]/i.test(text)?"depois de amanhã":/amanh[aã]/i.test(text)?"amanhã":"hoje";
+      const dayPart=/manh[aã]/i.test(text)&&naturalDate!=="amanhã"?"manhã":/tarde/i.test(text)?"tarde":/noite/i.test(text)?"noite":undefined;
+      return this.call(available,"calendar_list_agent",{naturalDate,...(dayPart?{dayPart}:{})},"Consultando a agenda…");
+    }
+
     const folder = knownFolder(text);
     if (folder && /\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text)) {
       const count = requestedCount(text);
@@ -51,12 +57,21 @@ export class V2FastPathRouter {
       }, `Listando itens em ${folder}…`);
     }
 
+    if(folder&&/\b(crie|criar)\b.*\b(pasta|diret[oó]rio)\b/i.test(text)){
+      const name=text.match(/(?:pasta|diret[oó]rio)(?:\s+chamad[oa])?\s+["']?([\wÀ-ÿ ._-]+?)["']?(?:\s+(?:em|nos?|nas?)\b|$)/i)?.[1]?.trim();
+      if(name&&!/[\\/]/.test(name))return this.call(available,"create_folder",{path:path.join(folder,name)},`Preparando a criação da pasta ${name}…`);
+    }
+
+    const application=text.match(/\b(?:abra|abrir|inicie|iniciar)\s+(?:o\s+)?(?:aplicativo\s+)?([\w .+-]+)$/i)?.[1]?.trim();
+    if(application&&!/site|arquivo|pasta|https?/i.test(application))return this.call(available,"open_application",{name:application},`Preparando a abertura de ${application}…`);
+
     if (isBrowserResearch(text)) {
       return this.call(available, "browser_agent_run", { request: text, mode: "research" }, "Pesquisando na web…");
     }
     const url = siteFromText(text);
     if (url && /\b(abra|abrir|acesse|acessar|entre|entrar|navegue|navegar|v[aá]\s+para)\b/i.test(text)) {
-      return this.call(available, "browser_open", { url }, `Abrindo ${url}…`);
+      return this.call(available, "open_url", { url }, `Preparando a abertura de ${url}…`)
+        ?? this.call(available, "browser_open", { url }, `Abrindo ${url}…`);
     }
     return null;
   }

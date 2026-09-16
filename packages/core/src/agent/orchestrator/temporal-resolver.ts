@@ -21,6 +21,8 @@ export function resolvePeriod(raw: unknown, now = new Date(), dayPart?: unknown)
     start = new Date(year, month - 1, day, 0, 0, 0, 0);
     end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
     label = value;
+  } else if (/depois\s+de\s+amanh|day_after_tomorrow/.test(value)) {
+    start = startOfLocalDay(addDays(now, 2)); end = startOfLocalDay(addDays(now, 3)); label = "depois de amanhã";
   } else if (/amanh|tomorrow/.test(value)) {
     start = startOfLocalDay(addDays(now, 1)); end = startOfLocalDay(addDays(now, 2)); label = "amanhã";
   } else if (/semana|this_week/.test(value)) {

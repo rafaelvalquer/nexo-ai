@@ -1,6 +1,6 @@
 import type { ConnectionService } from "../connections/service.js";
 import type { EmailDraft, EmailDraftInput, EmailMessage, EmailSearchQuery, EmailSearchResult, EmailModifyAction, EmailAttachment, EmailMailboxStats } from "./types.js";
-import type { EmailMailboxCategory } from "./preferences/types.js";
+import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "./preferences/types.js";
 import { buildGmailSearchQuery } from "./google/query-builder.js";
 import { GoogleApiClient } from "../google/api-client.js";
 import { randomUUID } from "node:crypto";
@@ -8,9 +8,12 @@ import fs from "node:fs/promises";
 
 export class EmailService {
   private readonly google:GoogleApiClient;
+  private preferenceResolver?:{resolveCategories(connectionId:string,explicit?:EmailMailboxPreferenceCategory[]):EmailMailboxPreferenceCategory[]|undefined};
   constructor(private connections:ConnectionService){this.google=new GoogleApiClient(connections);}
+  setPreferenceResolver(resolver:{resolveCategories(connectionId:string,explicit?:EmailMailboxPreferenceCategory[]):EmailMailboxPreferenceCategory[]|undefined}){this.preferenceResolver=resolver;}
 
   async search(input:EmailSearchQuery,signal?:AbortSignal):Promise<EmailSearchResult>{
+    input={...input,categories:this.resolveCategories(input.connectionId,input.categories)};
     const account=this.requireAccount(input.connectionId);
     if(account.provider==="google")return searchGoogle(this.google,input,signal);
     const token=await this.connections.accessToken(account.id,"email.read");
@@ -23,6 +26,7 @@ export class EmailService {
   }
 
   async stats(connectionId:string,categories?:EmailMailboxCategory[],signal?:AbortSignal):Promise<EmailMailboxStats>{
+    categories=this.resolveCategories(connectionId,categories);
     const account=this.requireAccount(connectionId);
     if(account.provider==="google"){
       if(!categories?.length){
@@ -136,6 +140,7 @@ export class EmailService {
   }
 
   private requireAccount(connectionId:string){const account=this.connections.get(connectionId);if(!account)throw new Error("Conexão não encontrada.");return account;}
+  private resolveCategories(connectionId:string,explicit?:EmailMailboxCategory[]){const resolved=this.preferenceResolver?.resolveCategories(connectionId,explicit)??explicit;if(resolved?.includes("inbox"))return undefined;return resolved as EmailMailboxCategory[]|undefined;}
 }
 
 async function searchGoogle(client:GoogleApiClient,input:EmailSearchQuery,signal?:AbortSignal):Promise<EmailSearchResult>{

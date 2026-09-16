@@ -24,7 +24,7 @@ export class CapabilityAwareToolCatalog {
 
   list(): AgentToolDescriptor[] {
     return this.registry.definitions().filter(tool => {
-      if(tool.agent?.hidden)return false;
+      if(tool.agent?.hidden||tool.exposure==="CORE_INTERNAL_TOOL"||tool.exposure==="UI_ACTION_TOOL")return false;
       for (const permission of tool.permissions) {
         if (!connectionCapabilities.has(permission as ConnectionCapability)) continue;
         if (this.connections?.resolveForCapability(permission as ConnectionCapability).status !== "ready") return false;
