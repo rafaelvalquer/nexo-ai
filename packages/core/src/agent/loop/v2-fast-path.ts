@@ -1,5 +1,6 @@
 import path from "node:path";
 import { LocationRegistry } from "../../locations/location-registry.js";
+import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
 
 export type V2FastPathCall = {
@@ -46,6 +47,16 @@ export class V2FastPathRouter {
       return this.call(available,"calendar_list_agent",{naturalDate,...(dayPart?{dayPart}:{})},"Consultando a agenda…");
     }
 
+    const textFile = textFileCreation(text, this.locations);
+    if (textFile) {
+      return this.call(
+        available,
+        "create_text_file",
+        { path: textFile.path, content: textFile.content },
+        `Preparando a criação de ${path.basename(textFile.path)}…`,
+      );
+    }
+
     const folder = knownFolder(text, this.locations);
     if (folder && /\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text)) {
       const count = requestedCount(text);
@@ -81,6 +92,20 @@ export class V2FastPathRouter {
   private call(available: Map<string, AgentToolDescriptor>, name: string, args: Record<string, unknown>, explanation: string): V2FastPathCall | null {
     return available.has(name) ? { name, arguments: args, explanation } : null;
   }
+}
+
+function textFileCreation(text: string, locations: LocationRegistry) {
+  const request = text.match(/\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["']?([\wÀ-ÿ ._-]+\.(?:txt|md))["']?/i);
+  if (!request || request.index === undefined) return undefined;
+
+  const tail = text.slice(request.index + request[0].length);
+  const destination = tail.match(/^\s+(?:em|no|na|nos|nas|para|dentro\s+de)\s+(.+?)(?=\s+com\s+(?:o\s+)?(?:conte[uú]do|texto)\s*:|$)/i)?.[1]?.trim();
+  const content = text.match(/\bcom\s+(?:o\s+)?(?:conte[uú]do|texto)\s*:?\s*([\s\S]+)$/i)?.[1]?.trim();
+  if (!destination || content === undefined) return undefined;
+
+  const resolution = new PathIntentResolver(locations).resolve(destination);
+  if (resolution.status !== "resolved" || !resolution.resolvedPath) return undefined;
+  return { path: path.join(resolution.resolvedPath, request[1].trim()), content };
 }
 
 function requestedCount(text: string) {
