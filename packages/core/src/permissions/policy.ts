@@ -9,6 +9,11 @@ export class PermissionEngine {
     return this.paths.isAllowed(target);
   }
 
+  /** Snapshot of the roots that currently define filesystem authority. */
+  allowedRoots() {
+    return [...this.getSettings().allowedRoots];
+  }
+
   requiresApproval(risk: RiskLevel, mutatesState = false) {
     if (mutatesState) return true;
     const autonomy = this.getSettings().autonomy;

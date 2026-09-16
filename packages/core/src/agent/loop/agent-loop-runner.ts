@@ -24,13 +24,14 @@ import type { AgentResourceContext } from "../goal/goal-types.js";
 import { EntityReferenceResolver } from "../resolution/entity-reference-resolver.js";
 import { ModelRouter } from "../model/model-router.js";
 import { DateTimeResolver } from "../resolution/datetime-resolver.js";
+import { LocationRegistry } from "../../locations/location-registry.js";
+import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
 /** Bridges provider, a bounded capability catalog and the sole execution authority. */
 export class AgentLoopRunner {
   private readonly candidates = new ToolCandidateSelector(6);
-  private readonly fastPath = new V2FastPathRouter();
   private readonly modelRouter = new ModelRouter();
   constructor(private readonly llm: LLMProvider, private readonly catalog: CapabilityAwareToolCatalog, private readonly registry: ToolRegistry, private readonly executor: ActionExecutor, private readonly connections?: ConnectionService,private readonly runtime?:AgentRuntime,private readonly contextManager=new AgentContextManager(),private readonly graph=new AgentGraph(),private readonly metrics?:LocalMetricsService,private readonly reconciliation?:AgentReconciliationCoordinator) {}
 
@@ -48,15 +49,16 @@ export class AgentLoopRunner {
     const remediation=await this.emailSendRemediation(userRequest);
     if(remediation){this.metrics?.record("agent.capability_remediation",1,{capability:"email.send"});return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});}
     const available = this.availableForMode(options.mode);
+    const locations=this.filesystemLocations();
 
-    const fast=this.fastPath.resolve(userRequest,available);
+    const fast=new V2FastPathRouter(locations).resolve(userRequest,available);
     if(fast){
       if("rejected" in fast){this.metrics?.record("agent.fast_path_rejected",1,{tool:"create_text_file",code:fast.code});return this.completeWithoutExecution(userRequest,fast.message,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});}
       const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;
     }
 
     const loop=this.createLoop(options.mode,available);
-    const taskState=new GoalBuilder().build(userRequest,options.resources);
+    const taskState=new GoalBuilder(new PathIntentResolver(locations)).build(userRequest,options.resources);
     const route=this.modelRouter.route(userRequest,taskState.goal.steps.length);const installed=typeof this.llm.models==="function"?await this.llm.models().catch(()=>[]):[];const model=route.model&&installed.some(name=>name===route.model||name.startsWith(`${route.model}:`))?route.model:undefined;this.metrics?.record("agent.model_route",1,{profile:route.profile,reason:route.reason,model:model??"provider_default"});
     try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,model,signal:options.signal}));}
     catch(error){if(error&&typeof error==="object")Object.assign(error,{runId});throw error;}
@@ -90,6 +92,8 @@ export class AgentLoopRunner {
   }
 
   private availableForMode(mode:"read_only"|"full") {return this.catalog.list().filter(tool=>!tool.mutatesState||tool.risk==="READ"||mode==="full"&&Boolean(this.registry.get(tool.name)?.mutationSafety));}
+
+  private filesystemLocations(){return new LocationRegistry({},[],this.executor.allowedFilesystemRoots());}
 
   private async executeFastPath(userRequest:string,toolName:string,input:Record<string,unknown>,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"];signal?:AbortSignal}):Promise<AgentLoopState|undefined>{
     const tool=this.registry.get(toolName);if(!tool)return undefined;
