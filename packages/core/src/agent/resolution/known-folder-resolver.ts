@@ -14,13 +14,27 @@ export class KnownFolderResolver {
 
   resolve(value: string): ResolvedKnownFolder | undefined {
     const resolution = this.paths.resolve(value);
-    if (resolution.status !== "resolved" || !resolution.resolvedPath || !resolution.location) return undefined;
-    return {
-      id: resolution.location.id,
-      path: resolution.resolvedPath,
-      confidence: resolution.location.confidence,
-      matchedAlias: value,
-      relativePath: resolution.relativePath,
-    };
+    if (resolution.status === "resolved" && resolution.resolvedPath && resolution.location) {
+      return {
+        id: resolution.location.id,
+        path: resolution.resolvedPath,
+        confidence: resolution.location.confidence,
+        matchedAlias: value,
+        relativePath: resolution.relativePath,
+      };
+    }
+
+    // Preserve the historical safe behavior for an exact known folder followed
+    // by traversal: resolve only the authorized folder itself and discard the
+    // unsafe suffix instead of returning a path containing "..".
+    if (/(^|[\\/])\.\.([\\/]|$)/.test(value)) {
+      const head = value.trim().split(/[\\/]/, 1)[0]?.trim();
+      const location = head ? this.locations.resolveAlias(head) : undefined;
+      if (location) {
+        return { id: location.id, path: location.path, confidence: 1, matchedAlias: head! };
+      }
+    }
+
+    return undefined;
   }
 }
