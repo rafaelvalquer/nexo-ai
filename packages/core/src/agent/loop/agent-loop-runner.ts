@@ -23,6 +23,7 @@ import { GoalBuilder } from "../goal/goal-builder.js";
 import type { AgentResourceContext } from "../goal/goal-types.js";
 import { EntityReferenceResolver } from "../resolution/entity-reference-resolver.js";
 import { ModelRouter } from "../model/model-router.js";
+import { DateTimeResolver } from "../resolution/datetime-resolver.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
@@ -37,6 +38,7 @@ export class AgentLoopRunner {
     if (!this.llm.agentTurn) throw new Error("O provider de LLM não implementa agentTurn().");
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
+    const temporal=new DateTimeResolver().context();messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Contexto temporal determinístico do Core: agora=${temporal.now}; timezone=${temporal.timeZone}; hoje=${temporal.today}; amanhã=${temporal.tomorrow}; depois_de_amanhã=${temporal.dayAfterTomorrow}. Use datas naturais nas tools agent-facing; o Core normaliza ISO.`});
     if(options.conversationId&&this.runtime){const entity=new EntityReferenceResolver(this.runtime.entities).resolve(options.conversationId,userRequest);if(entity){messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Referência ordinal resolvida pelo Core: ${entity.kind} id=${entity.id}${entity.path?` path=${entity.path}`:""}.`});this.metrics?.record("agent.entity_reference_resolved",1,{kind:entity.kind});}else if(/\b(primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa])\b/i.test(userRequest))this.metrics?.record("agent.entity_reference_failed",1);}
     if(options.resources?.documents.length)messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Documentos disponíveis como resources (use tools document_* para acessar conteúdo):\n${options.resources.documents.map(document=>`ID: ${document.id}\nNome: ${document.name}\nTipo: ${document.mimeType}`).join("\n\n")}`});
 
@@ -52,8 +54,8 @@ export class AgentLoopRunner {
 
     const loop=this.createLoop(options.mode,available);
     const taskState=new GoalBuilder().build(userRequest,options.resources);
-    const route=this.modelRouter.route(userRequest,taskState.goal.steps.length);this.metrics?.record("agent.model_route",1,{profile:route.profile,reason:route.reason,model:route.model??"provider_default"});
-    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,model:route.model,signal:options.signal}));}
+    const route=this.modelRouter.route(userRequest,taskState.goal.steps.length);const installed=typeof this.llm.models==="function"?await this.llm.models().catch(()=>[]):[];const model=route.model&&installed.some(name=>name===route.model||name.startsWith(`${route.model}:`))?route.model:undefined;this.metrics?.record("agent.model_route",1,{profile:route.profile,reason:route.reason,model:model??"provider_default"});
+    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,model,signal:options.signal}));}
     catch(error){if(error&&typeof error==="object")Object.assign(error,{runId});throw error;}
   }
 
@@ -98,7 +100,7 @@ export class AgentLoopRunner {
   private createLoop(mode:"read_only"|"full",available=this.availableForMode(mode)){return new AgentLoop({
       agentTurn:(request,signal)=>this.llm.agentTurn!(request,signal),
       toolsForTurn:async state=>{const selectionContext=state.messages.filter(message=>message.role!=="system");const selected=this.candidates.select(state.userRequest,available,selectionContext,state.taskState);const names=selected.map(tool=>tool.name);if(state.activeToolNames.length&&names.join("|")!==state.activeToolNames.join("|"))this.metrics?.record("agent.tool_reselection",1,{mode});this.metrics?.record("agent.candidate_tool_count",selected.length,{mode});return createAgentToolSchemas(selected);},
-      preflight:(name,input,context)=>this.executor.preflight(name,input,{...context,capabilityResolver:permission=>this.hasCapability(permission,input)}),
+      preflight:(name,input,context)=>{const resolved=this.resolveEntityInput(name,input,context.conversationId,context.userRequest);return this.executor.preflight(name,resolved,{...context,capabilityResolver:permission=>this.hasCapability(permission,resolved)});},
       execute:(action,context)=>this.executor.executePrepared(action,context),reconcileRun:this.reconciliation?(state,executionId,signal)=>this.reconciliation!.reconcileRun(state,executionId,signal):undefined,
       observe:(execution,callId)=>this.toObservation(execution,callId),
       onObservation:(state,observation)=>{if(state.conversationId)this.runtime?.entities.record(state.conversationId,observation);},
@@ -118,6 +120,19 @@ export class AgentLoopRunner {
   }
 
   private ensureTool(selected:AgentToolDescriptor[],available:AgentToolDescriptor[],name:string){if(selected.some(tool=>tool.name===name))return selected;const required=available.find(tool=>tool.name===name);return required?[required,...selected].slice(0,10):selected;}
+
+  private resolveEntityInput(toolName:string,input:Record<string,unknown>,conversationId?:string,userRequest?:string){
+    if(!conversationId||!userRequest||!this.runtime)return input;
+    const entity=new EntityReferenceResolver(this.runtime.entities).resolve(conversationId,userRequest);
+    if(!entity)return input;
+    const next={...input};
+    if(entity.kind==="email"&&toolName.startsWith("email_")&&next.messageId===undefined)next.messageId=entity.id;
+    if(entity.kind==="event"&&toolName.startsWith("calendar_")&&next.eventId===undefined)next.eventId=entity.id;
+    if(entity.kind==="document"&&toolName.startsWith("document_")&&next.documentId===undefined&&next.documentIds===undefined)next.documentId=entity.id;
+    if(entity.kind==="file"&&(/file|folder|path|document_import/.test(toolName))&&next.path===undefined)next.path=entity.path??entity.id;
+    if(JSON.stringify(next)!==JSON.stringify(input))this.metrics?.record("agent.context_reference_resolved",1,{kind:entity.kind,tool:toolName});
+    return next;
+  }
 
   private hasCapability(permission: string, input: Record<string, unknown>) {
     const connectionCapability = new Set<ConnectionCapability>(["email.read", "email.send", "email.modify", "calendar.read", "calendar.write"]);

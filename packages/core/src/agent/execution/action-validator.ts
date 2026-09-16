@@ -8,6 +8,7 @@ import { semanticMutationAllowed } from "../security/semantic-mutation-guard.js"
 import { actionFingerprint } from "./action-fingerprint.js";
 import { ConnectionResolver, isConnectionCapability } from "./connection-resolver.js";
 import type { ActionExecutionContext, ActionPreflightResult } from "./types.js";
+import { KnownFolderResolver } from "../resolution/known-folder-resolver.js";
 
 export type ActionValidationResult =
   | { ok: true; toolName: string; input: Record<string, unknown>; fingerprint: string; mutatesState: boolean }
@@ -34,6 +35,7 @@ export class ActionValidator {
 
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
+    normalizeKnownFolderPaths(candidate,tool.pathFields??[]);
     for (const capability of tool.permissions) {
       if (isConnectionCapability(capability) && this.connections) {
         const resolution = new ConnectionResolver(this.connections).resolve(capability, candidate.connectionId);
@@ -64,6 +66,7 @@ function validatePaths(value: unknown, use: (target: string) => void) {
   if (typeof value === "string") use(value);
   else if (Array.isArray(value)) for (const item of value) if (typeof item === "string") use(item);
 }
+function normalizeKnownFolderPaths(input:Record<string,unknown>,fields:string[]){const resolver=new KnownFolderResolver();const normalize=(value:string)=>path.isAbsolute(value)?value:resolver.resolve(value)?.path??value;for(const field of fields){const value=input[field];if(typeof value==="string")input[field]=normalize(value);else if(Array.isArray(value))input[field]=value.map(item=>typeof item==="string"?normalize(item):item);}}
 function validatePhysicalPath(target:string,permissions:PermissionEngine){
   const absolute=path.resolve(target);
   if(fs.existsSync(absolute)){permissions.assertPath(fs.realpathSync.native(absolute));return;}

@@ -29,7 +29,7 @@ const TOOL_HINTS: Array<[RegExp, string[]]> = [
   [/\bprocessos?|cpu\b/i, ["process_list", "system_info"]],
   [/([uú]ltim[oa]|mais recente).*(e-?mail|gmail)|(e-?mail|gmail).*(mais recente|[uú]ltim[oa])/i, ["email_latest", "email_search", "email_get"]],
   [/\b(resuma|resumir|liste|listar|mostre|mostrar|procure|pesquise).*(e-?mail|gmail)|\b(e-?mail|gmail).*(resuma|liste|mostre|procure|pesquise)\b/i, ["email_search", "email_get_many", "email_get", "email_latest"]],
-  [/\b(envie|enviar|mande|mandar).*(e-?mail)|\be-?mail.*(envie|enviar|mande|mandar)\b/i, ["email_send_composed", "email_create_draft", "email_send"]],
+  [/\b(envie|enviar|mande|mandar).*(e-?mail)|\be-?mail.*(envie|enviar|mande|mandar)\b/i, ["email_send_composed"]],
   [/\b(liste|listar|mostre|mostrar|quais).*(arquivo|pasta|download)|\b(arquivo|pasta|download).*(liste|listar|mostre|mostrar|quais)\b/i, ["list_files", "file_info", "search_files"]],
   [/\b(procure|procurar|pesquise|buscar|busque|encontre).*(arquivo|pasta)|\b(arquivo|pasta).*(procure|pesquise|buscar|busque|encontre)\b/i, ["search_files", "file_info", "list_files"]],
   [/\b(crie|criar).*(pasta|diret[oó]rio)\b/i, ["create_folder"]],

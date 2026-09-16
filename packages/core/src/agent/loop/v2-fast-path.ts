@@ -63,7 +63,7 @@ export class V2FastPathRouter {
     }
 
     const application=text.match(/\b(?:abra|abrir|inicie|iniciar)\s+(?:o\s+)?(?:aplicativo\s+)?([\w .+-]+)$/i)?.[1]?.trim();
-    if(application&&!/site|arquivo|pasta|https?/i.test(application))return this.call(available,"open_application",{name:application},`Preparando a abertura de ${application}…`);
+    if(application&&!/site|arquivo|pasta|https?/i.test(application))return this.call(available,"open_application",{application},`Preparando a abertura de ${application}…`);
 
     if (isBrowserResearch(text)) {
       return this.call(available, "browser_agent_run", { request: text, mode: "research" }, "Pesquisando na web…");
