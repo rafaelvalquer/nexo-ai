@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { nearestExistingAncestor } from "./nearest-existing-ancestor.js";
 
 const BLOCKED_WINDOWS_FRAGMENTS = ["\\windows", "\\program files", "\\appdata"];
 
@@ -25,17 +26,15 @@ export class PathPolicy {
   }
 
   private physicalTarget(target: string): string {
-    const resolved = path.resolve(target);
-    return this.realpathWithMissingSuffix(resolved);
+    return this.realpathWithMissingSuffix(path.resolve(target));
   }
 
   private realpathExisting(target: string): string {
     return fs.realpathSync.native(path.resolve(target)).toLowerCase();
   }
 
-  private realpathWithMissingSuffix(target:string):string{
-    let cursor=path.resolve(target);const suffix:string[]=[];
-    while(!fs.existsSync(cursor)){const parent=path.dirname(cursor);if(parent===cursor)throw new Error(`Nenhum ancestral existente para ${target}`);suffix.unshift(path.basename(cursor));cursor=parent;}
-    return path.join(this.realpathExisting(cursor),...suffix).toLowerCase();
+  private realpathWithMissingSuffix(target: string): string {
+    const { existingPath, missingSegments } = nearestExistingAncestor(target);
+    return path.join(this.realpathExisting(existingPath), ...missingSegments).toLowerCase();
   }
 }
