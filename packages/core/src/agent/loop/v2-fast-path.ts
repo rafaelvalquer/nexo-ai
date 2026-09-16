@@ -1,5 +1,5 @@
 import path from "node:path";
-import os from "node:os";
+import { LocationRegistry } from "../../locations/location-registry.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
 
 export type V2FastPathCall = {
@@ -9,6 +9,8 @@ export type V2FastPathCall = {
 };
 
 export class V2FastPathRouter {
+  constructor(private readonly locations: LocationRegistry = new LocationRegistry()) {}
+
   resolve(text: string, tools: AgentToolDescriptor[]): V2FastPathCall | null {
     const available = new Map(tools.map(tool => [tool.name, tool]));
 
@@ -44,7 +46,7 @@ export class V2FastPathRouter {
       return this.call(available,"calendar_list_agent",{naturalDate,...(dayPart?{dayPart}:{})},"Consultando a agenda…");
     }
 
-    const folder = knownFolder(text);
+    const folder = knownFolder(text, this.locations);
     if (folder && /\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text)) {
       const count = requestedCount(text);
       const onlyDirectories = /\b(pastas?|diret[oó]rios?)\b/i.test(text) && !/\barquivos?\b/i.test(text);
@@ -86,10 +88,10 @@ function requestedCount(text: string) {
   return match ? Number(match[1]) : undefined;
 }
 
-function knownFolder(text: string) {
-  if (/\bdownloads?|pasta\s+downloads?\b/i.test(text)) return path.join(os.homedir(), "Downloads");
-  if (/\bdocumentos?|documents?\b/i.test(text)) return path.join(os.homedir(), "Documents");
-  if (/\bdesktop|[aá]rea\s+de\s+trabalho\b/i.test(text)) return path.join(os.homedir(), "Desktop");
+function knownFolder(text: string, locations: LocationRegistry) {
+  if (/\b(?:downloads?|downlaod|donwload|dowload)|pasta\s+downloads?\b/i.test(text)) return locations.resolve("downloads")?.path;
+  if (/\bdocumentos?|documents?\b/i.test(text)) return locations.resolve("documents")?.path;
+  if (/\bdesktop|[aá]rea\s+de\s+trabalho\b/i.test(text)) return locations.resolve("desktop")?.path;
   const absolute = text.match(/\b([A-Za-z]:\\[^\n,;]+)/);
   return absolute?.[1]?.trim();
 }
