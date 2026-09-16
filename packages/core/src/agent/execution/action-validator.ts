@@ -1,6 +1,7 @@
 import type { ConnectionService } from "../../connections/service.js";
 import fs from "node:fs";
 import path from "node:path";
+import { LocationRegistry } from "../../locations/location-registry.js";
 import type { PermissionEngine } from "../../permissions/policy.js";
 import type { SecurityPolicyService } from "../../security/policy.js";
 import type { ToolRegistry } from "../../tools/registry.js";
@@ -21,7 +22,8 @@ export class ActionValidator {
     private readonly registry: ToolRegistry,
     private readonly permissions: PermissionEngine,
     private readonly security?: SecurityPolicyService,
-    private readonly connections?: ConnectionService
+    private readonly connections?: ConnectionService,
+    private readonly locations: LocationRegistry = new LocationRegistry(),
   ) {}
 
   async validateCurrent(toolName: string, rawInput: Record<string, unknown>, context: CurrentActionValidationContext = {}): Promise<ActionValidationResult> {
@@ -35,7 +37,7 @@ export class ActionValidator {
 
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
-    normalizeKnownFolderPaths(candidate, tool.pathFields ?? []);
+    normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], this.locations);
     for (const capability of tool.permissions) {
       if (isConnectionCapability(capability) && this.connections) {
         const resolution = new ConnectionResolver(this.connections).resolve(capability, candidate.connectionId);
@@ -66,7 +68,7 @@ function validatePaths(value: unknown, use: (target: string) => void) {
   if (typeof value === "string") use(value);
   else if (Array.isArray(value)) for (const item of value) if (typeof item === "string") use(item);
 }
-function normalizeKnownFolderPaths(input: Record<string, unknown>, fields: string[]) { const resolver = new KnownFolderResolver(); const normalize = (value: string) => path.isAbsolute(value) ? value : resolver.resolve(value)?.path ?? value; for (const field of fields) { const value = input[field]; if (typeof value === "string") input[field] = normalize(value); else if (Array.isArray(value)) input[field] = value.map(item => typeof item === "string" ? normalize(item) : item); } }
+function normalizeKnownFolderPaths(input: Record<string, unknown>, fields: string[], locations: LocationRegistry) { const resolver = new KnownFolderResolver(locations); const normalize = (value: string) => path.isAbsolute(value) || path.win32.isAbsolute(value) ? value : resolver.resolve(value)?.path ?? value; for (const field of fields) { const value = input[field]; if (typeof value === "string") input[field] = normalize(value); else if (Array.isArray(value)) input[field] = value.map(item => typeof item === "string" ? normalize(item) : item); } }
 function validatePhysicalPath(target: string, permissions: PermissionEngine) { permissions.assertPath(target); }
 function failure(code: Extract<ActionPreflightResult, { ok: false }>["code"], text: string): Extract<ActionPreflightResult, { ok: false }> { return { ok: false, code, message: text }; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
