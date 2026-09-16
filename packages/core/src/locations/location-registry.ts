@@ -30,14 +30,25 @@ const DEFINITIONS: Record<SystemLocation, { label: string; directory?: string; a
   music: { label: "Músicas", directory: "Music", aliases: ["music", "música", "musica", "músicas", "musicas"] },
 };
 
+const ENV_PATHS: Record<SystemLocation, string> = {
+  downloads: "NEXO_SYSTEM_DOWNLOADS",
+  documents: "NEXO_SYSTEM_DOCUMENTS",
+  desktop: "NEXO_SYSTEM_DESKTOP",
+  home: "NEXO_SYSTEM_HOME",
+  pictures: "NEXO_SYSTEM_PICTURES",
+  videos: "NEXO_SYSTEM_VIDEOS",
+  music: "NEXO_SYSTEM_MUSIC",
+};
+
 export class LocationRegistry {
   private readonly locations = new Map<string, ResolvedLocation>();
   private readonly aliasIndex = new Map<string, { alias: string; location: ResolvedLocation }>();
 
   constructor(systemPaths: SystemLocationPaths = {}, aliases: LocationAlias[] = []) {
-    const home = systemPaths.home ? canonical(systemPaths.home) : canonical(os.homedir());
+    const configuredHome = systemPaths.home ?? envPath("home");
+    const home = canonical(configuredHome ?? os.homedir());
     for (const [id, definition] of Object.entries(DEFINITIONS) as Array<[SystemLocation, typeof DEFINITIONS[SystemLocation]]>) {
-      const configured = systemPaths[id];
+      const configured = systemPaths[id] ?? envPath(id);
       const resolvedPath = canonical(configured ?? (id === "home" ? home : path.join(home, definition.directory!)));
       const location: ResolvedLocation = { id, label: definition.label, path: resolvedPath, source: "system" };
       this.locations.set(id, location);
@@ -72,6 +83,11 @@ export class LocationRegistry {
 
 export function normalizeLocationText(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function envPath(id: SystemLocation) {
+  const value = process.env[ENV_PATHS[id]]?.trim();
+  return value || undefined;
 }
 
 function canonical(value: string) {
