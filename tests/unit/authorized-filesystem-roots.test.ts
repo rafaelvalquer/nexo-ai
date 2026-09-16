@@ -69,6 +69,26 @@ describe("authorized filesystem roots", () => {
     });
   });
 
+  it("rejects traversal in list requests instead of falling back to the root alias", () => {
+    const locations = new LocationRegistry({}, [], [projects]);
+    const result = new V2FastPathRouter(locations).resolve(
+      "Liste os arquivos em Projetos\\..\\Fora",
+      [{ name: "list_files" } as any],
+    );
+
+    expect(result).toMatchObject({ rejected: true, code: "PATH_TRAVERSAL_DENIED" });
+  });
+
+  it("rejects malformed folder destinations instead of silently using a nearby alias", () => {
+    const locations = new LocationRegistry({}, [], [projects]);
+    const result = new V2FastPathRouter(locations).resolve(
+      "Crie a pasta Segredo em Projetos....\\Fora",
+      [{ name: "create_folder" } as any],
+    );
+
+    expect(result).toMatchObject({ rejected: true, code: "PATH_NOT_RECOGNIZED" });
+  });
+
   it("accepts absolute destinations independently of known-folder names", () => {
     const locations = new LocationRegistry({}, [], [projects]);
     const destination = path.join(projects, "Absoluto");
