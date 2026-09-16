@@ -78,7 +78,6 @@ function bindGoalControlledArguments(toolName: string, input: Record<string, unk
   const taskState = new GoalBuilder(new PathIntentResolver(locations)).build(userRequest);
   const deliverable = taskState.goal.deliverables.find(item => item.required);
   if (deliverable?.pathResolutionStatus === "needs_confirmation") throw new Error("PATH_CONFIRMATION_REQUIRED");
-  if (deliverable?.pathResolutionStatus === "unresolved" && /[\\/]/.test(deliverable.requestedPath ?? "")) throw new Error("PATH_UNRESOLVED");
   const resolved = new ToolArgumentResolver().resolve(toolName, input, taskState);
   Object.assign(input, resolved);
 }
