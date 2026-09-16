@@ -6,11 +6,12 @@ export class EntityReferenceResolver{
   constructor(private readonly ledger:EntityLedgerReader){}
   resolve(conversationId:string,text:string){
     const normalized=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+    const isLast=/\b([uú]ltimo|[uú]ltima)\b/.test(normalized);
     const ordinal=Object.entries(ORDINALS).find(([word])=>new RegExp(`\\b${word}\\b`).test(normalized))?.[1]??(/\b(esse|essa|este|esta|dele|dela|acima)\b/.test(normalized)?1:undefined);
-    if(!ordinal)return undefined;
+    if(!ordinal&&!isLast)return undefined;
     const kind:ConversationEntity["kind"]=/e-?mail|mensagem/.test(normalized)?"email":/evento|compromisso|reuniao/.test(normalized)?"event":/documento/.test(normalized)?"document":"file";
     const entities=this.ledger.list(conversationId,kind);
-    if(/\b([uú]ltimo|[uú]ltima)\b/.test(normalized))return entities.at(-1);
+    if(isLast)return entities.at(-1);
     return entities.find(entity=>entity.ordinal===ordinal);
   }
 }

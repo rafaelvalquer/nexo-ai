@@ -5,6 +5,7 @@ import {DateTimeResolver} from "../../packages/core/src/agent/resolution/datetim
 import {KnownFolderResolver} from "../../packages/core/src/agent/resolution/known-folder-resolver.js";
 import {ModelRouter} from "../../packages/core/src/agent/model/model-router.js";
 import {ToolCandidateSelector} from "../../packages/core/src/agent/orchestrator/tool-candidate-selector.js";
+import {EntityReferenceResolver} from "../../packages/core/src/agent/resolution/entity-reference-resolver.js";
 
 describe("plano de refinamento do Agent Loop",()=>{
   it("classifica um caminho lido como recurso de entrada, não como entregável",()=>{const state=new GoalBuilder().build("Leia C:\\dados\\entrada.pdf e resuma");expect(state.goal.resources[0]?.path).toBe("C:\\dados\\entrada.pdf");expect(state.goal.deliverables).toHaveLength(0);});
@@ -14,4 +15,5 @@ describe("plano de refinamento do Agent Loop",()=>{
   it("resolve pastas conhecidas sem aceitar travessia",()=>{const resolver=new KnownFolderResolver();expect(resolver.resolve("Downloads")?.id).toBe("downloads");expect(resolver.resolve("Downloads/../../segredo")?.path).not.toContain("segredo");});
   it("roteia tarefas simples, estruturadas e complexas por perfil",()=>{const router=new ModelRouter({fast:"1.7b",balanced:"4b",quality:"8b"});expect(router.route("quanto de RAM eu tenho?").profile).toBe("FAST");expect(router.route("resuma o documento",2).profile).toBe("BALANCED");expect(router.route("pesquise na web e envie um e-mail",4).profile).toBe("QUALITY");});
   it("limita ferramentas simples a cinco e prioriza o pedido atual",()=>{const tools=Array.from({length:8},(_,index)=>({name:index===0?"email_search":`system_${index}`,description:index===0?"Busca e-mails":"Sistema",domain:index===0?"email":"system",operation:"read",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:[]}));const selected=new ToolCandidateSelector(6).select("Liste meus e-mails",tools as any,[{role:"user",content:"Antes falamos de memória"}]);expect(selected.length).toBeLessThanOrEqual(5);expect(selected[0].name).toBe("email_search");});
+  it("resolve referências ordinais e a última entidade registrada",()=>{const resolver=new EntityReferenceResolver({list:(_conversationId,kind)=>kind==="email"?[{kind:"email",id:"new",ordinal:1},{kind:"email",id:"old",ordinal:2}]:[]});expect(resolver.resolve("c1","abra esse e-mail")?.id).toBe("new");expect(resolver.resolve("c1","abra o segundo e-mail")?.id).toBe("old");expect(resolver.resolve("c1","abra o último e-mail")?.id).toBe("old");});
 });

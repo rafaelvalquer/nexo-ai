@@ -128,7 +128,10 @@ export class AgentLoopRunner {
     const next={...input};
     if(entity.kind==="email"&&toolName.startsWith("email_")&&next.messageId===undefined)next.messageId=entity.id;
     if(entity.kind==="event"&&toolName.startsWith("calendar_")&&next.eventId===undefined)next.eventId=entity.id;
-    if(entity.kind==="document"&&toolName.startsWith("document_")&&next.documentId===undefined&&next.documentIds===undefined)next.documentId=entity.id;
+    if(entity.kind==="document"&&toolName.startsWith("document_")&&next.documentId===undefined&&next.documentIds===undefined){
+      if(["document_search","document_summarize","document_extract"].includes(toolName))next.documentIds=[entity.id];
+      else next.documentId=entity.id;
+    }
     if(entity.kind==="file"&&(/file|folder|path|document_import/.test(toolName))&&next.path===undefined)next.path=entity.path??entity.id;
     if(JSON.stringify(next)!==JSON.stringify(input))this.metrics?.record("agent.context_reference_resolved",1,{kind:entity.kind,tool:toolName});
     return next;

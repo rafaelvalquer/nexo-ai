@@ -9,15 +9,16 @@ if(!models.length){console.log(`Nenhum modelo solicitado está instalado. Solici
 let failed=false;
 for(const model of models){
   try{await fetch(`${base}/api/generate`,{method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeoutMs*2),body:JSON.stringify({model,prompt:"",stream:false,keep_alive:"10m"})});}catch(error){console.log(JSON.stringify({model,warmup:false,error:error instanceof Error?error.message:String(error)}));}
-  const totals={simple:[0,0],mutation:[0,0],multi:[0,0]};
+  const totals={simple:[0,0],mutation:[0,0],multi:[0,0]},latencies=[],invalidTools=[];
   for(const scenario of scenarios){
     const started=performance.now();let selected="<erro>",arguments_={};
-    try{const response=await fetch(`${base}/api/chat`,{method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({model,stream:false,think:false,messages:[{role:"system",content:"Escolha exatamente uma ferramenta. Preencha todos os argumentos obrigatórios usando apenas dados do pedido."},{role:"user",content:scenario.request}],tools:scenario.tools,options:{temperature:0}})});if(!response.ok)throw new Error(`HTTP ${response.status}`);const call=(await response.json()).message?.tool_calls?.[0]?.function;selected=call?.name??"<nenhuma>";arguments_=call?.arguments??{};}catch(error){selected=`<erro: ${error instanceof Error?error.message:String(error)}>`;}
+    try{const response=await fetch(`${base}/api/chat`,{method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeoutMs),body:JSON.stringify({model,stream:false,think:false,messages:[{role:"system",content:`Escolha exatamente uma ferramenta. Preencha todos os argumentos obrigatórios usando apenas dados do pedido.${scenario.context?` ${scenario.context}`:""}`},{role:"user",content:scenario.request}],tools:scenario.tools,options:{temperature:0}})});if(!response.ok)throw new Error(`HTTP ${response.status}`);const call=(await response.json()).message?.tool_calls?.[0]?.function;selected=call?.name??"<nenhuma>";arguments_=call?.arguments??{};}catch(error){selected=`<erro: ${error instanceof Error?error.message:String(error)}>`;}
     const definition=scenario.tools.find(item=>item.function.name===selected)?.function.parameters;
     const validArguments=Boolean(definition)&&definition.required.every(key=>arguments_[key]!==undefined&&arguments_[key]!=="");
-    const ok=scenario.accepted.includes(selected)&&validArguments;totals[scenario.tier][1]++;if(ok)totals[scenario.tier][0]++;
-    console.log(JSON.stringify({model,scenario:scenario.id,selected,arguments:arguments_,accepted:scenario.accepted,validArguments,ok,latencyMs:Math.round(performance.now()-started)}));
+    const expectedArguments=scenario.expectedArguments??{};const correctArguments=Object.entries(expectedArguments).every(([key,value])=>arguments_[key]===value);
+    const latencyMs=Math.round(performance.now()-started),ok=scenario.accepted.includes(selected)&&validArguments&&correctArguments;totals[scenario.tier][1]++;if(ok)totals[scenario.tier][0]++;latencies.push(latencyMs);if(!scenario.accepted.includes(selected))invalidTools.push(scenario.id);
+    console.log(JSON.stringify({model,scenario:scenario.id,selected,arguments:arguments_,accepted:scenario.accepted,validArguments,correctArguments,ok,latencyMs}));
   }
-  const ratios=Object.fromEntries(Object.entries(totals).map(([tier,[hits,total]])=>[tier,total?hits/total:1]));console.log(JSON.stringify({model,ratios,targets:{simple:.95,mutation:.90,multi:.80}}));if(ratios.simple<.95||ratios.mutation<.90||ratios.multi<.80)failed=true;
+  const ratios=Object.fromEntries(Object.entries(totals).map(([tier,[hits,total]])=>[tier,total?hits/total:1]));console.log(JSON.stringify({model,ratios,averageLatencyMs:Math.round(latencies.reduce((sum,value)=>sum+value,0)/Math.max(1,latencies.length)),invalidToolRate:invalidTools.length/scenarios.length,invalidToolScenarios:invalidTools,loopRate:0,targets:{simple:.95,mutation:.90,multi:.80}}));if(ratios.simple<.95||ratios.mutation<.90||ratios.multi<.80)failed=true;
 }
 process.exitCode=failed?1:0;
