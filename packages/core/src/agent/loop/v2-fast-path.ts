@@ -1,6 +1,7 @@
 import path from "node:path";
 import { LocationRegistry } from "../../locations/location-registry.js";
 import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
+import { containsPathTraversal, parseTextFileIntent } from "../intent/text-file-intent.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
 
 export type V2FastPathCall = {
@@ -9,10 +10,19 @@ export type V2FastPathCall = {
   explanation: string;
 };
 
+export type V2FastPathRejection = {
+  rejected: true;
+  code: "PATH_TRAVERSAL_DENIED" | "PATH_NOT_RECOGNIZED";
+  message: string;
+  explanation: string;
+};
+
+export type V2FastPathResult = V2FastPathCall | V2FastPathRejection;
+
 export class V2FastPathRouter {
   constructor(private readonly locations: LocationRegistry = new LocationRegistry()) {}
 
-  resolve(text: string, tools: AgentToolDescriptor[]): V2FastPathCall | null {
+  resolve(text: string, tools: AgentToolDescriptor[]): V2FastPathResult | null {
     const available = new Map(tools.map(tool => [tool.name, tool]));
 
     if (/\b(analise|analisar|diagnostique|diagnosticar).*(computador|pc)\b|\b(computador|pc).*(lento|desempenho|an[aá]lise)\b/i.test(text)) {
@@ -47,14 +57,17 @@ export class V2FastPathRouter {
       return this.call(available,"calendar_list_agent",{naturalDate,...(dayPart?{dayPart}:{})},"Consultando a agenda…");
     }
 
-    const textFile = textFileCreation(text, this.locations);
-    if (textFile) {
-      return this.call(
-        available,
-        "create_text_file",
-        { path: textFile.path, content: textFile.content },
-        `Preparando a criação de ${path.basename(textFile.path)}…`,
-      );
+    if (available.has("create_text_file")) {
+      const textFile = textFileCreation(text, this.locations);
+      if (textFile && "rejected" in textFile) return textFile;
+      if (textFile) {
+        return this.call(
+          available,
+          "create_text_file",
+          { path: textFile.path, content: textFile.content },
+          `Preparando a criação de ${path.basename(textFile.path)}…`,
+        );
+      }
     }
 
     const folder = knownFolder(text, this.locations);
@@ -94,18 +107,30 @@ export class V2FastPathRouter {
   }
 }
 
-function textFileCreation(text: string, locations: LocationRegistry) {
-  const request = text.match(/\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["']?([\wÀ-ÿ ._-]+\.(?:txt|md))["']?/i);
-  if (!request || request.index === undefined) return undefined;
+function textFileCreation(text: string, locations: LocationRegistry): { path: string; content: string } | V2FastPathRejection | undefined {
+  const request = parseTextFileIntent(text);
+  if (!request) return undefined;
 
-  const tail = text.slice(request.index + request[0].length);
-  const destination = tail.match(/^\s+(?:em|no|na|nos|nas|para|dentro\s+de)\s+(.+?)(?=\s+com\s+(?:o\s+)?(?:conte[uú]do|texto)\s*:|$)/i)?.[1]?.trim();
-  const content = text.match(/\bcom\s+(?:o\s+)?(?:conte[uú]do|texto)\s*:?\s*([\s\S]+)$/i)?.[1]?.trim();
-  if (!destination || content === undefined) return undefined;
+  if (containsPathTraversal(request.destination)) {
+    return {
+      rejected: true,
+      code: "PATH_TRAVERSAL_DENIED",
+      message: "PATH_TRAVERSAL_DENIED: O caminho solicitado contém navegação relativa ('.' ou '..') e foi bloqueado antes de qualquer execução.",
+      explanation: "Bloqueando caminho inseguro…",
+    };
+  }
 
-  const resolution = new PathIntentResolver(locations).resolve(destination);
-  if (resolution.status !== "resolved" || !resolution.resolvedPath) return undefined;
-  return { path: path.join(resolution.resolvedPath, request[1].trim()), content };
+  const resolution = new PathIntentResolver(locations).resolve(request.destination);
+  if (resolution.status !== "resolved" || !resolution.resolvedPath) {
+    return {
+      rejected: true,
+      code: "PATH_NOT_RECOGNIZED",
+      message: `PATH_NOT_RECOGNIZED: Não reconheci com segurança o destino "${request.destination}". Nenhuma ação foi executada.`,
+      explanation: "Validando o destino solicitado…",
+    };
+  }
+
+  return { path: path.join(resolution.resolvedPath, request.fileName), content: request.content };
 }
 
 function requestedCount(text: string) {
