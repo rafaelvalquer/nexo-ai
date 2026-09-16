@@ -46,11 +46,14 @@ export class AgentLoopRunner {
     // before taking the per-turn catalog snapshot, otherwise this turn can keep
     // a stale list that omits email_send_composed even after email.send is healed.
     const remediation=await this.emailSendRemediation(userRequest);
-    if(remediation)return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});
+    if(remediation){this.metrics?.record("agent.capability_remediation",1,{capability:"email.send"});return this.completeWithoutExecution(userRequest,remediation,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});}
     const available = this.availableForMode(options.mode);
 
     const fast=this.fastPath.resolve(userRequest,available);
-    if(fast){const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;}
+    if(fast){
+      if("rejected" in fast){this.metrics?.record("agent.fast_path_rejected",1,{tool:"create_text_file",code:fast.code});return this.completeWithoutExecution(userRequest,fast.message,{runId,conversationId:options.conversationId,taskId:options.taskId,messages});}
+      const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;
+    }
 
     const loop=this.createLoop(options.mode,available);
     const taskState=new GoalBuilder().build(userRequest,options.resources);
@@ -69,6 +72,9 @@ export class AgentLoopRunner {
     if(!current.ok){state.finalResponse=`${current.code}: ${current.message}`;state.pendingAction=undefined;state.executionSafetyState="NO_ACTION";state.status="FAILED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);throw new Error(state.finalResponse);}
     coordinator.consumeApproved(approvalId,pending);state.status="EXECUTING";state.executionSafetyState="DISPATCHING";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);
     const execution=await this.executor.executePrepared(action,{runId:state.runId,conversationId:state.conversationId,taskId:state.taskId,executionId:pending.executionId,dispatchAuthorized:true,signal});
+    if(pending.callId.startsWith("fast-")&&execution.status==="SUCCEEDED"&&execution.result){
+      const observation=this.toObservation(execution,pending.callId);state.observations.push(observation);state.messages.push({role:"assistant",content:"",toolCalls:[{id:pending.callId,name:pending.toolName,arguments:sanitizeAgentArguments(pending.input)}],trust:"TRUSTED_LOCAL"});state.messages.push({role:"tool",toolCallId:pending.callId,toolName:pending.toolName,content:JSON.stringify({source:observation.toolName,summary:observation.summary,data:modelVisiblePresentationData(observation.data),references:observation.references}),trust:observation.trust});state.toolCallCount++;state.iteration++;state.pendingAction=undefined;state.executionSafetyState=action.mutatesState?"MUTATION_COMPLETED":"READ_ONLY_EXECUTED";state.finalResponse=execution.result.summary;state.status="COMPLETED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_completed",1,{tool:pending.toolName});return state;
+    }
     return this.createLoop("full",available).acceptExecution(state,action,execution,signal);
   }
 
@@ -88,7 +94,7 @@ export class AgentLoopRunner {
   private async executeFastPath(userRequest:string,toolName:string,input:Record<string,unknown>,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"];signal?:AbortSignal}):Promise<AgentLoopState|undefined>{
     const tool=this.registry.get(toolName);if(!tool)return undefined;
     const preflight=await this.executor.preflight(toolName,input,{runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,signal:options.signal,capabilityResolver:permission=>this.hasCapability(permission,input)});
-    if(!preflight.ok){this.metrics?.record("agent.fast_path_rejected",1,{tool:toolName,code:preflight.code});return undefined;}
+    if(!preflight.ok){this.metrics?.record("agent.fast_path_rejected",1,{tool:toolName,code:preflight.code});if(preflight.code==="PATH_DENIED"||preflight.code==="SECURITY_DENIED")return this.completeWithoutExecution(userRequest,`${preflight.code}: ${preflight.message}`,options);return undefined;}
     const now=new Date().toISOString();const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[preflight.action.fingerprint],observationFingerprints:[],activeToolNames:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"EXECUTING",executionSafetyState:"NO_ACTION"};
     if(preflight.action.requiresApproval){state.pendingAction={callId:`fast-${randomUUID()}`,toolName:preflight.action.toolName,input:preflight.action.input,fingerprint:preflight.action.fingerprint,executionId:preflight.action.executionId,idempotencyKey:preflight.action.idempotencyKey,iteration:0,mutatesState:preflight.action.mutatesState,risk:preflight.action.risk,requiresApproval:true};state.status="WAITING_APPROVAL";state.executionSafetyState="WAITING_APPROVAL";await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_hit",1,{tool:toolName,approval:true});return state;}
     await this.runtime?.saveLoopState(state.runId,state);
@@ -154,7 +160,7 @@ export class AgentLoopRunner {
   private async completeWithoutExecution(userRequest:string,finalResponse:string,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"]}){
     const now=new Date().toISOString();
     const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[],observationFingerprints:[],activeToolNames:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"COMPLETED",executionSafetyState:"NO_ACTION",finalResponse};
-    await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.capability_remediation",1,{capability:"email.send"});return state;
+    await this.runtime?.saveLoopState(state.runId,state);return state;
   }
 }
 
