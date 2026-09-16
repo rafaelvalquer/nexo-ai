@@ -1,10 +1,12 @@
 import type { AgentToolDescriptor } from "./tool-catalog.js";
 import type { AgentModelMessage } from "../loop/types.js";
+import type { AgentTaskState } from "../goal/goal-types.js";
 
 const DEFAULT_MAX_TOOLS = 10;
 
 type DomainRule = { domain: string; pattern: RegExp };
 const DOMAIN_RULES: DomainRule[] = [
+  { domain: "document", pattern: /pdf|docx|documento|arquivo anexado|resuma|resumir|extraia|compare/i },
   { domain: "system", pattern: /\b(computador|pc|sistema|hardware|cpu|process|processo|ram|mem[oó]ria|disco|armazenamento|gpu|desempenho|lento)\b/i },
   { domain: "filesystem", pattern: /\b(arquivo|arquivos|pasta|pastas|download|downloads|documentos?|documents?|desktop|diret[oó]rio|diretorios?|pdf|docx?|xlsx?|txt|jpg|png|mp4)\b/i },
   { domain: "email", pattern: /\b(e-?mail|e-?mails|gmail|caixa de entrada|mensagem(?:ns)? recebida(?:s)?|remetente|assunto)\b/i },
@@ -18,6 +20,8 @@ const READ_HINT = /\b(liste|listar|mostre|mostrar|veja|ver|procure|procurar|pesq
 const MUTATION_HINT = /\b(crie|criar|envie|enviar|mande|mandar|apague|apagar|delete|deletar|remova|remover|mova|mover|renomeie|renomear|edite|editar|arquive|arquivar|marque|marcar|salve|salvar|mutate|mutation|modify|update|create|write|move|rename|send|delete)\b/i;
 
 const TOOL_HINTS: Array<[RegExp, string[]]> = [
+  [/\b(procure|procurar|pesquise|buscar|busque|encontre|localize).*(?:\.pdf|\.docx|\.md|\.txt)\b/i, ["search_files", "file_info", "list_files", "document_get"]],
+  [/\b(resuma|resumir|extraia|compare).*(?:documento|anexad|\.pdf|\.docx|\.md|\.txt)|(?:documento|anexad|\.pdf|\.docx|\.md|\.txt).*(resuma|resumir|extraia|compare)\b/i, ["document_summarize", "document_extract", "document_compare", "document_get"]],
   [/\b(analise|analisar).*(computador|pc)|\b(computador|pc).*(desempenho|lento|an[aá]lise)\b/i, ["daily_summary", "system_info", "memory_usage", "disk_usage", "process_list"]],
   [/\b(ram|mem[oó]ria).*(uso|usad|dispon[ií]vel)|\b(uso|usad).*(ram|mem[oó]ria)\b/i, ["memory_usage", "system_info"]],
   [/\b(ram|mem[oó]ria).*(total|tem|possui)|\bquanto.*(ram|mem[oó]ria)\b/i, ["system_info", "memory_usage"]],
@@ -29,6 +33,7 @@ const TOOL_HINTS: Array<[RegExp, string[]]> = [
   [/\b(liste|listar|mostre|mostrar|quais).*(arquivo|pasta|download)|\b(arquivo|pasta|download).*(liste|listar|mostre|mostrar|quais)\b/i, ["list_files", "file_info", "search_files"]],
   [/\b(procure|procurar|pesquise|buscar|busque|encontre).*(arquivo|pasta)|\b(arquivo|pasta).*(procure|pesquise|buscar|busque|encontre)\b/i, ["search_files", "file_info", "list_files"]],
   [/\b(crie|criar).*(pasta|diret[oó]rio)\b/i, ["create_folder"]],
+  [/\b(crie|criar|salve|salvar|escreva|gerar).*(?:\.txt|\.md|\.docx|arquivo|documento)\b/i, ["create_text_file", "document_create", "write_text_file", "document_transform", "file_info"]],
   [/\b(agenda|calend[aá]rio|compromisso|reuni[aã]o).*(amanh[aã]|hoje|semana|pr[oó]xim)|\b(o que tenho).*(amanh[aã]|agenda)\b/i, ["calendar_list", "calendar_search", "calendar_get"]],
   [/\b(crie|agende|marque).*(reuni[aã]o|evento|compromisso)\b/i, ["calendar_create", "calendar_create_meeting"]],
   [/\b(infomoney|uol|g1|github|linkedin|youtube|site|web|internet).*(not[ií]cia|verifique|pesquise|procure|veja|analise)|\b(not[ií]cia|verifique|pesquise|procure|veja|analise).*(infomoney|uol|g1|github|site|web|internet)\b/i, ["browser_agent_run", "browser_open", "browser_navigate", "browser_extract"]],
@@ -38,7 +43,7 @@ const TOOL_HINTS: Array<[RegExp, string[]]> = [
 export class ToolCandidateSelector {
   constructor(private readonly maxTools = DEFAULT_MAX_TOOLS) {}
 
-  select(userRequest: string, tools: AgentToolDescriptor[], context: AgentModelMessage[] = []): AgentToolDescriptor[] {
+  select(userRequest: string, tools: AgentToolDescriptor[], context: AgentModelMessage[] = [], taskState?:AgentTaskState): AgentToolDescriptor[] {
     if (tools.length <= this.maxTools) return tools;
     const contextText = context.slice(-4).map(message => message.content).filter(Boolean).join(" ");
     const text = `${contextText} ${userRequest}`.trim();
@@ -54,6 +59,10 @@ export class ToolCandidateSelector {
     const ranked = tools.map((tool, index) => {
       let score = preferred.get(tool.name) ?? 0;
       if (domains.has(tool.domain)) score += 100;
+      const current=taskState?.goal.steps.find(step=>step.id===taskState.currentStepId);
+      if(current?.requiredDomains?.includes(tool.domain))score+=150;
+      if(current?.requiredCapabilities?.some(capability=>tool.permissions.includes(capability)))score+=120;
+      if(taskState?.artifacts.some(artifact=>artifact.kind==="document")&&tool.domain==="document")score+=35;
       const haystack = `${tool.name} ${tool.description} ${tool.operation} ${tool.domain}`.toLowerCase();
       if (!domains.size && tokens.some(token => haystack.includes(token) || (token.length >= 5 && haystack.includes(token.slice(0, 5))))) score += 45;
       for (const token of tokens) {
@@ -67,12 +76,6 @@ export class ToolCandidateSelector {
     });
     let selected = ranked.filter(item => item.score > 0).sort((a, b) => b.score - a.score || a.index - b.index).slice(0, this.maxTools).map(item => item.tool);
     if (!selected.length) selected = ranked.sort((a, b) => b.score - a.score || a.index - b.index).slice(0, this.maxTools).map(item => item.tool);
-    for (const [name] of [...preferred.entries()].sort((a, b) => b[1] - a[1])) {
-      const tool = tools.find(item => item.name === name);
-      if (!tool || selected.some(item => item.name === name)) continue;
-      if (selected.length >= this.maxTools) selected.pop();
-      selected.unshift(tool);
-    }
     return selected.slice(0, this.maxTools);
   }
 }

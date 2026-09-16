@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-export const intentDomainSchema = z.enum(["email", "calendar", "filesystem", "browser", "system", "memory", "general"]);
+export const intentDomainSchema = z.enum(["email", "calendar", "filesystem", "document", "browser", "system", "memory", "general"]);
 export type IntentDomain = z.infer<typeof intentDomainSchema>;
 
 export const domainClassificationV1Schema = z.object({
@@ -43,6 +43,10 @@ export function normalizeDomain(value: string): string {
     arquivo: "filesystem",
     pastas: "filesystem",
     pasta: "filesystem"
+    ,documento: "document",
+    documentos: "document",
+    pdf: "document",
+    docx: "document"
   };
   return aliases[normalized] ?? normalized;
 }

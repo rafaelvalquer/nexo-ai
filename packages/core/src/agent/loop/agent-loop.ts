@@ -6,6 +6,9 @@ import { PollingController } from "./polling-policy.js";
 import type { ActionExecutionResult, PreparedAction } from "../execution/types.js";
 import { sanitizeAssistantContent } from "../../llm/agent/sanitize-assistant-content.js";
 import { modelVisiblePresentationData } from "../../chat/presentation/internal-metadata.js";
+import type { AgentResourceContext, AgentTaskState } from "../goal/goal-types.js";
+import { GoalUpdater } from "../goal/goal-updater.js";
+import { CompletionValidator } from "../goal/completion-validator.js";
 
 export type AgentLoopRunOptions = {
   runId?: string;
@@ -14,11 +17,16 @@ export type AgentLoopRunOptions = {
   messages?: AgentLoopState["messages"];
   deadlineAt?: string;
   signal?: AbortSignal;
+  resources?: AgentResourceContext;
+  taskState?: AgentTaskState;
 };
 
 /** Sequential V2 state machine. Every security-relevant transition is durable. */
 export class AgentLoop {
   private readonly polling = new Map<string, PollingController>();
+  private readonly goalUpdater = new GoalUpdater();
+  private readonly completion = new CompletionValidator();
+  private currentTools: import("./types.js").AgentToolSchema[] = [];
 
   constructor(private readonly deps: AgentLoopDependencies, private readonly limits: AgentLoopLimits = DEFAULT_AGENT_LOOP_LIMITS) {}
 
@@ -38,6 +46,9 @@ export class AgentLoop {
       protocolRepairCount: 0,
       actionFingerprints: [],
       observationFingerprints: [],
+      activeToolNames: [],
+      resources: options.resources,
+      taskState: options.taskState,
       startedAt: now,
       updatedAt: now,
       deadlineAt: options.deadlineAt ?? new Date(Date.now() + this.limits.maxExecutionMs).toISOString(),
@@ -80,7 +91,11 @@ export class AgentLoop {
       }
 
       const started = Date.now();
-      const decision = validateAgentTurn(await this.deps.agentTurn({ messages: state.messages, tools: this.deps.tools() }, signal));
+      this.currentTools = this.deps.toolsForTurn ? await this.deps.toolsForTurn(state) : this.deps.tools?.() ?? [];
+      state.activeToolNames=this.currentTools.map(tool=>tool.name);
+      if(state.taskState)state.taskState.selectedToolNames=[...state.activeToolNames];
+      await this.save(state,"DECIDING");
+      const decision = validateAgentTurn(await this.deps.agentTurn({ messages: state.messages, tools: this.currentTools }, signal));
       this.deps.metric?.("agent.turns", 1, { runId: state.runId });
       this.deps.metric?.("agent.turn_duration_ms", Date.now() - started, { runId: state.runId });
 
@@ -91,6 +106,7 @@ export class AgentLoop {
           await this.save(state, "FAILED");
           return state;
         }
+        if(state.taskState){const validation=await this.completion.validate(state.taskState);state.taskState=validation.taskState;if(!validation.complete){state.messages.push({role:"tool",content:`GOAL_INCOMPLETE: ${validation.reason} Selecione a próxima ação necessária.`,trust:"TRUSTED_LOCAL"});state.protocolRepairCount++;if(state.protocolRepairCount<=this.limits.maxProtocolRepairAttempts){await this.save(state,"DECIDING");continue;}state.finalResponse=validation.reason;await this.save(state,"FAILED");return state;}}
         state.finalResponse = finalResponse;
         await this.save(state, "COMPLETED");
         return state;
@@ -110,6 +126,7 @@ export class AgentLoop {
       }
 
       const call = { ...decision.call, arguments: sanitizeAgentArguments(decision.call.arguments) };
+      if(!state.activeToolNames.includes(call.name)){state.protocolRepairCount++;state.messages.push({role:"tool",toolCallId:call.id,toolName:call.name,content:"TOOL_NOT_AVAILABLE_THIS_TURN: escolha exatamente uma ferramenta da lista ativa.",trust:"TRUSTED_LOCAL"});if(state.protocolRepairCount>this.limits.maxProtocolRepairAttempts){state.finalResponse="TOOL_NOT_AVAILABLE_THIS_TURN";await this.save(state,"FAILED");return state;}await this.save(state,"DECIDING");continue;}
       state.messages.push({ role: "assistant", content: "", toolCalls: [call], trust: "TRUSTED_LOCAL" });
       this.deps.metric?.("agent.tool_calls", 1, { tool: call.name });
       await this.save(state, "PREFLIGHT");
@@ -183,6 +200,7 @@ export class AgentLoop {
 
     await this.save(state, "OBSERVING");
     const observation = this.appendObservation(state, this.deps.observe(execution, callId), execution.status === "SUCCEEDED" || execution.status === "RECONCILED_SUCCESS");
+    if(state.taskState)state.taskState=this.goalUpdater.update(state.taskState,observation);
     if (!await this.waitForExternalProgress(state, observation, signal)) {
       const guard = this.guard(state);
       if (!guard.ok) {
@@ -197,7 +215,7 @@ export class AgentLoop {
   }
 
   private appendObservation(state: AgentLoopState, observation: AgentObservation, success: boolean) {
-    const used = state.observations.reduce((total, item) => total + (item.encodedBytes ?? Buffer.byteLength(JSON.stringify(item.data))), 0);
+    const used = state.observations.reduce((total, item) => total + (item.encodedBytes ?? Buffer.byteLength(JSON.stringify(item.data) ?? "")), 0);
     if (used + (observation.encodedBytes ?? 0) > this.limits.maxTotalObservationBytes) {
       observation = {
         ...observation,
@@ -223,7 +241,7 @@ export class AgentLoop {
   }
 
   private async waitForExternalProgress(state: AgentLoopState, observation: AgentObservation, signal?: AbortSignal) {
-    const policy = this.deps.tools().find(tool => tool.name === observation.toolName)?.polling;
+    const policy = this.currentTools.find(tool => tool.name === observation.toolName)?.polling;
     if (!policy || !observation.progress || /^(completed|complete|done|failed|cancelled|100)$/i.test(String(observation.progress.value))) return false;
     const key = `${state.runId}:${observation.toolName}`;
     const controller = this.polling.get(key) ?? new PollingController(policy);
@@ -236,7 +254,7 @@ export class AgentLoop {
 
   private isPollingAction(state: AgentLoopState, toolName: string) {
     const previous = state.observations.at(-1);
-    return previous?.toolName === toolName && Boolean(previous.progress) && Boolean(this.deps.tools().find(tool => tool.name === toolName)?.polling);
+    return previous?.toolName === toolName && Boolean(previous.progress) && Boolean(this.currentTools.find(tool => tool.name === toolName)?.polling);
   }
 
   private limitReached(state: AgentLoopState) {

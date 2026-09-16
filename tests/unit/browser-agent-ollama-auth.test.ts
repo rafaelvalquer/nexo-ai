@@ -62,7 +62,7 @@ describe("Browser Agent Ollama model adapter", () => {
     }
   });
 
-  it("validates tool calling through native /api/chat without forcing think", async () => {
+  it("validates tool calling through native /api/chat using the Browser Agent runtime think mode", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(tagsResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ capabilities:["tools","vision"] }), { status:200, headers:{"content-type":"application/json"} }))
@@ -86,7 +86,7 @@ describe("Browser Agent Ollama model adapter", () => {
       tools?: Array<{function?:{name?:string}}>;
       messages?: Array<{content?:string}>;
     };
-    expect(Object.prototype.hasOwnProperty.call(request, "think")).toBe(false);
+    expect(request.think).toBe(false);
     expect(request.stream).toBe(false);
     expect(request.tools?.[0]?.function?.name).toBe("nexo_browser_preflight");
     expect(request.messages?.at(-1)?.content).toContain("https://example.com");

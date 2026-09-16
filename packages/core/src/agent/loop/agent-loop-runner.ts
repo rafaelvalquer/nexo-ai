@@ -19,6 +19,8 @@ import type {AgentReconciliationCoordinator} from "../execution/reconciliation/a
 import { V2FastPathRouter } from "./v2-fast-path.js";
 import { modelVisiblePresentationData, wrapPresentationData } from "../../chat/presentation/internal-metadata.js";
 import { emailSendCapabilityRemediation, isEmailSendRequest, resolveEmailSendCapability } from "../orchestrator/email-capability-remediation.js";
+import { GoalBuilder } from "../goal/goal-builder.js";
+import type { AgentResourceContext } from "../goal/goal-types.js";
 
 const PRESENTATION_INPUT_TOOLS = new Set(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"]);
 
@@ -28,10 +30,11 @@ export class AgentLoopRunner {
   private readonly fastPath = new V2FastPathRouter();
   constructor(private readonly llm: LLMProvider, private readonly catalog: CapabilityAwareToolCatalog, private readonly registry: ToolRegistry, private readonly executor: ActionExecutor, private readonly connections?: ConnectionService,private readonly runtime?:AgentRuntime,private readonly contextManager=new AgentContextManager(),private readonly graph=new AgentGraph(),private readonly metrics?:LocalMetricsService,private readonly reconciliation?:AgentReconciliationCoordinator) {}
 
-  async run(userRequest: string, options: { mode: "read_only" | "full"; runId?: string; conversationId?:string;taskId?:string;messages?:AgentLoopState["messages"];signal?: AbortSignal } ): Promise<AgentLoopState> {
+  async run(userRequest: string, options: { mode: "read_only" | "full"; runId?: string; conversationId?:string;taskId?:string;messages?:AgentLoopState["messages"];resources?:AgentResourceContext;signal?: AbortSignal } ): Promise<AgentLoopState> {
     if (!this.llm.agentTurn) throw new Error("O provider de LLM não implementa agentTurn().");
     const runId=options.runId??randomUUID();
     const messages=this.contextManager.build(userRequest,options.messages??[]);
+    if(options.resources?.documents.length)messages.push({role:"system",trust:"TRUSTED_LOCAL",content:`Documentos disponíveis como resources (use tools document_* para acessar conteúdo):\n${options.resources.documents.map(document=>`ID: ${document.id}\nNome: ${document.name}\nTipo: ${document.mimeType}`).join("\n\n")}`});
 
     // Capability repair may change the operational tool set. Always perform it
     // before taking the per-turn catalog snapshot, otherwise this turn can keep
@@ -43,37 +46,34 @@ export class AgentLoopRunner {
     const fast=this.fastPath.resolve(userRequest,available);
     if(fast){const completed=await this.executeFastPath(userRequest,fast.name,fast.arguments,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(completed)return completed;}
 
-    const selected=this.candidates.select(userRequest,available,options.messages??[]);
-    this.metrics?.record("agent.candidate_tool_count",selected.length,{mode:options.mode});
-    const schemas=createAgentToolSchemas(selected),allowed=new Set(schemas.map(tool=>tool.name));
-    const loop=this.createLoop(schemas,allowed);
-    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal}));}
+    const loop=this.createLoop(options.mode,available);
+    const taskState=new GoalBuilder().build(userRequest,options.resources);
+    try{return await this.graph.invoke(runId,()=>loop.run(userRequest,{runId,conversationId:options.conversationId,taskId:options.taskId,messages,resources:options.resources,taskState,signal:options.signal}));}
     catch(error){if(error&&typeof error==="object")Object.assign(error,{runId});throw error;}
   }
 
   async resumeApproved(state:AgentLoopState,approvalId:string,coordinator:ApprovalCoordinator,signal?:AbortSignal){
     if(state.status!=="WAITING_APPROVAL"||!state.pendingAction)throw new Error("Run não está aguardando aprovação.");
     const pending=state.pendingAction;if(pending.approvalId&&pending.approvalId!==approvalId)throw new Error("Approval não pertence à PendingAgentAction.");
-    const available=this.availableForMode("full"),selected=this.ensureTool(this.candidates.select(state.userRequest,available,state.messages),available,pending.toolName);
-    const schemas=createAgentToolSchemas(selected),allowed=new Set(schemas.map(tool=>tool.name));if(!allowed.has(pending.toolName))throw new Error("A ferramenta aprovada não está mais disponível.");
+    const available=this.availableForMode("full");if(!available.some(tool=>tool.name===pending.toolName))throw new Error("A ferramenta aprovada não está mais disponível.");
     const definition=this.registry.get(pending.toolName);if(!definition)throw new Error("A ferramenta aprovada não está registrada.");
     const action={executionId:pending.executionId,toolName:pending.toolName,input:pending.input,fingerprint:pending.fingerprint,idempotencyKey:pending.idempotencyKey,mutatesState:pending.mutatesState,risk:pending.risk??definition.risk,requiresApproval:pending.requiresApproval??true,status:"PREPARED" as const};
+    const current=await this.executor.revalidatePreparedAction(action,{runId:state.runId,userRequest:state.userRequest,conversationId:state.conversationId,taskId:state.taskId,executionId:pending.executionId,signal,capabilityResolver:permission=>this.hasCapability(permission,pending.input)});
+    if(!current.ok){state.finalResponse=`${current.code}: ${current.message}`;state.pendingAction=undefined;state.executionSafetyState="NO_ACTION";state.status="FAILED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);throw new Error(state.finalResponse);}
     coordinator.consumeApproved(approvalId,pending);state.status="EXECUTING";state.executionSafetyState="DISPATCHING";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);
     const execution=await this.executor.executePrepared(action,{runId:state.runId,conversationId:state.conversationId,taskId:state.taskId,executionId:pending.executionId,dispatchAuthorized:true,signal});
-    return this.createLoop(schemas,allowed).acceptExecution(state,action,execution,signal);
+    return this.createLoop("full",available).acceptExecution(state,action,execution,signal);
   }
 
   async reject(state:AgentLoopState,approvalId:string){
     if(state.status!=="WAITING_APPROVAL"||!state.pendingAction||state.pendingAction.approvalId!==approvalId)throw new Error("Approval não corresponde ao run.");
     state.messages.push({role:"tool",toolCallId:state.pendingAction.callId,toolName:state.pendingAction.toolName,trust:"TRUSTED_LOCAL",content:"APPROVAL_REJECTED: o usuário recusou a mutação. Não execute essa ação novamente sem novo pedido explícito."});
     state.observations.push({toolCallId:state.pendingAction.callId,toolName:state.pendingAction.toolName,ok:false,summary:"Ação rejeitada pelo usuário.",trust:"TRUSTED_LOCAL",truncated:false});state.pendingAction=undefined;state.status="DECIDING";state.updatedAt=new Date().toISOString();this.runtime?.saveLoopState(state.runId,state);
-    const available=this.availableForMode("read_only"),selected=this.candidates.select(state.userRequest,available,state.messages),schemas=createAgentToolSchemas(selected);
-    return this.createLoop(schemas,new Set(selected.map(tool=>tool.name))).resume(state);
+    return this.createLoop("read_only",this.availableForMode("read_only")).resume(state);
   }
 
   async createLoopForRecovery(state:AgentLoopState){
-    const available=this.availableForMode("full"),selected=this.candidates.select(state.userRequest,available,state.messages),schemas=createAgentToolSchemas(selected);
-    return this.graph.invoke(state.runId,previous=>this.createLoop(schemas,new Set(selected.map(tool=>tool.name))).resume(previous??state),state);
+    const available=this.availableForMode("full");return this.graph.invoke(state.runId,previous=>this.createLoop("full",available).resume(previous??state),state);
   }
 
   private availableForMode(mode:"read_only"|"full") {return this.catalog.list().filter(tool=>!tool.mutatesState||tool.risk==="READ"||mode==="full"&&Boolean(this.registry.get(tool.name)?.mutationSafety));}
@@ -82,16 +82,17 @@ export class AgentLoopRunner {
     const tool=this.registry.get(toolName);if(!tool||(tool.mutatesState??tool.risk!=="READ"))return undefined;
     const preflight=await this.executor.preflight(toolName,input,{runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,signal:options.signal,capabilityResolver:permission=>this.hasCapability(permission,input)});
     if(!preflight.ok){this.metrics?.record("agent.fast_path_rejected",1,{tool:toolName,code:preflight.code});return undefined;}
-    const now=new Date().toISOString();const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[preflight.action.fingerprint],observationFingerprints:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"EXECUTING",executionSafetyState:"NO_ACTION"};
+    const now=new Date().toISOString();const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[preflight.action.fingerprint],observationFingerprints:[],activeToolNames:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"EXECUTING",executionSafetyState:"NO_ACTION"};
     await this.runtime?.saveLoopState(state.runId,state);
     const execution=await this.executor.executePrepared(preflight.action,{runId:state.runId,conversationId:state.conversationId,taskId:state.taskId,signal:options.signal});
     if(execution.status!=="SUCCEEDED"||!execution.result){this.metrics?.record("agent.fast_path_failed",1,{tool:toolName,status:execution.status});return undefined;}
     const observation=this.toObservation(execution,`fast-${randomUUID()}`);state.observations.push(observation);state.messages.push({role:"assistant",content:"",toolCalls:[{id:observation.toolCallId,name:toolName,arguments:sanitizeAgentArguments(preflight.action.input)}],trust:"TRUSTED_LOCAL"});state.messages.push({role:"tool",toolCallId:observation.toolCallId,toolName,content:JSON.stringify({source:observation.toolName,summary:observation.summary,data:modelVisiblePresentationData(observation.data),references:observation.references}),trust:observation.trust});state.toolCallCount=1;state.iteration=1;state.executionSafetyState="READ_ONLY_EXECUTED";state.finalResponse=execution.result.summary;state.status="COMPLETED";state.updatedAt=new Date().toISOString();await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.fast_path_hit",1,{tool:toolName});return state;
   }
 
-  private createLoop(schemas:ReturnType<typeof createAgentToolSchemas>,allowed:Set<string>){return new AgentLoop({
-      agentTurn:(request,signal)=>this.llm.agentTurn!({...request,tools:schemas},signal),tools:()=>schemas,
-      preflight:(name,input,context)=>{if(!allowed.has(name))return Promise.resolve({ok:false as const,code:"TOOL_NOT_FOUND" as const,message:"A ferramenta não está disponível neste turno do Agent Loop."});return this.executor.preflight(name,input,{...context,capabilityResolver:permission=>this.hasCapability(permission,input)});},
+  private createLoop(mode:"read_only"|"full",available=this.availableForMode(mode)){return new AgentLoop({
+      agentTurn:(request,signal)=>this.llm.agentTurn!(request,signal),
+      toolsForTurn:async state=>{const selectionContext=state.messages.filter(message=>message.role!=="system");const selected=this.candidates.select(state.userRequest,available,selectionContext,state.taskState);this.metrics?.record("agent.candidate_tool_count",selected.length,{mode});return createAgentToolSchemas(selected);},
+      preflight:(name,input,context)=>this.executor.preflight(name,input,{...context,capabilityResolver:permission=>this.hasCapability(permission,input)}),
       execute:(action,context)=>this.executor.executePrepared(action,context),reconcileRun:this.reconciliation?(state,executionId,signal)=>this.reconciliation!.reconcileRun(state,executionId,signal):undefined,
       observe:(execution,callId)=>this.toObservation(execution,callId),
       persistence:this.runtime?{save:async state=>this.runtime!.saveLoopState(state.runId,state)}:undefined,
@@ -127,7 +128,7 @@ export class AgentLoopRunner {
 
   private async completeWithoutExecution(userRequest:string,finalResponse:string,options:{runId:string;conversationId?:string;taskId?:string;messages:AgentLoopState["messages"]}){
     const now=new Date().toISOString();
-    const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[],observationFingerprints:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"COMPLETED",executionSafetyState:"NO_ACTION",finalResponse};
+    const state:AgentLoopState={version:2,runId:options.runId,conversationId:options.conversationId,taskId:options.taskId,userRequest,messages:options.messages,observations:[],iteration:0,toolCallCount:0,consecutiveFailures:0,protocolRepairCount:0,actionFingerprints:[],observationFingerprints:[],activeToolNames:[],startedAt:now,updatedAt:now,deadlineAt:new Date(Date.now()+120_000).toISOString(),status:"COMPLETED",executionSafetyState:"NO_ACTION",finalResponse};
     await this.runtime?.saveLoopState(state.runId,state);this.metrics?.record("agent.capability_remediation",1,{capability:"email.send"});return state;
   }
 }

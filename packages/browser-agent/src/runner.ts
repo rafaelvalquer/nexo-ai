@@ -44,6 +44,7 @@ export class BrowserAgentRunner {
 
       const { models, model } = await adapter.createModels(undefined, preflight);
       const streamFn = createOllamaNativeStreamFn(config.ollamaUrl, browserModel.model,{
+        think:false,
         onTelemetry:metadata=>this.emit({type:"diagnostic",runId:config.runId,event:"model_turn_completed",durationMs:metadata.durationMs,metadata})
       });
       this.emit({
@@ -124,7 +125,8 @@ export class BrowserAgentRunner {
       });
       if (result.status !== "completed") {
         const cancelled = result.status === "cancelled";
-        throw Object.assign(new Error(cancelled ? "Execução cancelada." : result.error ?? `Browser Agent encerrado: ${result.status}`), { cancelled });
+        const code=result.status==="timeout"?"BROWSER_TIMEOUT" as const:undefined;
+        throw Object.assign(new Error(cancelled ? "Execução cancelada." : result.error ?? `Browser Agent encerrado: ${result.status}`), { cancelled,...(code?{code}:{}) });
       }
       this.phase(config.runId, "finishing");
       this.emit({ type:"completed", runId:config.runId, result:result.output as BrowserResearchResult, steps:result.steps, durationMs:result.durationMs });
@@ -135,10 +137,10 @@ export class BrowserAgentRunner {
       this.emit({
         type:"failed",
         runId:config.runId,
-        error:aborted
+        error:aborted&&!value.code
           ? (this.cancelledByUser ? "Execução cancelada pelo usuário." : "A execução do navegador foi interrompida internamente (BROWSER_ABORT_INTERNAL).")
           : value.message || String(error),
-        errorCode:aborted && !this.cancelledByUser ? "BROWSER_ABORT_INTERNAL" : errorCode,
+        errorCode:errorCode??(aborted && !this.cancelledByUser ? "BROWSER_ABORT_INTERNAL" : undefined),
         cancelled:this.cancelledByUser
       });
     } finally {

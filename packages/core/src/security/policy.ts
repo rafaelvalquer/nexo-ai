@@ -8,7 +8,7 @@ export class SecurityPolicyService {
     const current = this.settings();
     if (!current.connectionsEnabled && /^(email|calendar)_/.test(toolName)) throw new Error("Conexões externas foram desativadas pela política de segurança.");
     if (!current.browserAutomationEnabled && toolName.startsWith("browser_")) throw new Error("Automação de navegador foi desativada pela política de segurança.");
-    if (!current.fileWritesEnabled && /^(write_|move_|copy_|rename_|delete_|create_|trash_)/.test(toolName)) throw new Error("Escritas em arquivos foram desativadas pela política de segurança.");
+    if (!current.fileWritesEnabled && (/^(write_|move_|copy_|rename_|delete_|create_|trash_)/.test(toolName) || /^document_(create|transform)$/.test(toolName))) throw new Error("Escritas em arquivos foram desativadas pela política de segurança.");
   }
 
   requiresApproval(toolName: string, risk: RiskLevel) {

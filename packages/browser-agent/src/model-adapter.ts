@@ -85,7 +85,7 @@ export class NexoBrowserModelAdapter {
       compatibilityResponse = await fetch(`${base}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(buildBrowserToolCallingProbeRequest(this.modelId)),
+        body: JSON.stringify(buildBrowserToolCallingProbeRequest(this.modelId,false)),
         signal: boundedSignal(signal, 20_000)
       });
     } catch (error) {

@@ -20,7 +20,7 @@ export type PreparedAction = {
 
 export type ActionPreflightResult =
   | { ok: true; action: PreparedAction }
-  | { ok: false; code: "TOOL_NOT_FOUND" | "SECURITY_DENIED" | "CAPABILITY_DENIED" | "SCHEMA_INVALID" | "PATH_DENIED"; message: string };
+  | { ok: false; code: "TOOL_NOT_FOUND" | "TOOL_DISABLED" | "SECURITY_DENIED" | "CAPABILITY_DENIED" | "SCHEMA_INVALID" | "PATH_DENIED" | "ACTION_STALE"; message: string };
 
 export type ActionExecutionContext = ToolExecutionContext & { userRequest?:string;capabilityResolver?: (permission: string) => boolean | Promise<boolean> };
 

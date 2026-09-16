@@ -6,6 +6,7 @@ export * from "./capability-resolver.js";
 export * from "./connection-resolver.js";
 export * from "./action-context.js";
 export * from "./action-executor.js";
+export * from "./action-validator.js";
 export * from "./execution-record-repository.js";
 export * from "./reconciliation/reconciler.js";
 export * from "./reconciliation/reconciler-registry.js";

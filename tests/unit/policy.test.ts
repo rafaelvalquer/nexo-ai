@@ -45,6 +45,7 @@ describe("SecurityPolicyService", () => {
   it("blocks disabled browser and file-writing tools", () => {
     expect(() => policy.assertToolEnabled("browser_navigate")).toThrow(/navegador/);
     expect(() => policy.assertToolEnabled("write_file")).toThrow(/arquivos/);
+    expect(() => policy.assertToolEnabled("document_create")).toThrow(/arquivos/);
   });
   it("enforces approved recipient domains and e-mail approval", () => {
     expect(() => policy.assertRecipientDomains([{email:"person@external.com"}])).toThrow(/domínio/);

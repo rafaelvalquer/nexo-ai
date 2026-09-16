@@ -1,18 +1,12 @@
-import path from "node:path";
 import type { NexoSettings, RiskLevel } from "@nexo/shared";
-
-const blockedWindowsFragments = ["\\windows", "\\program files", "\\appdata"];
+import { PathPolicy } from "../security/path-policy.js";
 
 export class PermissionEngine {
-  constructor(private getSettings: () => NexoSettings) {}
+  private readonly paths: PathPolicy;
+  constructor(private getSettings: () => NexoSettings) { this.paths = new PathPolicy(() => this.getSettings().allowedRoots); }
 
   isPathAllowed(target: string) {
-    const resolved = path.resolve(target).toLowerCase();
-    if (process.platform === "win32" && blockedWindowsFragments.some(x => resolved.includes(x))) return false;
-    return this.getSettings().allowedRoots.some(root => {
-      const allowed = path.resolve(root).toLowerCase();
-      return resolved === allowed || resolved.startsWith(allowed + path.sep);
-    });
+    return this.paths.isAllowed(target);
   }
 
   requiresApproval(risk: RiskLevel, mutatesState = false) {
@@ -34,7 +28,7 @@ export class PermissionEngine {
   }
 
   assertPath(target: string) {
-    if (!this.isPathAllowed(target)) throw new Error(`Caminho fora do escopo permitido: ${target}`);
+    this.paths.assertAllowed(target);
   }
 
   assertCapability(permission: string, available: Iterable<string>) {

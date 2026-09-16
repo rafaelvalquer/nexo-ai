@@ -11,7 +11,7 @@ const RECOVERY_INSTRUCTION = "Your previous response did not call a tool. Call e
 type OllamaMessage = {role:"system"|"user"|"assistant"|"tool";content:string;images?:string[];tool_name?:string;tool_calls?:OllamaToolCall[]};
 type OllamaToolCall = {type:"function";function:{name:string;arguments:Record<string,unknown>}};
 type OllamaChatChunk = {message?:{role?:unknown;content?:unknown;thinking?:unknown;tool_calls?:unknown};done?:unknown;done_reason?:unknown;prompt_eval_count?:unknown;eval_count?:unknown};
-type TransportOptions={firstChunkTimeoutMs?:number;modelTurnTimeoutMs?:number;onTelemetry?:(telemetry:BrowserModelTurnTelemetry)=>void};
+type TransportOptions={firstChunkTimeoutMs?:number;modelTurnTimeoutMs?:number;think?:"omitted"|boolean;onTelemetry?:(telemetry:BrowserModelTurnTelemetry)=>void};
 type TurnResult={validToolCalls:number;diagnostic:ReturnType<typeof inspectOllamaToolCalls>["diagnostic"];doneReason:string;firstChunkMs:number|null;durationMs:number;promptTokens:number;completionTokens:number};
 
 export class BrowserModelTransportError extends Error {
@@ -54,7 +54,7 @@ async function runTurn(input:{base:string;modelId:string;model:Model<any>;contex
   const modelTimeout=input.transport.modelTurnTimeoutMs??input.options?.timeoutMs??DEFAULT_MODEL_TURN_TIMEOUT_MS;
   const timeoutSignal=AbortSignal.timeout(modelTimeout),signal=input.options?.signal?AbortSignal.any([input.options.signal,timeoutSignal]):timeoutSignal;
   let response:Response;
-  try{response=await (input.options?.fetch??fetch)(`${input.base}/api/chat`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(buildRequest(input.modelId,input.model,input.context,input.options,input.recoveryAttempt)),signal});}
+  try{response=await (input.options?.fetch??fetch)(`${input.base}/api/chat`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(buildRequest(input.modelId,input.model,input.context,input.options,input.recoveryAttempt,input.transport.think??"omitted")),signal});}
   catch(error){if(timeoutSignal.aborted&&!input.options?.signal?.aborted)throw new BrowserModelTransportError("BROWSER_MODEL_TURN_TIMEOUT",`BROWSER_MODEL_TURN_TIMEOUT: o turno excedeu ${modelTimeout} ms.`);throw error;}
   await input.options?.onResponse?.({status:response.status,headers:Object.fromEntries(response.headers.entries())},input.model);
   if(!response.ok)throw new Error(`O endpoint nativo /api/chat do Ollama respondeu com HTTP ${response.status}.`);
@@ -94,10 +94,12 @@ async function runTurn(input:{base:string;modelId:string;model:Model<any>;contex
   }
 }
 
-function buildRequest(modelId:string,model:Model<any>,context:Context,options:SimpleStreamOptions|undefined,recovery:boolean){
+function buildRequest(modelId:string,model:Model<any>,context:Context,options:SimpleStreamOptions|undefined,recovery:boolean,transportThink:"omitted"|boolean){
   const messages=toOllamaMessages(context);
   if(recovery){const completion=discoverCompletionTool(context);messages.push({role:"user",content:`${RECOVERY_INSTRUCTION} Available tools: ${(context.tools??[]).map(tool=>tool.name).join(", ")}.${completion?` If the task is already complete, call ${completion}.`:""}`});}
-  return{model:modelId,messages,tools:(context.tools??[]).map(tool=>({type:"function",function:{name:tool.name,description:tool.description,parameters:tool.parameters}})),stream:true,options:{temperature:options?.temperature??0,num_predict:Math.min(options?.maxTokens??model.maxTokens,2_048)}};
+  const request:{model:string;messages:OllamaMessage[];tools:unknown[];stream:true;options:{temperature:number;num_predict:number};think?:boolean}={model:modelId,messages,tools:(context.tools??[]).map(tool=>({type:"function",function:{name:tool.name,description:tool.description,parameters:tool.parameters}})),stream:true,options:{temperature:options?.temperature??0,num_predict:Math.min(options?.maxTokens??model.maxTokens,1_024)}};
+  if(transportThink!=="omitted")request.think=transportThink;
+  return request;
 }
 function discoverCompletionTool(context:Context){return(context.tools??[]).map(tool=>tool.name).find(name=>/(^|_)(done|complete|finish|final|submit)(_|$)/i.test(name));}
 function toOllamaMessages(context:Context):OllamaMessage[]{const messages:OllamaMessage[]=[];if(context.systemPrompt?.trim())messages.push({role:"system",content:context.systemPrompt});for(const message of context.messages){if(message.role==="user"){const content=flattenContent(message.content),converted:OllamaMessage={role:"user",content:content.text};if(content.images.length)converted.images=content.images;messages.push(converted);}else if(message.role==="assistant"){const text=message.content.filter(block=>block.type==="text").map(block=>block.text).join("\n"),toolCalls=message.content.filter((block):block is ToolCall=>block.type==="toolCall").map(block=>({type:"function" as const,function:{name:block.name,arguments:block.arguments}})),converted:OllamaMessage={role:"assistant",content:text};if(toolCalls.length)converted.tool_calls=toolCalls;messages.push(converted);}else{const content=flattenContent(message.content),converted:OllamaMessage={role:"tool",tool_name:message.toolName,content:content.text};if(content.images.length)converted.images=content.images;messages.push(converted);}}return messages;}

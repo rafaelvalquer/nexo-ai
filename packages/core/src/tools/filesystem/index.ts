@@ -7,6 +7,7 @@ import AdmZip from "adm-zip";
 import { createWriteStream } from "node:fs";
 import { z } from "zod";
 import type { ToolDefinition } from "../types.js";
+import { textFileTools } from "./text-file-tools.js";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -22,6 +23,7 @@ function formatBytes(bytes: number) {
 
 export function filesystemTools(): ToolDefinition[] {
   return [
+    ...textFileTools(),
     {
       name: "list_files", description: "Lista arquivos de uma pasta", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
       inputSchema: z.object({

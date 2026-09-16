@@ -13,38 +13,29 @@ import type { ExecutionRecordRepository } from "./execution-record-repository.js
 import type { ConnectionService } from "../../connections/service.js";
 import type { ConnectionCapability } from "@nexo/shared";
 import {actionFingerprint,canonicalJson,createIdempotencyKey} from "./action-fingerprint.js";
-import {ConnectionResolver,isConnectionCapability} from "./connection-resolver.js";
-import {semanticMutationAllowed} from "../security/semantic-mutation-guard.js";
+import { ActionValidator } from "./action-validator.js";
+import { documentOutputBuffer, type DocumentFormat } from "../../documents/writer.js";
 export {actionFingerprint,canonicalJson} from "./action-fingerprint.js";
 
 /** The sole safe execution entry point for agent, UI, and automation actions. */
 export class ActionExecutor {
+  private readonly validator: ActionValidator;
   constructor(
     private readonly registry: ToolRegistry,
     private readonly permissions: PermissionEngine,
     private readonly audit: AuditService,
     private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository;connections?:ConnectionService } = {}
-  ) {}
+  ) { this.validator = new ActionValidator(registry, permissions, options.security, options.connections); }
 
   async preflight(toolName: string, rawInput: Record<string, unknown>, context: ActionExecutionContext = {}): Promise<ActionPreflightResult> {
-    const tool = this.registry.get(toolName);
-    if (!tool) {this.options.metrics?.record("agent.tool_call_invalid",1,{tool:toolName});return fail("TOOL_NOT_FOUND", `Ferramenta não disponível: ${toolName}`);}
-    try { this.options.security?.assertToolEnabled(tool.name); } catch (error) { return fail("SECURITY_DENIED", message(error)); }
-    const mutatesState = tool.mutatesState ?? tool.risk !== "READ";
-    if(mutatesState&&!semanticMutationAllowed(context.userRequest))return fail("SECURITY_DENIED","A solicitação é semanticamente de leitura e não autoriza alteração de estado.");
-    const candidate={...rawInput};
-    for (const capability of tool.permissions) {
-      if(isConnectionCapability(capability)&&this.options.connections){const resolution=new ConnectionResolver(this.options.connections).resolve(capability,candidate.connectionId);if(!resolution.ok)return fail("CAPABILITY_DENIED",resolution.reason!);if(resolution.connectionId&&!candidate.connectionId)candidate.connectionId=resolution.connectionId;}
-      if(isConnectionCapability(capability)&&!this.options.connections&&!context.capabilityResolver)return fail("CAPABILITY_DENIED",`Nenhum resolvedor de conexão configurado para ${capability}.`);
-      if (context.capabilityResolver && !await context.capabilityResolver(capability)) return fail("CAPABILITY_DENIED", `Capacidade não autorizada: ${capability}`);
+    const validation = await this.validator.validateCurrent(toolName, rawInput, context);
+    if (!validation.ok) {
+      this.options.metrics?.record(validation.code === "SCHEMA_INVALID" ? "agent.schema_error" : "agent.tool_call_invalid", 1, { tool: toolName, code: validation.code });
+      return validation;
     }
-    const parsed = tool.inputSchema.safeParse(candidate);
-    if (!parsed.success) {this.options.metrics?.record("agent.schema_error",1,{tool:tool.name});return fail("SCHEMA_INVALID", `Parâmetros inválidos para ${tool.name}: ${parsed.error.issues.map(issue => issue.message).join(", ")}`);}
-    const input = parsed.data as Record<string, unknown>;
-    try {
-      this.options.security?.assertRecipientDomains(input.to as Array<{ email?: string }> | undefined);
-      for (const field of tool.pathFields ?? []) validatePaths(input[field], target => this.permissions.assertPath(target));
-    } catch (error) { return fail("PATH_DENIED", message(error)); }
+    const tool = this.registry.get(validation.toolName)!;
+    const { mutatesState } = validation;
+    const input = validation.input;
     await enrichReconciliationEvidence(tool.name,input);
     const executionId = context.executionId ?? randomUUID();
     const fingerprint = actionFingerprint(tool.name, input);
@@ -60,9 +51,10 @@ export class ActionExecutor {
 
   async executePrepared(action: PreparedAction, context: ActionExecutionContext = {}): Promise<ActionExecutionResult> {
     if (action.status !== "PREPARED") throw new Error(`Ação ${action.executionId} não está pronta para despacho.`);
-    const tool = this.registry.get(action.toolName);
-    if (!tool) return { status: "FAILED", action, error: "Ferramenta não encontrada durante o despacho." };
     if (action.requiresApproval && action.mutatesState && !context.dispatchAuthorized) return { status: "FAILED", action, error: "Mutation bloqueada: aprovação exata não foi validada e consumida." };
+    const current = await this.revalidatePreparedAction(action, context);
+    if (!current.ok) return { status: "FAILED", action, error: `${current.code}: ${current.message}` };
+    const tool = this.registry.get(action.toolName)!;
     const startedAt = Date.now();
     if(action.mutatesState){const prior=this.options.records?.get(action.executionId);if(prior?.status==="SUCCEEDED"||prior?.status==="RECONCILED_SUCCESS")return{status:"SUCCEEDED",action,result:prior.result};if(prior?.status==="DISPATCHING"||prior?.status==="RESULT_UNKNOWN"||prior?.status==="UNRESOLVED")return{status:"RESULT_UNKNOWN",action,error:prior.error??"A mutation já foi despachada e precisa de reconciliação."};if(prior?.status==="FAILED"||prior?.status==="RECONCILED_FAILURE")return{status:"FAILED",action,result:prior.result,error:prior.error};}
     // Audit dispatch before a mutation: a crash/timeout after this point is ambiguous, never retry it automatically.
@@ -92,6 +84,10 @@ export class ActionExecutor {
   /** @deprecated Prefer executePrepared; retained for API compatibility. */
   execute(action:PreparedAction,context:ActionExecutionContext={}){return this.executePrepared(action,context);}
 
+  revalidatePreparedAction(action: PreparedAction, context: ActionExecutionContext = {}) {
+    return this.validator.validateCurrent(action.toolName, action.input, { ...context, expectedFingerprint: action.fingerprint });
+  }
+
   private withResources<T>(tool: ToolDefinition, input: Record<string, unknown>, context: ActionExecutionContext, work: () => Promise<T>) {
     const keys: string[] = [];
     if (tool.name.startsWith("browser_")) keys.push(`browser:${context.runId ?? "default"}`);
@@ -102,7 +98,9 @@ export class ActionExecutor {
 }
 
 function validatePaths(value: unknown, use: (path: string) => void) { if (typeof value === "string") use(value); else if (Array.isArray(value)) value.forEach(item => { if (typeof item === "string") use(item); }); }
-function fail(code: Extract<ActionPreflightResult, { ok: false }> ["code"], message: string): ActionPreflightResult { return { ok: false, code, message }; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function isAmbiguous(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || /timeout|timed? out|network|connection reset|socket/i.test(message(error)); }
-async function enrichReconciliationEvidence(toolName:string,input:Record<string,unknown>){if(!["copy_file","move_file","rename_file"].includes(toolName))return;const source=typeof input.source==="string"?input.source:typeof input.path==="string"?input.path:undefined;if(!source)return;try{input.__nexoSourceHash=createHash("sha256").update(await fs.readFile(source)).digest("hex");}catch{/* Directories and unreadable inputs use existence evidence only. */}}
+async function enrichReconciliationEvidence(toolName:string,input:Record<string,unknown>){
+  if(["create_text_file","write_text_file"].includes(toolName)&&typeof input.content==="string")input.__nexoOutputHash=createHash("sha256").update(Buffer.from(input.content,"utf8")).digest("hex");
+  if(toolName==="document_create"&&typeof input.content==="string"&&["txt","md","docx"].includes(String(input.format)))input.__nexoOutputHash=createHash("sha256").update(documentOutputBuffer(input.format as DocumentFormat,input.content,typeof input.title==="string"?input.title:undefined)).digest("hex");
+  if(!["copy_file","move_file","rename_file"].includes(toolName))return;const source=typeof input.source==="string"?input.source:typeof input.path==="string"?input.path:undefined;if(!source)return;try{input.__nexoSourceHash=createHash("sha256").update(await fs.readFile(source)).digest("hex");}catch{/* Directories and unreadable inputs use existence evidence only. */}}

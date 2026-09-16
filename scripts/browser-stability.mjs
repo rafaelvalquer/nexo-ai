@@ -10,13 +10,14 @@ const total=numberArg("--runs",10),model=textArg("--model")??process.env.NEXO_BR
 const root=await mkdtemp(path.join(os.tmpdir(),"nexo-browser-stability-")),sessions=new BrowserAgentSessionManager(root),results=[];
 try{
   for(let index=1;index<=total;index++){
-    const runId=randomUUID(),started=Date.now(),events=[];let session;
+    const runId=randomUUID(),started=Date.now(),events=[];let session,stepCount=0;
     try{
       session=await sessions.create(runId,"research");
-      const runner=new BrowserAgentRunner(message=>{if(message.type==="diagnostic"||message.type==="completed"||message.type==="failed")events.push(message);},async()=>false);
+      const runner=new BrowserAgentRunner(message=>{if(message.type==="step")stepCount=Math.max(stepCount,message.step);if(message.type==="diagnostic"||message.type==="completed"||message.type==="failed")events.push(message);},async()=>false);
       await runner.run({runId,request:"Entre no site InfoMoney e resuma as principais notícias.",cdpUrl:session.cdpUrl,workspace:sessions.workspace(runId),ollamaUrl,model,mode:"research",allowedDomains:["infomoney.com.br","*.infomoney.com.br"],maxSteps:15,timeoutMs:600_000});
       const terminal=events.findLast(event=>event.type==="completed"||event.type==="failed"),firstAction=events.some(event=>event.type==="diagnostic"&&event.event==="first_action_started");
-      const result={run:index,firstAction,completed:terminal?.type==="completed",errorCode:terminal?.type==="failed"?terminal.errorCode??classify(terminal.error):null,durationMs:Date.now()-started};results.push(result);console.log(JSON.stringify(result));
+      const turns=events.filter(event=>event.type==="diagnostic"&&event.event==="model_turn_completed"&&event.metadata).map(event=>event.metadata),toolNames=[...new Set(turns.flatMap(turn=>turn.toolNames))].sort();
+      const result={run:index,firstAction,completed:terminal?.type==="completed",errorCode:terminal?.type==="failed"?terminal.errorCode??classify(terminal.error):null,durationMs:Date.now()-started,stepCount,modelTurns:turns.length,maxModelTurnMs:turns.length?Math.max(...turns.map(turn=>turn.durationMs)):0,maxCompletionTokens:turns.length?Math.max(...turns.map(turn=>turn.completionTokens)):0,totalCompletionTokens:turns.reduce((sum,turn)=>sum+turn.completionTokens,0),toolNames};results.push(result);console.log(JSON.stringify(result));
     }catch(error){const result={run:index,firstAction:false,completed:false,errorCode:classify(error instanceof Error?error.message:String(error)),durationMs:Date.now()-started};results.push(result);console.log(JSON.stringify(result));}
     finally{await session?.close().catch(()=>undefined);}
   }
