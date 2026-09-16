@@ -125,4 +125,20 @@ describe("authorized filesystem roots", () => {
     expect(new PathIntentResolver(locations).resolve(first).status).toBe("resolved");
     expect(new PathIntentResolver(locations).resolve(second).status).toBe("resolved");
   });
+
+  it("deduplicates equivalent Windows roots case-insensitively", () => {
+    const locations = new LocationRegistry({}, [], ["D:\\Projetos", "d:\\projetos\\"]);
+    const authorized = locations.getKnownLocations().filter(item => item.source === "settings");
+
+    expect(authorized).toHaveLength(1);
+    expect(locations.resolveAlias("Projetos")?.path).toBe("D:\\Projetos");
+  });
+
+  it("does not expose a drive root as a natural-language basename alias", () => {
+    const locations = new LocationRegistry({}, [], ["D:\\"]);
+
+    expect(locations.getKnownLocations().some(item => item.source === "settings" && item.path === "D:\\")).toBe(true);
+    expect(locations.getAliases().some(item => item.location.source === "settings")).toBe(false);
+    expect(new PathIntentResolver(locations).resolve("D:\\Projetos").status).toBe("resolved");
+  });
 });
