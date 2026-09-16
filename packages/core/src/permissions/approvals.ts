@@ -60,4 +60,4 @@ export class ApprovalService {
 }
 
 export function fingerprintFor(toolName:string,input:Record<string,unknown>){return createHash("sha256").update(`${toolName}\n${canonicalJson(JSON.parse(JSON.stringify(input)))}`).digest("hex");}
-function canonicalJson(value:unknown):string{if(value===null||typeof value!=="object")return JSON.stringify(value);if(Array.isArray(value))return`[${value.map(canonicalJson).join(",")}]`;const object=value as Record<string,unknown>;return`{${Object.keys(object).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;}
+function canonicalJson(value:unknown):string{if(Array.isArray(value))return`[${value.map(canonicalJson).join(",")}]`;if(value&&typeof value==="object")return`{${Object.keys(value as object).filter(key=>!key.startsWith("__")).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson((value as Record<string,unknown>)[key])}`).join(",")}}`;return JSON.stringify(value);}

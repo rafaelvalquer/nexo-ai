@@ -4,7 +4,7 @@ export type ParsedTextFileIntent = {
   content: string;
 };
 
-const FILE_REQUEST = /\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["']?([\wÀ-ÿ ._-]+\.(?:txt|md))["']?/i;
+const FILE_REQUEST = /\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma|o|a)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["']?([\wÀ-ÿ ._-]+\.(?:txt|md))["']?/i;
 const DESTINATION_PREFIX = /^\s+(?:(?:especificamente|exatamente|diretamente|somente|apenas)\s+)*(?:em|no|na|nos|nas|para|dentro\s+de)\s+/i;
 const CONTENT_MARKER = /\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo)\b\s*:?\s*/i;
 
