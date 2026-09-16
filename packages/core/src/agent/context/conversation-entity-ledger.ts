@@ -9,8 +9,14 @@ export class ConversationEntityLedger{
     const discovered=discover(observation.data);
     if(!discovered.length)return;
     const current=this.load(conversationId);
-    for(const item of discovered){const existing=current.find(candidate=>candidate.kind===item.kind&&candidate.id===item.id);if(existing)Object.assign(existing,item);else current.unshift({...item,ordinal:1});}
-    this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`entity-ledger:${conversationId}`,JSON.stringify(current.slice(0,this.maxEntries))]);
+    const observed=[] as ConversationEntity[];
+    for(const item of discovered){
+      const existing=current.find(candidate=>candidate.kind===item.kind&&candidate.id===item.id);
+      const normalized={...(existing??{}),...item,ordinal:1};
+      if(!observed.some(candidate=>candidate.kind===normalized.kind&&candidate.id===normalized.id))observed.push(normalized);
+    }
+    const remaining=current.filter(candidate=>!observed.some(item=>item.kind===candidate.kind&&item.id===candidate.id));
+    this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`entity-ledger:${conversationId}`,JSON.stringify([...observed,...remaining].slice(0,this.maxEntries))]);
   }
   clear(conversationId:string){this.db.run("DELETE FROM application_state WHERE key=?",[`entity-ledger:${conversationId}`]);}
   private load(conversationId:string):ConversationEntity[]{const row=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`entity-ledger:${conversationId}`]);if(!row)return[];try{const value=JSON.parse(row.value);return Array.isArray(value)?value:[];}catch{return[];}}

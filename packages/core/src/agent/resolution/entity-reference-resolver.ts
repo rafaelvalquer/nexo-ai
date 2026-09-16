@@ -9,7 +9,7 @@ export class EntityReferenceResolver{
     const isLast=/\b([uú]ltimo|[uú]ltima)\b/.test(normalized);
     const ordinal=Object.entries(ORDINALS).find(([word])=>new RegExp(`\\b${word}\\b`).test(normalized))?.[1]??(/\b(esse|essa|este|esta|dele|dela|acima)\b/.test(normalized)?1:undefined);
     if(!ordinal&&!isLast)return undefined;
-    const kind:ConversationEntity["kind"]=/e-?mail|mensagem/.test(normalized)?"email":/evento|compromisso|reuniao/.test(normalized)?"event":/documento/.test(normalized)?"document":"file";
+    const kind:ConversationEntity["kind"]|undefined=/e-?mail|mensagem/.test(normalized)?"email":/evento|compromisso|reuniao/.test(normalized)?"event":/documento/.test(normalized)?"document":/arquivo|pasta|path|caminho/.test(normalized)?"file":undefined;
     const entities=this.ledger.list(conversationId,kind);
     if(isLast)return entities.at(-1);
     return entities.find(entity=>entity.ordinal===ordinal);

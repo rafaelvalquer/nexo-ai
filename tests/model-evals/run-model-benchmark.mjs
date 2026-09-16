@@ -5,7 +5,9 @@ const timeoutMs=Math.max(5_000,Number(process.env.NEXO_EVAL_TIMEOUT_MS??120_000)
 let installed=[];
 try{const response=await fetch(`${base}/api/tags`,{signal:AbortSignal.timeout(10_000)});if(!response.ok)throw new Error(`HTTP ${response.status}`);installed=((await response.json()).models??[]).map(model=>model.name);}catch(error){console.log(`Ollama indisponível em ${base}: ${error instanceof Error?error.message:String(error)}. Benchmark ignorado.`);process.exit(0);}
 const models=requested.filter(model=>installed.includes(model)||installed.some(name=>name.startsWith(`${model}:`)));
-if(!models.length){console.log(`Nenhum modelo solicitado está instalado. Solicitados: ${requested.join(", ")}`);process.exit(0);}
+const missingModels=requested.filter(model=>!models.includes(model));
+if(!models.length){console.error(`Nenhum modelo solicitado está instalado. Solicitados: ${requested.join(", ")}`);process.exitCode=1;}
+if(missingModels.length&&process.env.NEXO_EVAL_ALLOW_MISSING!=="1")console.error(`Modelos obrigatórios ausentes: ${missingModels.join(", ")}. Instale-os ou defina NEXO_EVAL_ALLOW_MISSING=1 somente para diagnóstico local.`);
 let failed=false;
 for(const model of models){
   try{await fetch(`${base}/api/generate`,{method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeoutMs*2),body:JSON.stringify({model,prompt:"",stream:false,keep_alive:"10m"})});}catch(error){console.log(JSON.stringify({model,warmup:false,error:error instanceof Error?error.message:String(error)}));}
@@ -17,8 +19,8 @@ for(const model of models){
     const validArguments=Boolean(definition)&&definition.required.every(key=>arguments_[key]!==undefined&&arguments_[key]!=="");
     const expectedArguments=scenario.expectedArguments??{};const correctArguments=Object.entries(expectedArguments).every(([key,value])=>arguments_[key]===value);
     const latencyMs=Math.round(performance.now()-started),ok=scenario.accepted.includes(selected)&&validArguments&&correctArguments;totals[scenario.tier][1]++;if(ok)totals[scenario.tier][0]++;latencies.push(latencyMs);if(!scenario.accepted.includes(selected))invalidTools.push(scenario.id);
-    console.log(JSON.stringify({model,scenario:scenario.id,selected,arguments:arguments_,accepted:scenario.accepted,validArguments,correctArguments,ok,latencyMs}));
+    console.log(JSON.stringify({model,scenario:scenario.id,category:scenario.category,selected,arguments:arguments_,accepted:scenario.accepted,validArguments,correctArguments,ok,latencyMs}));
   }
-  const ratios=Object.fromEntries(Object.entries(totals).map(([tier,[hits,total]])=>[tier,total?hits/total:1]));console.log(JSON.stringify({model,ratios,averageLatencyMs:Math.round(latencies.reduce((sum,value)=>sum+value,0)/Math.max(1,latencies.length)),invalidToolRate:invalidTools.length/scenarios.length,invalidToolScenarios:invalidTools,loopRate:0,targets:{simple:.95,mutation:.90,multi:.80}}));if(ratios.simple<.95||ratios.mutation<.90||ratios.multi<.80)failed=true;
+  const ratios=Object.fromEntries(Object.entries(totals).map(([tier,[hits,total]])=>[tier,total?hits/total:1]));console.log(JSON.stringify({model,ratios,averageLatencyMs:Math.round(latencies.reduce((sum,value)=>sum+value,0)/Math.max(1,latencies.length)),invalidToolRate:invalidTools.length/scenarios.length,invalidToolScenarios:invalidTools,targets:{simple:.95,mutation:.90,multi:.80}}));if(ratios.simple<.95||ratios.mutation<.90||ratios.multi<.80)failed=true;
 }
-process.exitCode=failed?1:0;
+process.exitCode=failed||Boolean(missingModels.length&&process.env.NEXO_EVAL_ALLOW_MISSING!=="1")?1:process.exitCode??0;
