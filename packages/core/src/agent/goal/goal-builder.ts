@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
+import { parseTextFileIntent } from "../intent/text-file-intent.js";
 import type { AgentResourceContext, AgentTaskState, GoalDeliverable, GoalStep } from "./goal-types.js";
 
 export class GoalBuilder {
@@ -48,6 +49,15 @@ function deliverableFrom(output: OutputTarget, resolver: PathIntentResolver): Go
 }
 
 function inferOutputTarget(objective: string, paths: string[]): OutputTarget | undefined {
+  const textFile = parseTextFileIntent(objective);
+  if (textFile) {
+    return {
+      requestedPath: `${textFile.destination}\\${textFile.fileName}`,
+      kind: "file",
+      consumedPaths: [textFile.fileName],
+    };
+  }
+
   const folder = objective.match(/(?:crie|criar|gere|gerar)\s+(?:uma?\s+)?(?:pasta|diret[oó]rio)\s+["']?([^"'.,\\/]+?)["']?\s+(?:em|no|na|nos|nas|para|dentro\s+de)\s+(.+?)(?:[.!?]|$)/i);
   if (folder) {
     const name = folder[1].trim();
@@ -75,7 +85,7 @@ function destinationAfter(objective: string, token: string) {
   const index = objective.toLowerCase().lastIndexOf(token.toLowerCase());
   if (index < 0) return undefined;
   const tail = objective.slice(index + token.length);
-  const match = tail.match(/^\s+(?:em|no|na|nos|nas|para|dentro\s+de)\s+(.+?)(?:[.!?]|$)/i);
+  const match = tail.match(/^\s+(?:(?:especificamente|exatamente|diretamente|somente|apenas)\s+)*(?:em|no|na|nos|nas|para|dentro\s+de)\s+(.+?)(?:[.!?]|$)/i);
   return match ? cleanDestination(match[1]) : undefined;
 }
 
