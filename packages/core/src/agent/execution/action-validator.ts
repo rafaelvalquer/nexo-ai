@@ -2,12 +2,15 @@ import type { ConnectionService } from "../../connections/service.js";
 import fs from "node:fs";
 import path from "node:path";
 import { LocationRegistry } from "../../locations/location-registry.js";
+import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import type { PermissionEngine } from "../../permissions/policy.js";
 import type { SecurityPolicyService } from "../../security/policy.js";
 import type { ToolRegistry } from "../../tools/registry.js";
+import { GoalBuilder } from "../goal/goal-builder.js";
 import { semanticMutationAllowed } from "../security/semantic-mutation-guard.js";
 import { actionFingerprint } from "./action-fingerprint.js";
 import { ConnectionResolver, isConnectionCapability } from "./connection-resolver.js";
+import { ToolArgumentResolver } from "./tool-argument-resolver.js";
 import type { ActionExecutionContext, ActionPreflightResult } from "./types.js";
 import { KnownFolderResolver } from "../resolution/known-folder-resolver.js";
 
@@ -38,6 +41,8 @@ export class ActionValidator {
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
     normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], this.locations);
+    bindGoalControlledArguments(tool.name, candidate, context.userRequest, this.locations);
+
     for (const capability of tool.permissions) {
       if (isConnectionCapability(capability) && this.connections) {
         const resolution = new ConnectionResolver(this.connections).resolve(capability, candidate.connectionId);
@@ -64,6 +69,12 @@ export class ActionValidator {
   }
 }
 
+function bindGoalControlledArguments(toolName: string, input: Record<string, unknown>, userRequest: string | undefined, locations: LocationRegistry) {
+  if (!userRequest || !["create_text_file", "create_folder"].includes(toolName)) return;
+  const taskState = new GoalBuilder(new PathIntentResolver(locations)).build(userRequest);
+  const resolved = new ToolArgumentResolver().resolve(toolName, input, taskState);
+  Object.assign(input, resolved);
+}
 function validatePaths(value: unknown, use: (target: string) => void) {
   if (typeof value === "string") use(value);
   else if (Array.isArray(value)) for (const item of value) if (typeof item === "string") use(item);
