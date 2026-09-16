@@ -139,11 +139,36 @@ function requestedCount(text: string) {
 }
 
 function knownFolder(text: string, locations: LocationRegistry) {
-  if (/\b(?:downloads?|downlaod|donwload|dowload)|pasta\s+downloads?\b/i.test(text)) return locations.resolve("downloads")?.path;
-  if (/\bdocumentos?|documents?\b/i.test(text)) return locations.resolve("documents")?.path;
-  if (/\bdesktop|[aá]rea\s+de\s+trabalho\b/i.test(text)) return locations.resolve("desktop")?.path;
+  const resolver = new PathIntentResolver(locations);
+  const destination = destinationPhrase(text);
+  if (destination) {
+    const resolved = resolver.resolve(destination);
+    if (resolved.status === "resolved" && resolved.resolvedPath) return resolved.resolvedPath;
+  }
+
   const absolute = text.match(/\b([A-Za-z]:\\[^\n,;]+)/);
-  return absolute?.[1]?.trim();
+  if (absolute) {
+    const resolved = resolver.resolve(absolute[1].trim());
+    if (resolved.status === "resolved" && resolved.resolvedPath) return resolved.resolvedPath;
+  }
+
+  // Commands such as "liste Downloads" have no preposition. Match every registered
+  // location, including arbitrary authorized roots, without hard-coding folder names.
+  for (const candidate of locations.getAliases()) {
+    const expression = new RegExp(`(?:^|\\b)${escapeRegExp(candidate.alias)}(?:\\b|$)`, "i");
+    if (expression.test(text)) return candidate.location.path;
+  }
+  return undefined;
+}
+
+function destinationPhrase(text: string) {
+  const match = text.match(/(?:\b(?:em|no|na|nos|nas|para)\b|\bdentro\s+de\b)\s+(.+?)\s*$/i);
+  if (!match) return undefined;
+  return match[1].trim().replace(/[.!?]+$/g, "").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizeUrl(raw: string) {
