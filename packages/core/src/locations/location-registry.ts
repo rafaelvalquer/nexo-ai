@@ -85,13 +85,19 @@ export class LocationRegistry {
   }
 
   private registerAuthorizedRoots(roots: string[]) {
-    const canonicalRoots = [...new Set(roots.map(root => canonical(root)))];
+    const seen = new Set<string>();
+    const canonicalRoots = roots.map(root => canonical(root)).filter(root => {
+      const key = rootIdentity(root);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     const candidates = canonicalRoots.map((root, index) => {
       const label = rootLabel(root);
-      return { root, index, label, normalizedLabel: normalizeLocationText(label) };
+      return { root, index, label, normalizedLabel: normalizeLocationText(label), canAlias: !isFilesystemRoot(root) };
     });
     const labelCount = new Map<string, number>();
-    for (const item of candidates) labelCount.set(item.normalizedLabel, (labelCount.get(item.normalizedLabel) ?? 0) + 1);
+    for (const item of candidates.filter(item => item.canAlias)) labelCount.set(item.normalizedLabel, (labelCount.get(item.normalizedLabel) ?? 0) + 1);
 
     for (const item of candidates) {
       const id = `authorized-root:${item.index}`;
@@ -99,8 +105,9 @@ export class LocationRegistry {
       this.locations.set(id, location);
 
       // Absolute paths always resolve without aliases. A basename alias is added only
-      // when it is unambiguous and does not shadow a built-in/explicit alias.
-      if (!item.normalizedLabel || labelCount.get(item.normalizedLabel) !== 1 || this.aliasIndex.has(item.normalizedLabel)) continue;
+      // when it is unambiguous and does not shadow a built-in/explicit alias. Drive/
+      // filesystem roots intentionally have no natural-language basename alias.
+      if (!item.canAlias || !item.normalizedLabel || labelCount.get(item.normalizedLabel) !== 1 || this.aliasIndex.has(item.normalizedLabel)) continue;
       this.registerAlias(item.label, location);
       this.registerAlias(`pasta ${item.label}`, location);
     }
@@ -128,8 +135,19 @@ function canonical(value: string) {
 }
 
 function rootLabel(value: string) {
-  const normalized = path.win32.isAbsolute(value) ? path.win32.normalize(value) : path.normalize(value);
-  const parsed = path.win32.isAbsolute(normalized) ? path.win32.parse(normalized) : path.parse(normalized);
-  const base = path.win32.isAbsolute(normalized) ? path.win32.basename(normalized) : path.basename(normalized);
+  const windows = path.win32.isAbsolute(value);
+  const normalized = windows ? path.win32.normalize(value) : path.normalize(value);
+  const parsed = windows ? path.win32.parse(normalized) : path.parse(normalized);
+  const base = windows ? path.win32.basename(normalized) : path.basename(normalized);
   return base || parsed.root || normalized;
+}
+
+function rootIdentity(value: string) {
+  const normalized = canonical(value);
+  return path.win32.isAbsolute(normalized) || process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function isFilesystemRoot(value: string) {
+  const parsed = path.win32.isAbsolute(value) ? path.win32.parse(path.win32.normalize(value)) : path.parse(path.normalize(value));
+  return parsed.root === value || parsed.root === (path.win32.isAbsolute(value) ? path.win32.normalize(value) : path.normalize(value));
 }
