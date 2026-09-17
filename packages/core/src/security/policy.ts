@@ -4,15 +4,10 @@ import type { NexoSettings, RiskLevel } from "@nexo/shared";
 export class SecurityPolicyService {
   constructor(private settings: () => NexoSettings) {}
 
-  isToolEnabled(toolName:string):boolean{try{this.assertToolEnabled(toolName);return true;}catch{return false;}}
-
   assertToolEnabled(toolName: string) {
     const current = this.settings();
     if (!current.connectionsEnabled && /^(email|calendar)_/.test(toolName)) throw new Error("Conexões externas foram desativadas pela política de segurança.");
     if (!current.browserAutomationEnabled && toolName.startsWith("browser_")) throw new Error("Automação de navegador foi desativada pela política de segurança.");
-    if (current.webToolsEnabled === false && toolName.startsWith("web_")) throw new Error("As ferramentas web foram desativadas pela política de segurança.");
-    if (current.filesystemToolsEnabled === false && /^(list_files|search_files|read_|file_|move_file|copy_file|rename_file|create_folder|create_text_file|write_text_file|open_path|document_|calculate_hash|trash_file)/.test(toolName)) throw new Error("As ferramentas de arquivos foram desativadas pela política de segurança.");
-    if (current.systemToolsEnabled === false && /^(system_|open_application|disk_usage|memory_usage|process_list|shell_)/.test(toolName)) throw new Error("As ferramentas do sistema foram desativadas pela política de segurança.");
     if (!current.fileWritesEnabled && (/^(write_|move_|copy_|rename_|delete_|create_|trash_)/.test(toolName) || /^document_(create|transform)$/.test(toolName))) throw new Error("Escritas em arquivos foram desativadas pela política de segurança.");
   }
 

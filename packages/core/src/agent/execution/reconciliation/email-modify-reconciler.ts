@@ -14,7 +14,7 @@ export class EmailModifyReconciler implements MutationReconciler {
       const rows = await Promise.all(ids.map(id => this.email.getMessage(input.connectionId!, id, signal)));
       const expectedUnread = record.toolName.endsWith("mark_unread");
       return rows.every(row => Boolean(row.isUnread) === expectedUnread)
-        ? { status: "confirmed_success", result: { success:true, ok: true, summary: "Alteração de leitura confirmada pelo provedor." } }
+        ? { status: "confirmed_success", result: { ok: true, summary: "Alteração de leitura confirmada pelo provedor." } }
         : { status: "confirmed_failure" };
     } catch (error) { return { status: "still_unknown", reason: error instanceof Error ? error.message : String(error) }; }
   }

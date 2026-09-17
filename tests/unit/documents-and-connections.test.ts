@@ -246,7 +246,7 @@ describe("private audit", () => {
     expect(db.get<{ details_json: string }>("SELECT details_json FROM audit_logs LIMIT 1")?.details_json).toBe('{"redacted":true}');
   });
   it("redacts sensitive content in normal audit records while retaining operational metadata", () => {
-    const audit = new AuditService(db); audit.record("email_send", "CRITICAL", "success", { input:{to:[{email:"person@example.com"}],bodyText:"mensagem confidencial",access_token:"secret"}, result:{ok:true} });
+    const audit = new AuditService(db); audit.record("email_send", "SENSITIVE", "success", { input:{to:[{email:"person@example.com"}],bodyText:"mensagem confidencial",access_token:"secret"}, result:{ok:true} });
     const saved = JSON.parse(db.get<{ details_json: string }>("SELECT details_json FROM audit_logs LIMIT 1")!.details_json);
     expect(saved.input.to).toEqual({count:1}); expect(saved.input.bodyText).toEqual({redacted:true,length:21}); expect(saved.input.access_token).toBe("[REDACTED]"); expect(saved.result.ok).toBe(true);
   });

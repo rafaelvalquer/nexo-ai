@@ -3,18 +3,18 @@ import { Search } from "lucide-react";
 import { useAppStore } from "../../stores/app";
 
 type Command = { label:string; keywords:string; page?:string; run?:()=>Promise<void> };
-const pages=["Assistente","Macros","Ferramentas","Configurações"];
+const pages=["Hoje","Assistente","Documentos","Conexões","Aprovações","Automações","Atividade","Memória","Configurações"];
 
 export function CommandPalette() {
   const [open,setOpen]=useState(false),[query,setQuery]=useState(""); const setPage=useAppStore(s=>s.setPage);
   const commands=useMemo<Command[]>(()=>[
     ...pages.map(page=>({label:`Abrir ${page}`,keywords:page,page})),
     {label:"Nova conversa",keywords:"chat assistente nova conversa",page:"Assistente"},
-    {label:"Importar documento",keywords:"arquivo word pdf importar",page:"Assistente"},
-    {label:"Conectar Google",keywords:"gmail google conta conexão",page:"Configurações"},
-    {label:"Conectar Microsoft",keywords:"outlook microsoft conta conexão",page:"Configurações"},
-    {label:"Criar macro",keywords:"macro automação agendar rotina",page:"Macros"},
-    {label:"Ver ferramentas",keywords:"tools arquivos sistema web",page:"Ferramentas"},
+    {label:"Importar documento",keywords:"arquivo word pdf importar",page:"Documentos"},
+    {label:"Conectar Google",keywords:"gmail google conta conexão",page:"Conexões"},
+    {label:"Conectar Microsoft",keywords:"outlook microsoft conta conexão",page:"Conexões"},
+    {label:"Criar automação",keywords:"automação agendar rotina",page:"Automações"},
+    {label:"Abrir memória",keywords:"memória lembrar",page:"Memória"},
     {label:"Ativar/desativar modo privado",keywords:"privacidade privado",run:async()=>{const current=await window.nexo.getSettings();await window.nexo.updateSettings({privateMode:!current.privateMode});setPage("Configurações");}}
   ],[setPage]);
   const visible=useMemo(()=>commands.filter(command=>`${command.label} ${command.keywords}`.toLowerCase().includes(query.toLowerCase())),[commands,query]);

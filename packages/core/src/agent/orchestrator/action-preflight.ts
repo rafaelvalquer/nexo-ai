@@ -6,7 +6,7 @@ import type { BuiltPlanStep } from "./plan-builder.js";
 export type MaterializedAction = { step?: BuiltPlanStep; direct?: string };
 
 export function materializeDeferredAction(action: DeferredAction, result: ToolResult): MaterializedAction {
-  if (!result.ok) return { direct: typeof result.error === "string" ? result.error : result.error?.message ?? result.summary };
+  if (!result.ok) return { direct: result.error ?? result.summary };
   if (action.kind === "email.bulk") return materializeEmail(action, result.data);
   if (action.kind === "calendar.delete") return materializeCalendarDelete(action, result.data);
   if (action.kind === "calendar.update") return materializeCalendarUpdate(action, result.data);

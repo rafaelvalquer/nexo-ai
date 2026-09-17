@@ -26,7 +26,7 @@ describe("Agent V2 email.send tool refresh", () => {
         description: "Envia um e-mail após confirmação explícita do usuário",
         domain: "email",
         operation: "send",
-        risk: "CRITICAL",
+        risk: "SENSITIVE",
         mutatesState: true,
         requiresConfirmation: true,
         permissions: ["email.send"],
@@ -37,7 +37,7 @@ describe("Agent V2 email.send tool refresh", () => {
     const registry = {
       get: vi.fn((name: string) => name === "email_send_composed" ? {
         name,
-        risk: "CRITICAL",
+        risk: "SENSITIVE",
         mutationSafety: { idempotency: "none", reconciliation: "supported" }
       } : undefined)
     };
@@ -54,7 +54,7 @@ describe("Agent V2 email.send tool refresh", () => {
       llm as any,
       catalog as any,
       registry as any,
-      { allowedFilesystemRoots:()=>[] } as any,
+      {} as any,
       connections as any
     );
 

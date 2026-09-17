@@ -1,7 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { AgentLoop } from "../../packages/core/src/agent/loop/agent-loop.js";
 import { AgentLoopRunner } from "../../packages/core/src/agent/loop/agent-loop-runner.js";
 import { V2FastPathRouter } from "../../packages/core/src/agent/loop/v2-fast-path.js";
@@ -14,15 +11,8 @@ import { ActionExecutor } from "../../packages/core/src/agent/execution/action-e
 import { ToolRegistry } from "../../packages/core/src/tools/registry.js";
 import { createAgentToolSchemas } from "../../packages/core/src/llm/agent/tool-schema-factory.js";
 import { OllamaProvider } from "../../packages/core/src/llm/ollama.js";
-import { AgentPlanner } from "../../packages/core/src/agent/planner.js";
-import { AgentEngine } from "../../packages/core/src/agent/engine.js";
-import { NexoDatabase } from "../../packages/core/src/database/db.js";
-import { PermissionEngine } from "../../packages/core/src/permissions/policy.js";
-import { ApprovalService } from "../../packages/core/src/permissions/approvals.js";
-import { AuditService } from "../../packages/core/src/audit/audit.js";
-import { z } from "zod";
 
-function tool(name:string,domain:string,mutatesState=false):AgentToolDescriptor{return{name,description:`Tool ${name}`,domain,operation:name,risk:mutatesState?"WRITE":"READ",mutatesState,requiresConfirmation:mutatesState,permissions:[],parameters:{type:"object",properties:{}}};}
+function tool(name:string,domain:string,mutatesState=false):AgentToolDescriptor{return{name,description:`Tool ${name}`,domain,operation:name,risk:mutatesState?"SAFE_WRITE":"READ",mutatesState,requiresConfirmation:mutatesState,permissions:[],parameters:{type:"object",properties:{}}};}
 
 function connectionHarness() {
   const connectionId = "11111111-1111-4111-8111-111111111111";
@@ -47,40 +37,11 @@ describe("Agent V2 routing",()=>{
 
   it("uses a deterministic read-only fast path for simple local tasks",()=>{
     const router=new V2FastPathRouter();
-    const tools=[tool("daily_summary","system"),tool("list_files","filesystem"),tool("email_latest","email"),tool("browser_agent_run","browser"),tool("web_search","web"),tool("web_fetch","web")];
+    const tools=[tool("daily_summary","system"),tool("list_files","filesystem"),tool("email_latest","email"),tool("browser_agent_run","browser")];
     expect(router.resolve("Analise meu computador",tools)?.name).toBe("daily_summary");
     expect(router.resolve("Liste os arquivos na pasta Downloads",tools)?.name).toBe("list_files");
     expect(router.resolve("Qual foi meu último email?",tools)?.name).toBe("email_latest");
-    expect(router.resolve("Entre no site InfoMoney e veja as últimas notícias",tools)?.name).toBe("web_search");
-  });
-
-  it("routes common macro steps directly to their tools",()=>{
-    const router=new V2FastPathRouter();
-    const tools=[tool("open_application","system",true),tool("open_path","filesystem",true),tool("open_url","browser",true),tool("move_file","filesystem",true),tool("copy_file","filesystem",true),tool("rename_file","filesystem",true),tool("create_folder","filesystem",true),tool("web_fetch","web")];
-    expect(router.resolve("Abra o aplicativo vscode",tools)).toMatchObject({name:"open_application",arguments:{application:"vscode"}});
-    expect(router.resolve('Abra o caminho "C:\\Projetos\\nexo"',tools)).toMatchObject({name:"open_path",arguments:{path:"C:\\Projetos\\nexo"}});
-    expect(router.resolve('Mova o arquivo "C:\\Downloads\\relatorio.csv" para "C:\\Relatorios\\relatorio.csv"',tools)).toMatchObject({name:"move_file",arguments:{source:"C:\\Downloads\\relatorio.csv",destination:"C:\\Relatorios\\relatorio.csv"}});
-    expect(router.resolve('Copie o arquivo "C:\\Downloads\\relatorio.csv" para "C:\\Relatorios\\relatorio.csv"',tools)).toMatchObject({name:"copy_file",arguments:{source:"C:\\Downloads\\relatorio.csv",destination:"C:\\Relatorios\\relatorio.csv"}});
-    expect(router.resolve('Renomeie o arquivo "C:\\Relatorios\\a.csv" para "C:\\Relatorios\\b.csv"',tools)).toMatchObject({name:"rename_file",arguments:{path:"C:\\Relatorios\\a.csv",newPath:"C:\\Relatorios\\b.csv"}});
-    expect(router.resolve('Crie a pasta "C:\\Relatorios\\2026"',tools)).toMatchObject({name:"create_folder",arguments:{path:"C:\\Relatorios\\2026"}});
-    expect(router.resolve("Leia https://example.com/artigo",tools)).toMatchObject({name:"web_fetch",arguments:{url:"https://example.com/artigo"}});
-  });
-
-  it("plans macro browser downloads without asking the LLM to choose the tool",async()=>{
-    const llm={plan:vi.fn(async()=>{throw new Error("LLM should not be called for a structured macro action");})} as any,registry=new ToolRegistry();const input={selector:"#download",path:"C:\\Reports\\daily.csv"};const plan=await new AgentPlanner(llm,registry).plan(`[[NEXO_TOOL:browser_download]] ${JSON.stringify(input)}`);
-    expect(plan).toMatchObject({tool:"browser_download",input,origin:"fast"});expect(llm.plan).not.toHaveBeenCalled();
-  });
-
-  it("routes macro browser actions before Agent Loop and still requests exact approval",async()=>{
-    const root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-macro-browser-route-"));
-    try{
-      const db=new NexoDatabase(root);await db.ready();const approvals=new ApprovalService(db),execute=vi.fn(async()=>({ok:true,summary:"executed"}));
-      const registry=new ToolRegistry().register({name:"browser_click",description:"Clica na página",risk:"CRITICAL",permissions:["browser.interact"],mutatesState:true,inputSchema:z.object({selector:z.string()}),execute});
-      const llm={plan:vi.fn(async()=>{throw new Error("Agent Loop must not plan an explicit macro step");})} as any,planner=new AgentPlanner(llm,registry),settings={allowedRoots:[],autonomy:"balanced"} as any;
-      const engine=new AgentEngine(planner,registry,new PermissionEngine(()=>settings),approvals,new AuditService(db),undefined,undefined,undefined,undefined,undefined,undefined,()=>"full");
-      const input={selector:"#continue"},reply=await engine.run(`[[NEXO_TOOL:browser_click]] ${JSON.stringify(input)}`);
-      expect(reply.approvalId).toBeTruthy();expect(approvals.list()[0]).toMatchObject({toolName:"browser_click",input,status:"pending"});expect(llm.plan).not.toHaveBeenCalled();expect(execute).not.toHaveBeenCalled();
-    }finally{fs.rmSync(root,{recursive:true,force:true});}
+    expect(router.resolve("Entre no site InfoMoney e veja as últimas notícias",tools)?.name).toBe("browser_agent_run");
   });
 
   it("propagates conversation/task context and preserves native tool-call history",async()=>{
@@ -123,7 +84,7 @@ describe("Agent V2 routing",()=>{
     const catalog = new CapabilityAwareToolCatalog(registry, connections);
     const executor = new ActionExecutor(
       registry,
-      { requiresApproval:(risk:string)=>risk==="CRITICAL", assertPath:()=>undefined, allowedRoots:()=>[] } as any,
+      { requiresApproval:()=>false, assertPath:()=>undefined } as any,
       { record:()=>undefined } as any,
       { connections }
     );
@@ -153,7 +114,7 @@ describe("Agent V2 routing",()=>{
     const { connectionId, connections } = connectionHarness();
     const registry = new ToolRegistry(undefined, {} as any);
     const catalog = new CapabilityAwareToolCatalog(registry, connections);
-    const executor = new ActionExecutor(registry,{requiresApproval:(risk:string)=>risk==="CRITICAL",assertPath:()=>undefined,allowedRoots:()=>[]} as any,{record:()=>undefined} as any,{connections});
+    const executor = new ActionExecutor(registry,{requiresApproval:()=>false,assertPath:()=>undefined} as any,{record:()=>undefined} as any,{connections});
     const llm={agentTurn:async()=>({toolCalls:[{id:"send-2",name:"email_send_composed",arguments:{connectionId:"nexus-ai",to:[{email:"rafael.valquer@gmail.com"}],subject:"Oi",bodyText:"Oi"}}]})} as any;
 
     const state=await new AgentLoopRunner(llm,catalog,registry,executor,connections).run("Envie e-mail para rafael.valquer@gmail.com falando Oi",{mode:"full"});

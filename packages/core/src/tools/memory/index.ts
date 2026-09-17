@@ -7,7 +7,7 @@ export function memoryTools(service: MemoryService): ToolDefinition[] {
     {
       name: "memory_save",
       description: "Salva uma informação útil na memória local somente quando o usuário pede explicitamente para lembrar, guardar ou salvar algo.",
-      risk: "WRITE",
+      risk: "SAFE_WRITE",
       permissions: ["memory.write"],
       mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"not_supported"},agent:{category:"memory",outputTrust:"sensitive_local"},
       inputSchema: z.object({
@@ -77,7 +77,7 @@ export function memoryTools(service: MemoryService): ToolDefinition[] {
     {
       name: "memory_delete",
       description: "Remove uma informação da memória local do usuário. Requer confirmação.",
-      risk: "CRITICAL",
+      risk: "SENSITIVE",
       permissions: ["memory.write"],
       mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"not_supported"},agent:{category:"memory",outputTrust:"sensitive_local"},
       inputSchema: z.object({

@@ -3,9 +3,6 @@ import { useCallback,useLayoutEffect,useRef,useState,type RefObject } from "reac
 type ChatAutoScrollOptions={
   sessionId?:string;
   messageCount:number;
-  newestMessageId?:string;
-  historyRevision?:number;
-  historyLoading?:boolean;
   streaming:boolean;
   streamRevision?:string|number;
   pendingApprovalId?:string;
@@ -18,7 +15,7 @@ function isNearBottom(node:HTMLDivElement){
 }
 
 export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAutoScrollOptions){
-  const{sessionId,messageCount,streaming,streamRevision=0,pendingApprovalId,newestMessageId,historyRevision=0,historyLoading=false}=options;
+  const{sessionId,messageCount,streaming,streamRevision=0,pendingApprovalId}=options;
   const[nearBottom,setNearBottom]=useState(true),[unread,setUnread]=useState(false);
   const followRef=useRef(true);
   const anchoringRef=useRef(false);
@@ -27,16 +24,6 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
   const pendingInitialScrollRef=useRef(true);
   const previousSessionRef=useRef<string>();
   const previousMessageCountRef=useRef(0);
-  const previousNewestRef=useRef<string>();
-  const previousHistoryRevisionRef=useRef(historyRevision);
-  const historyAnchorRef=useRef<{sessionId?:string;id:string;offset:number}>();
-  const captureHistoryAnchor=useCallback(()=>{
-    const node=ref.current;
-    if(!node)return;
-    const viewport=node.getBoundingClientRect();
-    const visible=[...node.querySelectorAll<HTMLElement>("[data-message-id]")].find(message=>message.getBoundingClientRect().bottom>viewport.top);
-    if(visible)historyAnchorRef.current={sessionId,id:visible.dataset.messageId!,offset:visible.getBoundingClientRect().top-viewport.top};
-  },[ref,sessionId]);
   const previousStreamRevisionRef=useRef<string|number>(streamRevision);
   const previousApprovalIdRef=useRef<string>();
   const currentSessionRef=useRef(sessionId);
@@ -103,16 +90,9 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
     window.setTimeout(()=>{anchoringRef.current=false;},behavior==="smooth"?400:0);
   },[markProgrammaticScroll,ref]);
 
-  const prepareHistoryLoad=useCallback(()=>{
-    cancelScheduledScroll();
-    followRef.current=false;
-    captureHistoryAnchor();
-  },[cancelScheduledScroll,captureHistoryAnchor]);
-
   const onScroll=useCallback(()=>{
     const node=ref.current;
     if(!node)return;
-    if(historyAnchorRef.current)captureHistoryAnchor();
     const near=isNearBottom(node);
     setNearBottom(near);
     if(anchoringRef.current)return;
@@ -122,16 +102,13 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
     }
     followRef.current=near;
     if(near)setUnread(false);
-  },[ref,captureHistoryAnchor]);
+  },[ref]);
 
   useLayoutEffect(()=>{
     const sessionChanged=previousSessionRef.current!==sessionId;
     if(sessionChanged){
       previousSessionRef.current=sessionId;
       previousMessageCountRef.current=messageCount;
-      previousNewestRef.current=newestMessageId;
-      previousHistoryRevisionRef.current=historyRevision;
-      historyAnchorRef.current=undefined;
       previousStreamRevisionRef.current=streamRevision;
       pendingInitialScrollRef.current=true;
       followRef.current=true;
@@ -141,27 +118,11 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
 
     if(pendingInitialScrollRef.current&&(messageCount>0||streaming)){
       pendingInitialScrollRef.current=false;
-      previousMessageCountRef.current=messageCount;
-      previousNewestRef.current=newestMessageId;
-      previousStreamRevisionRef.current=streamRevision;
       scheduleBottom("auto",true,false);
       return;
     }
 
-    const prepended=!sessionChanged&&historyRevision!==previousHistoryRevisionRef.current;
-    previousHistoryRevisionRef.current=historyRevision;
-    if(prepended){
-      cancelScheduledScroll();
-      const anchor=historyAnchorRef.current,node=ref.current;
-      if(anchor&&anchor.sessionId===sessionId&&node){
-        const element=node.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(anchor.id)}"]`);
-        if(element){markProgrammaticScroll("auto");node.scrollTop+=element.getBoundingClientRect().top-node.getBoundingClientRect().top-anchor.offset;}
-      }
-      historyAnchorRef.current=undefined;
-    }
-    if(!historyLoading)historyAnchorRef.current=undefined;
-    const messageAdded=!sessionChanged&&(newestMessageId!==undefined?newestMessageId!==previousNewestRef.current:!prepended&&messageCount>previousMessageCountRef.current);
-    previousNewestRef.current=newestMessageId;
+    const messageAdded=!sessionChanged&&messageCount>previousMessageCountRef.current;
     const streamChanged=!sessionChanged&&streaming&&streamRevision!==previousStreamRevisionRef.current;
     previousMessageCountRef.current=messageCount;
     previousStreamRevisionRef.current=streamRevision;
@@ -173,14 +134,13 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
     }else if(node&&!isNearBottom(node)){
       setUnread(true);
     }
-  },[messageCount,newestMessageId,historyRevision,historyLoading,cancelScheduledScroll,markProgrammaticScroll,ref,scheduleBottom,sessionId,streaming,streamRevision]);
+  },[messageCount,ref,scheduleBottom,sessionId,streaming,streamRevision]);
 
   useLayoutEffect(() => {
     if (!pendingApprovalId) return;
     if (previousApprovalIdRef.current === pendingApprovalId) return;
 
     previousApprovalIdRef.current = pendingApprovalId;
-    if(!followRef.current)return;
     const expectedSession = currentSessionRef.current;
 
     requestAnimationFrame(() => {
@@ -214,5 +174,5 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
     if(programmaticTimerRef.current!==undefined)window.clearTimeout(programmaticTimerRef.current);
   },[cancelScheduledScroll]);
 
-  return{isNearBottom:nearBottom,hasUnreadBelow:unread,onScroll,scrollToBottom,anchorLatestUser,prepareHistoryLoad};
+  return{isNearBottom:nearBottom,hasUnreadBelow:unread,onScroll,scrollToBottom,anchorLatestUser};
 }

@@ -20,12 +20,11 @@ export type AgentToolDescriptor = {
 };
 
 export class CapabilityAwareToolCatalog {
-  constructor(private readonly registry: ToolRegistry, private readonly connections?: ConnectionService,private readonly isToolEnabled:(name:string)=>boolean=()=>true) {}
+  constructor(private readonly registry: ToolRegistry, private readonly connections?: ConnectionService) {}
 
   list(): AgentToolDescriptor[] {
     return this.registry.definitions().filter(tool => {
       if(tool.agent?.hidden||tool.exposure==="CORE_INTERNAL_TOOL"||tool.exposure==="UI_ACTION_TOOL")return false;
-      if(!this.isToolEnabled(tool.name))return false;
       for (const permission of tool.permissions) {
         if (!connectionCapabilities.has(permission as ConnectionCapability)) continue;
         if (this.connections?.resolveForCapability(permission as ConnectionCapability).status !== "ready") return false;

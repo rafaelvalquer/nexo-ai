@@ -197,7 +197,7 @@ export class ChatActionService {
   private finish(request:ChatActionRequest, plan:ActionPlan, reply:AgentReply, approval?:ApprovalBlock) {
     const failures=z.object({failures:z.array(z.object({messageId:z.string(),error:z.string()}))}).safeParse(reply.result?.data);
     const ok=reply.result?.ok ?? Boolean(reply.results?.length && reply.results.every(result=>result.ok));
-    return this.update(request,ok?"success":"failed",ok?plan.successText:toolErrorMessage(reply.result?.error)??reply.text,approval,item=>{
+    return this.update(request,ok?"success":"failed",ok?plan.successText:reply.result?.error??reply.text,approval,item=>{
       const failure=item.resource.kind === "email" && failures.success ? failures.data.failures.find(f=>f.messageId===(item.resource as any).messageId) : undefined;
       if(failure){item.state="failed";item.statusText=failure.error;return;}
       if(!ok)return;
@@ -259,4 +259,3 @@ export class ChatActionService {
     }
   }
 }
-function toolErrorMessage(error:import("@nexo/shared").ToolResult["error"]){return typeof error==="string"?error:error?.message;}

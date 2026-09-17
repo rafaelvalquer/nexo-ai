@@ -57,7 +57,6 @@ export type AutomationAction = {
   type: string;
   config: Record<string, unknown>;
   continueOnError?: boolean;
-  condition?: AutomationCondition;
 };
 
 export type AutomationOutput =

@@ -72,18 +72,7 @@ export class V2FastPathRouter {
       }
     }
 
-    const hasFilesystemTarget=/\b(arquivos?|pastas?|diret[oó]rios?|downloads|documentos|[aá]rea de trabalho|desktop)\b/i.test(text);
-    const isListRequest=hasFilesystemTarget&&/\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text);
-    const move=text.match(/\b(?:mova|mover)\s+(?:o\s+)?arquivo\s+["']([^"']+)["']\s+(?:para|a)\s+["']([^"']+)["']/i);
-    if(move)return this.call(available,"move_file",{source:move[1],destination:move[2]},"Preparando a movimentação do arquivo…");
-    const copy=text.match(/\b(?:copie|copiar)\s+(?:o\s+)?arquivo\s+["']([^"']+)["']\s+(?:para|a)\s+["']([^"']+)["']/i);
-    if(copy)return this.call(available,"copy_file",{source:copy[1],destination:copy[2]},"Preparando a cópia do arquivo…");
-    const rename=text.match(/\b(?:renomeie|renomear)\s+(?:o\s+)?arquivo\s+["']([^"']+)["']\s+(?:para|como)\s+["']([^"']+)["']/i);
-    if(rename)return this.call(available,"rename_file",{path:rename[1],newPath:rename[2]},"Preparando a renomeação do arquivo…");
-    const createFolder=text.match(/\b(?:crie|criar)\s+(?:a\s+)?pasta\s+["']([^"']+)["']\s*$/i);
-    if(createFolder)return this.call(available,"create_folder",{path:createFolder[1]},"Preparando a criação da pasta…");
-    const openPath=text.match(/\b(?:abra|abrir)\s+(?:o\s+)?(?:caminho|arquivo|pasta)\s+["']([^"']+)["']\s*$/i);
-    if(openPath)return this.call(available,"open_path",{path:openPath[1]},"Preparando a abertura do caminho…");
+    const isListRequest=/\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text);
     const isCreateFolderRequest=/\b(crie|criar)\b.*\b(pasta|diret[oó]rio)\b/i.test(text);
     if(isListRequest||isCreateFolderRequest){
       const folder=resolveFolder(text,this.locations);
@@ -107,18 +96,10 @@ export class V2FastPathRouter {
     }
 
     const application=text.match(/\b(?:abra|abrir|inicie|iniciar)\s+(?:o\s+)?(?:aplicativo\s+)?([\w .+-]+)$/i)?.[1]?.trim();
-    if(application&&!/site|arquivo|pasta|https?/i.test(application))return this.call(available,"open_application",{application:application.replace(/[.!?]+$/g,"").trim()},`Preparando a abertura de ${application}…`);
+    if(application&&!/site|arquivo|pasta|https?/i.test(application))return this.call(available,"open_application",{application},`Preparando a abertura de ${application}…`);
 
-    const directPage=explicitWebUrl(text);
-    if(directPage&&/\b(leia|ler|resuma|resumir|extraia|extrair|conte[uú]do)\b/i.test(text)){
-      return this.call(available,"web_fetch",{url:directPage,maxChars:16000},"Lendo a página sem abrir navegador…");
-    }
     if (isBrowserResearch(text)) {
-      const personal=/\b(minha\s+conta|log(?:in|ar)|autenticad[oa]|sess[aã]o\s+salva|meu\s+perfil|clique|preencha|formul[aá]rio)\b/i.test(text);
-      if(personal)return this.call(available,"browser_agent_run",{request:text,mode:"personal"},"Executando a tarefa no navegador…");
-      const query=text.replace(/^\s*(?:por favor[, ]*)?(?:pesquise|pesquisar|pesquisa|procure|procurar|busque|buscar|encontre|veja|consulte)\s+/i,"").replace(/^\s*(?:sobre|na internet|na web)\s+/i,"").trim()||text;
-      return this.call(available,"web_search",{query,maxResults:6},"Pesquisando na web…")
-        ?? this.call(available,"browser_agent_run",{request:text,mode:"research"},"Pesquisando na web…");
+      return this.call(available, "browser_agent_run", { request: text, mode: "research" }, "Pesquisando na web…");
     }
     const url = siteFromText(text);
     if (url && /\b(abra|abrir|acesse|acessar|entre|entrar|navegue|navegar|v[aá]\s+para)\b/i.test(text)) {
@@ -224,5 +205,3 @@ function isBrowserResearch(text: string) {
   const web = /\b(internet|web|site|p[aá]gina|not[ií]cias?|infomoney|uol|g1|github|linkedin|youtube)\b|https?:\/\//i.test(text);
   return research && web;
 }
-
-function explicitWebUrl(text:string){const value=text.match(/https?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i)?.[0];if(!value)return undefined;const clean=value.replace(/[),.;!?]+$/g,"");return /^https?:\/\//i.test(clean)?clean:`https://${clean}`;}

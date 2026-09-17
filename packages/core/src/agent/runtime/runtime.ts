@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ToolResult } from "@nexo/shared";
 import type { NexoDatabase } from "../../database/db.js";
-import type { LocalMetricsService } from "../../observability/metrics.js";
+import { LocalMetricsService } from "../../observability/metrics.js";
 import { EmailSearchPreferenceRepository } from "../../email/preferences/repository.js";
 import { EmailSearchPreferenceService } from "../../email/preferences/service.js";
 import { EmailComposeDraftRepository } from "../../email/compose/draft-repository.js";
@@ -22,13 +22,13 @@ export class AgentRuntime{
   readonly emailPreferences:EmailSearchPreferenceService;
   readonly emailDrafts:EmailComposeDraftService;
   readonly entities:ConversationEntityLedger;
-  constructor(private db:NexoDatabase, metrics?:LocalMetricsService){
+  constructor(private db:NexoDatabase){
     this.intentMemory=new IntentMemoryStore(db);
     this.emailPreferences=new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(db));
     this.emailDrafts=new EmailComposeDraftService(new EmailComposeDraftRepository(db));
     this.entities=new ConversationEntityLedger(db);
     this.ensureClarificationSchema();
-    configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),metrics);
+    configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),new LocalMetricsService(db));
   }
   start(userRequest:string,steps:PlanStep[],context:AgentRuntimeContext={},metadata:Partial<Pick<PersistedAgentState,"intent"|"deferredAction"|"responseMode">>={}):AgentRun{const id=randomUUID(),now=new Date().toISOString(),state:PersistedAgentState={userRequest,steps,nextStep:0,results:[],iteration:0,...metadata};this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id) VALUES(?,?,?,?,?,?,?,?,?)",[id,userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??null,context.taskId??null,context.agentId??null]);return{id,status:"RUNNING",state,createdAt:now,updatedAt:now};}
   get(id:string){const row=this.db.get<RunRow>("SELECT * FROM agent_runs WHERE id=?",[id]);return row&&this.toRun(row);}

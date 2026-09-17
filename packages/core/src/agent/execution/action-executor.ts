@@ -48,7 +48,7 @@ export class ActionExecutor {
     const action: PreparedAction = {
       executionId, toolName: tool.name, input, fingerprint, mutatesState, risk: tool.risk,
       idempotencyKey: mutatesState && (tool.supportsIdempotency||tool.mutationSafety?.idempotency==="provider"||tool.mutationSafety?.idempotency==="nexo") ? createIdempotencyKey(context.runId, executionId, fingerprint) : undefined,
-      requiresApproval: this.permissions.requiresApproval(tool.risk, mutatesState) || Boolean(this.options.security?.requiresApproval(tool.name, tool.risk)),
+      requiresApproval: mutatesState || this.permissions.requiresApproval(tool.risk, mutatesState) || Boolean(this.options.security?.requiresApproval(tool.name, tool.risk)),
       status: "PREPARED"
     };
     if (mutatesState) this.options.records?.prepare(action, context.runId);
@@ -67,11 +67,10 @@ export class ActionExecutor {
     if (action.mutatesState) { this.options.records?.prepare(action, context.runId); this.options.records?.markDispatching(action.executionId); this.audit.record(tool.name, tool.risk, "DISPATCHING", { executionId: action.executionId, fingerprint: action.fingerprint }); }
     try {
       if (context.signal?.aborted) throw context.signal.reason ?? new DOMException("Cancelada", "AbortError");
-      const rawResult = await this.withResources(tool, action.input, context, () => this.withToolTimeout(tool,context.signal,signal=>tool.execute(action.input, { ...context, signal, executionId: action.executionId, idempotencyKey: action.idempotencyKey })));
-      const result = normalizeToolResult(rawResult);
+      const result = await this.withResources(tool, action.input, context, () => tool.execute(action.input, { ...context, executionId: action.executionId, idempotencyKey: action.idempotencyKey }));
       const status = result.ok ? "SUCCEEDED" : "FAILED" as const;
       this.options.metrics?.record("tool.duration_ms", Date.now() - startedAt, { tool: tool.name, ok: result.ok });
-      this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, durationMs: Date.now() - startedAt, errorCode: result.ok ? undefined : "TOOL_RESULT_ERROR", result });
+      this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, result });
       if (action.mutatesState) this.options.records?.complete(action.executionId, status, { result });
       this.options.metrics?.record(result.ok?"agent.tool_succeeded":"agent.tool_failed",1,{tool:tool.name});
       return { status, action, result };
@@ -81,7 +80,7 @@ export class ActionExecutor {
       const errorMessage = message(error);
       this.options.metrics?.record("tool.duration_ms", Date.now() - startedAt, { tool: tool.name, ok: false });
       this.options.metrics?.record("tool.failed", 1, { tool: tool.name });
-      this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, durationMs: Date.now() - startedAt, errorCode: error instanceof Error ? error.name : "UNKNOWN_ERROR", error: errorMessage });
+      this.audit.record(tool.name, tool.risk, status, { executionId: action.executionId, input: action.input, error: errorMessage });
       if (action.mutatesState) this.options.records?.complete(action.executionId, status, { error: errorMessage });
       this.options.metrics?.record(ambiguous?"agent.result_unknown":"agent.tool_failed",1,{tool:tool.name});
       return { status, action, error: errorMessage };
@@ -102,31 +101,11 @@ export class ActionExecutor {
     if (tool.mutatesState ?? tool.risk !== "READ") for (const field of tool.pathFields ?? []) validatePaths(input[field], target => keys.push(`filesystem:${path.resolve(target).toLowerCase()}`));
     return this.options.resources ? this.options.resources.withResources(keys, work) : work();
   }
-
-  private async withToolTimeout<T>(tool:ToolDefinition,parent:AbortSignal|undefined,work:(signal:AbortSignal)=>Promise<T>):Promise<T>{
-    const timeoutMs=tool.timeoutMs??defaultToolTimeout(tool);
-    if(!Number.isFinite(timeoutMs)||timeoutMs<1||timeoutMs>300_000)throw new Error(`Timeout inválido configurado para a ferramenta ${tool.name}.`);
-    if(parent?.aborted)throw parent.reason??new DOMException("Cancelada","AbortError");
-    const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
-    const onParentAbort=()=>controller.abort(parent?.reason??new DOMException("Cancelada","AbortError"));
-    const abortPromise=new Promise<never>((_,reject)=>controller.signal.addEventListener("abort",()=>reject(controller.signal.reason??new DOMException("Cancelada","AbortError")),{once:true}));
-    parent?.addEventListener("abort",onParentAbort,{once:true});
-    timer=setTimeout(()=>controller.abort(new DOMException(`A ferramenta excedeu o limite de ${timeoutMs} ms.`,"TimeoutError")),timeoutMs);timer.unref?.();
-    try{return await Promise.race([work(controller.signal),abortPromise]);}
-    finally{if(timer)clearTimeout(timer);parent?.removeEventListener("abort",onParentAbort);}
-  }
 }
 
 function validatePaths(value: unknown, use: (path: string) => void) { if (typeof value === "string") use(value); else if (Array.isArray(value)) value.forEach(item => { if (typeof item === "string") use(item); }); }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function normalizeToolResult(result: import("@nexo/shared").ToolResultInput): import("@nexo/shared").ToolResult {
-  if ("success" in result) return result;
-  const legacyError = typeof result.error === "string" ? result.error : undefined;
-  const code = legacyError && /^[A-Z][A-Z0-9_]{2,}$/.test(legacyError) ? legacyError : "TOOL_EXECUTION_FAILED";
-  return { success: result.ok, ok: result.ok, summary: result.summary, ...(result.data === undefined ? {} : { data: result.data }), ...(!result.ok ? { error: { code, message: legacyError ?? result.summary } } : {}) };
-}
 function isAmbiguous(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || /timeout|timed? out|network|connection reset|socket/i.test(message(error)); }
-function defaultToolTimeout(tool:ToolDefinition){if(tool.domain==="web"||tool.name.startsWith("web_"))return 15_000;if(tool.domain==="browser"||tool.name.startsWith("browser_"))return 30_000;if(tool.domain==="document"||tool.name.startsWith("document_"))return 120_000;return 60_000;}
 async function enrichReconciliationEvidence(toolName:string,input:Record<string,unknown>){
   if(["create_text_file","write_text_file"].includes(toolName)&&typeof input.content==="string")input.__nexoOutputHash=createHash("sha256").update(Buffer.from(input.content,"utf8")).digest("hex");
   if(toolName==="document_create"&&typeof input.content==="string"&&["txt","md","docx"].includes(String(input.format)))input.__nexoOutputHash=createHash("sha256").update(documentOutputBuffer(input.format as DocumentFormat,input.content,typeof input.title==="string"?input.title:undefined)).digest("hex");

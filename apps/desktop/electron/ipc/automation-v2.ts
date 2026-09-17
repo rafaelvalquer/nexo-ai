@@ -7,9 +7,6 @@ const CONDITION_OPERATORS = new Set(["equals","notEquals","contains","notContain
 
 export function registerAutomationV2Ipc(core: NexoCore): void {
   ipcMain.handle("nexo:automation:create-v2",(_,value)=>core.automation.create(validateCreate(core,value)));
-  ipcMain.handle("nexo:automation:cancel",(_,id)=>core.automation.cancel(requireId(id)));
-  ipcMain.handle("nexo:automation:resume-run",(_,id,mode)=>{const runId=requireId(id);if(mode!=="retry"&&mode!=="continue")throw new Error("Ação de retomada inválida.");return core.automation.resumeFailedRun(runId,mode);});
-  ipcMain.handle("nexo:automation:draft-natural",(_,value)=>{const data=requireRecord(value,"Rascunho da macro");return core.draftMacroFromNatural(requireText(data.description,"Descrição",3000),data.name===undefined?undefined:requireText(data.name,"Nome",160));});
   ipcMain.handle("nexo:automation:get",(_,id)=>core.automation.get(requireId(id)));
   ipcMain.handle("nexo:automation:update",(_,id,value)=>{
     const automationId=requireId(id);
@@ -83,7 +80,7 @@ function validateConditions(value:unknown):AutomationCondition[]{
 
 function validateActions(value:unknown,allowed:Set<string>):AutomationAction[]{
   if(!Array.isArray(value)||value.length<1||value.length>20)throw new Error("Adicione entre 1 e 20 ações.");
-  return value.map((item,index)=>{const data=requireRecord(item,`Ação ${index+1}`),type=requireText(data.type,`Tipo da ação ${index+1}`,120);if(!allowed.has(type))throw new Error(`Ação não registrada: ${type}`);const condition=data.condition===undefined?undefined:validateConditions([data.condition])[0];return{id:requireText(data.id,`ID da ação ${index+1}`,100),type,config:requireRecord(safeJsonValue(data.config??{}),`Configuração da ação ${index+1}`),continueOnError:data.continueOnError===true,condition};});
+  return value.map((item,index)=>{const data=requireRecord(item,`Ação ${index+1}`),type=requireText(data.type,`Tipo da ação ${index+1}`,120);if(!allowed.has(type))throw new Error(`Ação não registrada: ${type}`);return{id:requireText(data.id,`ID da ação ${index+1}`,100),type,config:requireRecord(safeJsonValue(data.config??{}),`Configuração da ação ${index+1}`),continueOnError:data.continueOnError===true};});
 }
 
 function validateOutput(value:unknown):AutomationOutput {

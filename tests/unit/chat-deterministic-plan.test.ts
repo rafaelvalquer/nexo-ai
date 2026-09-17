@@ -16,7 +16,7 @@ const plan = vi.fn(() => { throw new Error("Ollama must not be called for card a
 beforeEach(async () => {
   vi.clearAllMocks(); root = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-card-plan-")); allowedRoot = fs.mkdtempSync(path.join(process.cwd(), ".nexo-card-plan-files-"));
   db = new NexoDatabase(root); await db.ready(); approvals = new ApprovalService(db); runtime = new AgentRuntime(db);
-  const tool = {name: "test_trash", description: "Mover arquivo", risk: "CRITICAL", permissions: ["filesystem.write"], mutatesState: true, pathFields: ["path"], inputSchema: z.object({path: z.string()}), execute};
+  const tool = {name: "test_trash", description: "Mover arquivo", risk: "SENSITIVE", permissions: ["filesystem.write"], mutatesState: true, pathFields: ["path"], inputSchema: z.object({path: z.string()}), execute};
   engine = new AgentEngine({plan, observe: () => ({})} as any, {get: (name: string) => name === tool.name ? tool : undefined} as any, new PermissionEngine(() => ({allowedRoots: [allowedRoot]} as any)), approvals, new AuditService(db), undefined, runtime);
 });
 afterEach(() => { fs.rmSync(root, {recursive: true, force: true}); if (!allowedRoot.startsWith(`${process.cwd()}${path.sep}.nexo-card-plan-files-`)) throw new Error("Unsafe test cleanup"); fs.rmSync(allowedRoot, {recursive: true, force: true}); });

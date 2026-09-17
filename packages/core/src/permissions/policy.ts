@@ -15,10 +15,10 @@ export class PermissionEngine {
   }
 
   requiresApproval(risk: RiskLevel, mutatesState = false) {
-    // A tool incorrectly marked READ must never get a free mutation path.
-    if (risk === "CRITICAL" || (risk === "READ" && mutatesState)) return true;
+    if (mutatesState) return true;
     const autonomy = this.getSettings().autonomy;
-    if (risk === "WRITE") return autonomy === "cautious";
+    if (risk === "CRITICAL" || risk === "SENSITIVE") return true;
+    if (risk === "SAFE_WRITE") return autonomy === "cautious";
     return false;
   }
 

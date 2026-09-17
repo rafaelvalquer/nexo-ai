@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, shell, Notification } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, dialog, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,7 @@ const storage=createDesktopStoragePaths();
 let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
 let quitting=false;
-const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost(),notify:(title,body)=>{if(Notification.isSupported())new Notification({title,body}).show();}});
+const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost()});
 let httpServer:any=null;
 let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
 

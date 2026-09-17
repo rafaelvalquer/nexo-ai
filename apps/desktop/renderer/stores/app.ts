@@ -7,15 +7,9 @@ type Store = {
   setStatus: (s: unknown) => void;
 };
 
-const canonicalPage = (page: string) => ({
-  Hoje: "Assistente", "Automações": "Macros", Atividade: "Macros",
-  Aprovações: "Assistente", Conexões: "Configurações", Memória: "Configurações",
-  Documentos: "Assistente", Diagnóstico: "Configurações", Escritório: "Assistente"
-}[page] ?? page);
-
 export const useAppStore = create<Store>(set => ({
-  page: "Assistente",
-  setPage: page => set({ page: canonicalPage(page) }),
+  page: import.meta.env.DEV && !window.nexo ? "Assistente" : "Hoje",
+  setPage: page => set({ page }),
   status: null,
   setStatus: status => set({ status })
 }));

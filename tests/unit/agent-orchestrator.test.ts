@@ -24,7 +24,7 @@ const emailTools:any[]=[
   {name:"email_search",description:"Pesquisa",domain:"email",operation:"search",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["email.read"]},
   {name:"email_get_many",description:"Lê vários",domain:"email",operation:"read_many",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["email.read"]},
   {name:"email_bulk_trash",description:"Lixeira em lote",domain:"email",operation:"trash",risk:"CRITICAL",mutatesState:true,requiresConfirmation:true,permissions:["email.modify"]},
-  {name:"email_send_composed",description:"Envia",domain:"email",operation:"send",risk:"CRITICAL",mutatesState:true,requiresConfirmation:true,permissions:["email.send"]}
+  {name:"email_send_composed",description:"Envia",domain:"email",operation:"send",risk:"SENSITIVE",mutatesState:true,requiresConfirmation:true,permissions:["email.send"]}
 ];
 const calendarTools:any[]=[
   {name:"calendar_list",description:"Agenda",domain:"calendar",operation:"list_events",risk:"READ",mutatesState:false,requiresConfirmation:false,permissions:["calendar.read"]},
