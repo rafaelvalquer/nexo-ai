@@ -70,7 +70,7 @@ describe("buffered local metrics",()=>{
   it("closes once, cancels timers and preserves immediate approval writes",async()=>{
     metrics.record("queued",1);
     const approvals=new ApprovalService(db,metrics);
-    const approval=approvals.create("test",{},"SAFE_WRITE","test");
+    const approval=approvals.create("test",{},"WRITE","test");
     const reopened=new NexoDatabase(root);await reopened.ready();
     expect(reopened.get("SELECT id FROM approvals WHERE id=?",[approval.id])).toBeTruthy();
     expect(reopened.all("SELECT * FROM local_metrics")).toHaveLength(0);

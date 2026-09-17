@@ -23,7 +23,7 @@ beforeEach(async()=>{
   vi.clearAllMocks();root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-file-card-db-"));files=fs.mkdtempSync(path.join(process.cwd(),".nexo-chat-test-"));
   fs.writeFileSync(path.join(files,"report.txt"),"Conteúdo original");
   db=new NexoDatabase(root);await db.ready();conversations=new ConversationService(db);approvals=new ApprovalService(db);const runtime=new AgentRuntime(db);
-  settings={allowedRoots:[files],allowedDomains:[],fileWritesEnabled:true,connectionsEnabled:true,browserAutomationEnabled:true};
+  settings={allowedRoots:[files],allowedDomains:[],fileWritesEnabled:true,connectionsEnabled:true,browserAutomationEnabled:true,autonomy:"cautious"};
   const permissions=new PermissionEngine(()=>settings),security=new SecurityPolicyService(()=>settings);
   const tools=new Map([...filesystemTools(),...calendarTools({delete:calendarDelete,update:calendarUpdate,rsvp:calendarRsvp,get:async()=>event} as any)].map(tool=>[tool.name,tool]));
   tools.set("trash_file",{...tools.get("trash_file")!,execute:trash});

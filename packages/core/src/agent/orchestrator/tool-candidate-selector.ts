@@ -11,7 +11,8 @@ const DOMAIN_RULES: DomainRule[] = [
   { domain: "filesystem", pattern: /\b(arquivo|arquivos|pasta|pastas|download|downloads|documentos?|documents?|desktop|diret[oó]rio|diretorios?|pdf|docx?|xlsx?|txt|jpg|png|mp4)\b/i },
   { domain: "email", pattern: /\b(e-?mail|e-?mails|gmail|caixa de entrada|mensagem(?:ns)? recebida(?:s)?|remetente|assunto)\b/i },
   { domain: "calendar", pattern: /\b(agenda|calend[aá]rio|compromisso|compromissos|reuni[aã]o|reuni[oõ]es|evento|eventos|convite)\b/i },
-  { domain: "browser", pattern: /\b(internet|web|site|p[aá]gina|navegador|browser|chrome|edge|github|infomoney|uol|g1|linkedin|youtube|not[ií]cia|not[ií]cias)\b|https?:\/\//i },
+  { domain: "web", pattern: /\b(internet|web|site|p[aá]gina|artigo|pesquisa|pesquise|pesquisar|not[ií]cia|not[ií]cias|react|infomoney|uol|g1|github)\b|https?:\/\//i },
+  { domain: "browser", pattern: /\b(navegador|browser|chrome|edge|autenticad[oa]|login|clique|preencha|formul[aá]rio|baixe)\b/i },
   { domain: "memory", pattern: /\b(lembre|lembrar|mem[oó]ria local|memorize|guarde|recorde|esque[cç]a)\b/i },
   { domain: "application", pattern: /\b(aplicativo|aplica[cç][aã]o|programa|vscode|visual studio code|android studio|explorer)\b/i }
 ];
@@ -36,7 +37,8 @@ const TOOL_HINTS: Array<[RegExp, string[]]> = [
   [/\b(crie|criar|salve|salvar|escreva|gerar).*(?:\.txt|\.md|\.docx|arquivo|documento)\b/i, ["create_text_file", "document_create", "write_text_file", "document_transform", "file_info"]],
   [/\b(agenda|calend[aá]rio|compromisso|reuni[aã]o).*(amanh[aã]|hoje|semana|pr[oó]xim)|\b(o que tenho).*(amanh[aã]|agenda)\b/i, ["calendar_list_agent", "calendar_search", "calendar_get"]],
   [/\b(crie|agende|marque).*(reuni[aã]o|evento|compromisso)\b/i, ["calendar_create_agent"]],
-  [/\b(infomoney|uol|g1|github|linkedin|youtube|site|web|internet).*(not[ií]cia|verifique|pesquise|procure|veja|analise)|\b(not[ií]cia|verifique|pesquise|procure|veja|analise).*(infomoney|uol|g1|github|site|web|internet)\b/i, ["browser_agent_run", "browser_open", "browser_navigate", "browser_extract"]],
+  [/\b(infomoney|uol|g1|github|site|web|internet|not[ií]cias?|pesquise|pesquisar|pesquisa).*(not[ií]cia|verifique|pesquise|procure|veja|analise|sobre)|\b(not[ií]cia|verifique|pesquise|procure|veja|analise).*(infomoney|uol|g1|site|web|internet)\b/i, ["web_search", "web_fetch"]],
+  [/\b(leia|ler|resuma|resumir|extraia|extrair).*(site|p[aá]gina|artigo)|https?:\/\//i, ["web_fetch", "web_extract"]],
   [/\b(abra|abrir|acesse|acessar|entre|entrar|navegue|navegar).*(site|github|infomoney|uol|g1|linkedin|youtube)|https?:\/\//i, ["browser_open", "browser_agent_run", "browser_navigate"]]
 ];
 

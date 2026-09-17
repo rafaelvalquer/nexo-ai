@@ -20,7 +20,7 @@ beforeEach(async()=>{
   execute.mockReset();execute.mockResolvedValue({ok:true,summary:"Alterado",data:undefined});
   root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-actions-"));db=new NexoDatabase(root);await db.ready();
   conversations=new ConversationService(db);approvals=new ApprovalService(db);runtime=new AgentRuntime(db);permissions=new PermissionEngine(()=>({allowedRoots:[]} as any));
-  const tools=new Map(["email_trash","email_archive","email_mark_read","email_mark_unread","email_bulk_trash","email_bulk_archive","email_bulk_mark_read","email_bulk_mark_unread","email_send_composed"].map(name=>[name,{name,description:name,risk:"SENSITIVE",permissions:[],mutatesState:true,inputSchema:z.record(z.unknown()),execute}]));
+  const tools=new Map(["email_trash","email_archive","email_mark_read","email_mark_unread","email_bulk_trash","email_bulk_archive","email_bulk_mark_read","email_bulk_mark_unread","email_send_composed"].map(name=>[name,{name,description:name,risk:"CRITICAL",permissions:[],mutatesState:true,inputSchema:z.record(z.unknown()),execute}]));
   tools.set("email_get",{name:"email_get",description:"Read",risk:"READ",permissions:[],mutatesState:false,inputSchema:z.record(z.unknown()),execute:async(input:any)=>({ok:true,summary:"Mensagem carregada",data:{...messages.find(message=>message.id===input.messageId),bodyText:"Corpo completo"}})});
   engine=new AgentEngine({observe:()=>({}),plan:()=>{throw new Error("Unexpected Ollama call");}} as any,{get:(name:string)=>tools.get(name)} as any,permissions,approvals,new AuditService(db),undefined,runtime);
   service=new ChatActionService(db,conversations,engine,approvals,runtime,permissions);

@@ -44,7 +44,7 @@ it("writes the whole message atomically and rolls back invalid attachments",()=>
   expect(service.getMessages(id)).toHaveLength(1);expect(db.get("SELECT * FROM application_state WHERE value='bad-task'")).toBeUndefined();
 });
 it("resolves approval ownership outside the latest page through Core",async()=>{
-  const approvals=new ApprovalService(db);const approval=approvals.create("test",{},"SAFE_WRITE","test");
+  const approvals=new ApprovalService(db);const approval=approvals.create("test",{},"WRITE","test");
   const old=service.addMessage(id,"assistant","old");
   db.run("UPDATE messages SET created_at='2000-01-01T00:00:00.000Z' WHERE id=?",[old.id]);
   service.savePresentation(old.id,{presentation:{version:1,blocks:[{id:"block",version:1,type:"approval",approvalId:approval.id,title:"Review",preview:"test",consequence:"test",status:"pending"}]},bindings:[]});seed();
@@ -61,4 +61,9 @@ it("migrates an existing database without rewriting its messages",async()=>{
   const reopened=new NexoDatabase(root);await reopened.ready();
   expect(new ConversationService(reopened).getMessages(id)).toEqual(original);
   expect(reopened.get("SELECT version FROM schema_migrations WHERE version=17")).toEqual({version:17});
+});
+it("normalizes legacy approval risks to READ, WRITE and CRITICAL",()=>{
+  const approvals=new ApprovalService(db),write=approvals.create("test",{},"WRITE","test"),critical=approvals.create("test",{},"CRITICAL","test");
+  db.run("UPDATE approvals SET risk='SAFE_WRITE' WHERE id=?",[write.id]);db.run("UPDATE approvals SET risk='SENSITIVE' WHERE id=?",[critical.id]);
+  expect(approvals.list("all").map(item=>item.risk)).toEqual(["CRITICAL","WRITE"]);
 });
