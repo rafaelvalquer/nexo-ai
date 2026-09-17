@@ -22,6 +22,6 @@ test("Configurações > integrações preserva configuração, conexão, permiss
   await expect(page.getByText("✓ Token presente",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("button",{name:"Copiar diagnóstico"}).click();
   await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Desconectar",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Desconectar Google?"})).toBeVisible();await page.getByRole("button",{name:"Cancelar"}).click();
-  await expect(page.evaluate(()=>((window as any).__disconnectCalls??0))).resolves.toBe(0);await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Desconectar",exact:true}).click();
+  await expect(page.evaluate(()=>((window as any).__disconnectCalls??0))).resolves.toBe(0);await page.getByRole("main").getByRole("button",{name:"Desconectar",exact:true}).click();
   await page.getByRole("button",{name:"Desconectar conta"}).click();await expect(page.getByText("Ação concluída")).toBeVisible();await expect(page.evaluate(()=>((window as any).__disconnectCalls??0))).resolves.toBe(1);
 });

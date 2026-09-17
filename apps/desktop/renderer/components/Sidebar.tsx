@@ -1,6 +1,8 @@
 import { MessageSquare, Zap, Settings, PanelLeftClose, PanelLeftOpen, Building2 } from "lucide-react";
 import { useAppStore } from "../stores/app";
 import { useAssistantStore } from "../stores/assistant";
+import { motion, useReducedMotion } from "motion/react";
+import { motionTokens } from "../design/motion";
 
 const items = [
   ["Assistente", "Assistente", MessageSquare],
@@ -14,6 +16,7 @@ export function Sidebar() {
   const setPage = useAppStore(s => s.setPage);
   const assistantBusy = useAssistantStore(s => s.sessions.some(session => session.status === "running" || session.status === "waiting_approval"));
   const collapsed=useAppStore(s=>s.sidebarCollapsed),setCollapsed=useAppStore(s=>s.setSidebarCollapsed);
+  const reduceMotion=useReducedMotion();
 
   return (
     <aside className="sidebar" aria-label="Navegação principal">
@@ -21,6 +24,7 @@ export function Sidebar() {
       <nav aria-label="Principal">
         {items.map(([label, route, Icon]) => (
           <button key={label} className={page === route ? "active" : ""} onClick={() => setPage(route)} title={label} aria-label={label} data-label={label} aria-current={page===route?"page":undefined}>
+            {page===route&&<motion.span className="navActiveIndicator" layoutId="active-navigation" aria-hidden="true" transition={reduceMotion?{duration:0}:motionTokens.spring.navigation}/>}
             <Icon size={18} />
             <span className="navLabel">{label}</span>
             {route === "Assistente" && assistantBusy && <span className="navBusy" title="Tarefa em execução" />}

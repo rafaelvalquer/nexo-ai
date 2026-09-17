@@ -33,7 +33,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar nav button { position: relative; min-height: 42px; color: var(--nexo-muted); border: 1px solid transparent; border-radius: 10px; transition: background .16s ease, color .16s ease, border-color .16s ease; }
 .sidebar nav button:hover { background: rgba(255,255,255,.035); color: var(--nexo-text); }
 .sidebar nav button[aria-current="page"], .sidebar nav button.active { color: var(--nexo-cyan-bright); background: linear-gradient(90deg, rgba(72,201,232,.12), rgba(72,201,232,.035)); border-color: rgba(72,201,232,.12); }
-.sidebar nav button[aria-current="page"]::before, .sidebar nav button.active::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--nexo-cyan); box-shadow: 0 0 12px rgba(72,201,232,.45); }
+.navActiveIndicator { position:absolute; z-index:0; left:-1px; top:9px; bottom:9px; width:2px; border-radius:2px; background:var(--nexo-cyan); box-shadow:0 0 12px rgba(72,201,232,.45); pointer-events:none; }
+.sidebar nav button > svg, .sidebar nav button > .navLabel { position:relative; z-index:1; }
+.sidebarCollapsed .navActiveIndicator { left:0; }
 .sidebar .navLabel { font-size: 13px; }
 .sidebarCollapsed .sidebar { align-items: center; padding-inline: 9px; }
 .sidebarCollapsed .sidebar .brand { justify-content: center; padding-inline: 0; }
