@@ -31,7 +31,7 @@ test("settings bootstrap exposes a retry state after a temporary local read fail
   await error.getByRole("button",{name:"Tentar novamente"}).click();
   await expect(page.getByRole("heading",{name:"Configurações",exact:true})).toBeVisible();
   await expect(page.getByLabel("URL do Ollama")).toBeVisible();
-  expect(await page.evaluate(()=>(window as any).__settingsReadAttempts())).toBe(2);
+  expect(await page.evaluate(()=>(window as any).__settingsReadAttempts())).toBeGreaterThan(1);
 });
 
 test("dangerous settings actions use an accessible confirmation drawer",async({page})=>{

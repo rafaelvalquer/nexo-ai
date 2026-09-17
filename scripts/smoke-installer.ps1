@@ -11,7 +11,11 @@ $readyFile = Join-Path $smokeRoot "NexoAI-Smoke-Ready-$runId.json"
 $process = $null
 
 try {
-  $install = Start-Process -FilePath $installer -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru -WindowStyle Hidden
+  $install = Start-Process -FilePath $installer -ArgumentList @("/S", "/D=$installDir") -PassThru -WindowStyle Hidden
+  if (-not $install.WaitForExit(120000)) {
+    $install.Kill($true)
+    throw "Instalador não concluiu em 120 segundos. Verifique se a máquina exige elevação ou possui outra instância de instalação ativa."
+  }
   if ($install.ExitCode -ne 0) { throw "Instalador terminou com código $($install.ExitCode)." }
   $executable = Join-Path $installDir "NexoAI.exe"
   if (-not (Test-Path -LiteralPath $executable)) { throw "Executável instalado não encontrado em $installDir." }

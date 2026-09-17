@@ -16,6 +16,38 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => { await server?.close(); });
 
+test("documents expose friendly retry and stale-data states", async ({ page }) => {
+  await page.goto(url);
+  await page.evaluate(() => {
+    const api = (window as any).nexo;
+    let attempts = 0;
+    let failReads = true;
+    api.listRecentDocuments = async () => {
+      attempts += 1;
+      if (failReads) throw new Error(attempts < 4 ? "SQLITE_BUSY: internal database detail" : "ECONNRESET: internal transport detail");
+      return [{ id: "document-ux", name: "Plano local.pdf", mimeType: "application/pdf", sizeBytes: 4096, status: "ready", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }];
+    };
+    api.chooseDocument = async () => null;
+    (window as any).__documentReadAttempts = () => attempts;
+    (window as any).__setDocumentReadFailure = (value: boolean) => { failReads = value; };
+  });
+
+  await page.keyboard.press("Control+K");
+  await page.getByPlaceholder("O que deseja fazer?").fill("abrir documentos");
+  await page.getByRole("option", { name: "Abrir Documentos" }).click();
+  await expect(page.getByRole("heading", { name: "Seus documentos não estão disponíveis" })).toBeVisible();
+  await expect(page.getByRole("alert")).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(() => (window as any).__setDocumentReadFailure(false));
+  await page.getByRole("button", { name: "Tentar novamente" }).click();
+  await expect(page.getByText("Plano local.pdf")).toBeVisible();
+  await page.evaluate(() => (window as any).__setDocumentReadFailure(true));
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Exibindo os dados carregados anteriormente.");
+  await expect(page.getByText("Plano local.pdf")).toBeVisible();
+  await expect(page.getByRole("status")).not.toContainText("ECONNRESET");
+  expect(await page.evaluate(() => (window as any).__documentReadAttempts())).toBeGreaterThan(2);
+});
+
 test("document preview uses the shared drawer and keeps version actions accessible", async ({ page }) => {
   await page.goto(url);
   await page.evaluate(() => {
