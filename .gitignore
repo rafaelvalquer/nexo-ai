@@ -1,8 +1,11 @@
 node_modules/
 dist/
 release/
+release-built/
+release-final*/
 apps/desktop/dist/
 apps/desktop/dist-electron/
+apps/desktop/release-final*/
 *.log
 .env
 .env.*

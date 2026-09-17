@@ -73,5 +73,5 @@ if(failures.length){
 const success=unsafeMutation===0&&structured/cases.length>=.999&&domainOk/cases.length>=.99&&intentOk/cases.length>=.98;
 process.exit(success?0:1);
 
-function tool(name,domain,operation,mutatesState,permissions){return{name,description:name,domain,operation,risk:mutatesState?"SENSITIVE":"READ",mutatesState,requiresConfirmation:mutatesState,permissions};}
+function tool(name,domain,operation,mutatesState,permissions){return{name,description:name,domain,operation,risk:mutatesState?"WRITE":"READ",mutatesState,requiresConfirmation:mutatesState,permissions};}
 function partialMatch(actual,expected){if(!expected||typeof expected!=="object")return true;for(const[key,value]of Object.entries(expected)){if(value&&typeof value==="object"&&!Array.isArray(value)){if(!partialMatch(actual?.[key],value))return false;}else if(actual?.[key]!==value)return false;}return true;}

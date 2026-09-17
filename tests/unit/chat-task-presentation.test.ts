@@ -34,7 +34,7 @@ it("private task cards remain ephemeral and are absent after rebuilding the task
   expect(db.get<{progress_json:string}>("SELECT progress_json FROM tasks WHERE id=?",[task.id])?.progress_json).not.toContain("Detalhes da tarefa");
 });
 it("resuming reflects approval resolution and clears the pending approval identity",()=>{
-  const approvals=new ApprovalService(db),approval=approvals.create("test",{},"SENSITIVE","Confirmar");
+  const approvals=new ApprovalService(db),approval=approvals.create("test",{},"CRITICAL","Confirmar");
   const tasks=new BackgroundTaskService(db),task=tasks.create("assistant-chat",{});
   tasks.markRunning(task.id);tasks.setPresentation(task.id,{version:1,blocks:[{id:"approval-block",version:1,type:"approval",approvalId:approval.id,title:"Confirmar",status:"pending"}]});tasks.markWaitingApproval(task.id,approval.id);
   approvals.resolve(approval.id,true);

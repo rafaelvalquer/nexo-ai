@@ -112,19 +112,19 @@ export function filesystemTools(): ToolDefinition[] {
       inputSchema:z.object({path:z.string()}), async execute({path:p}){const s=await fs.stat(p);return {ok:true,summary:"Metadados obtidos",data:{size:s.size,createdAt:s.birthtime.toISOString(),modifiedAt:s.mtime.toISOString(),isDirectory:s.isDirectory()}};}
     },
     {
-      name:"create_folder", description:"Cria diretório", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["path"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"create_folder", description:"Cria diretório", risk:"WRITE", permissions:["filesystem.write"], pathFields:["path"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({path:z.string()}), async execute({path:p}){await fs.mkdir(p,{recursive:true});return {ok:true,summary:`Pasta criada: ${p}`};}
     },
     {
-      name:"copy_file", description:"Copia arquivo", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"copy_file", description:"Copia arquivo", risk:"WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({source:z.string(),destination:z.string()}), async execute({source,destination}){await fs.mkdir(path.dirname(destination),{recursive:true});await fs.copyFile(source,destination);return {ok:true,summary:`Copiado para ${destination}`};}
     },
     {
-      name:"move_file", description:"Move arquivo", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"move_file", description:"Move arquivo", risk:"WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({source:z.string(),destination:z.string()}), async execute({source,destination}){await fs.mkdir(path.dirname(destination),{recursive:true});await fs.rename(source,destination);return {ok:true,summary:`Movido para ${destination}`};}
     },
     {
-      name:"rename_file", description:"Renomeia arquivo", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["path","newPath"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"rename_file", description:"Renomeia arquivo", risk:"WRITE", permissions:["filesystem.write"], pathFields:["path","newPath"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({path:z.string(),newPath:z.string()}), async execute({path:p,newPath}){await fs.rename(p,newPath);return {ok:true,summary:`Renomeado para ${newPath}`};}
     },
     {
@@ -136,12 +136,12 @@ export function filesystemTools(): ToolDefinition[] {
       inputSchema:z.object({path:z.string()}), async execute({path:p}){await trash([p]);return {ok:true,summary:`Enviado para a lixeira: ${p}`};}
     },
     {
-      name:"compress_files", description:"Cria arquivo ZIP", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["destination", "sources"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"compress_files", description:"Cria arquivo ZIP", risk:"WRITE", permissions:["filesystem.write"], pathFields:["destination", "sources"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({sources:z.array(z.string()).min(1),destination:z.string()}),
       async execute({sources,destination}) { await fs.mkdir(path.dirname(destination),{recursive:true}); await new Promise<void>((resolve,reject)=>{ const output=createWriteStream(destination); const zip=archiver("zip",{zlib:{level:9}}); output.on("close",()=>resolve()); zip.on("error",reject); zip.pipe(output); for(const s of sources){ zip.file(s,{name:path.basename(s)}); } void zip.finalize(); }); return {ok:true,summary:`ZIP criado: ${destination}`}; }
     },
     {
-      name:"extract_archive", description:"Extrai um ZIP para uma pasta", risk:"SAFE_WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
+      name:"extract_archive", description:"Extrai um ZIP para uma pasta", risk:"WRITE", permissions:["filesystem.write"], pathFields:["source","destination"],mutationSafety:{idempotency:"nexo",reconciliation:"supported"},
       inputSchema:z.object({source:z.string(),destination:z.string()}),
       async execute({source,destination}){
         const base=path.resolve(destination);await fs.mkdir(base,{recursive:true});const zip=new AdmZip(source);

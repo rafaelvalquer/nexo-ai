@@ -1,5 +1,5 @@
 import type {
-  ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest,
+  ConversationPageOptions, ConversationMessagePage, ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest,
   CreateAutomationV2Input, UpdateAutomationV2Input, AutomationExecutionResult, AutomationViewModel,
   EmailComposeDraftUpdateRequest, EmailComposeDraftCancelRequest, EmailComposeDraftSubmitRequest
 } from "@nexo/shared";
@@ -48,6 +48,7 @@ const api={
   createConversation:(title?:string)=>ipcRenderer.invoke("nexo:conversations:create",title),
   renameConversation:(id:string,title:string)=>ipcRenderer.invoke("nexo:conversations:rename",id,title),
   deleteConversation:(id:string)=>ipcRenderer.invoke("nexo:conversations:delete",id),
+  conversationMessagePage:(id:string,options:ConversationPageOptions={}):Promise<ConversationMessagePage>=>ipcRenderer.invoke("nexo:conversations:messages-page",id,options),
   conversationMessages:(id:string)=>ipcRenderer.invoke("nexo:conversations:messages",id),
   startChatTask:(conversationOrText:string,textOrAttachments?:string|string[],attachmentIds:string[]=[])=>typeof textOrAttachments==="string"?ipcRenderer.invoke("nexo:chat:start",conversationOrText,textOrAttachments,attachmentIds):legacyStart(conversationOrText,Array.isArray(textOrAttachments)?textOrAttachments:[]),
   listConnections:()=>ipcRenderer.invoke("nexo:connections:list"),
@@ -91,12 +92,15 @@ const api={
   getAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:get",id),
   createAutomation:(data:any)=>ipcRenderer.invoke("nexo:automation:create",data),
   createAutomationV2:(data:CreateAutomationV2Input)=>ipcRenderer.invoke("nexo:automation:create-v2",data),
+  draftMacroFromNatural:(data:{name?:string;description:string})=>ipcRenderer.invoke("nexo:automation:draft-natural",data),
   createNaturalAutomation:(data:{name:string;when:string;command:string;enabled?:boolean})=>ipcRenderer.invoke("nexo:automation:create-natural",data),
   updateAutomation:(id:string,data:UpdateAutomationV2Input)=>ipcRenderer.invoke("nexo:automation:update",id,data),
   duplicateAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:duplicate",id),
   toggleAutomation:(id:string,enabled:boolean)=>ipcRenderer.invoke("nexo:automation:toggle",id,enabled),
   removeAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:remove",id),
   runAutomation:(id:string):Promise<AutomationExecutionResult|AutomationViewModel>=>ipcRenderer.invoke("nexo:automation:run",id),
+  cancelAutomation:(id:string):Promise<boolean>=>ipcRenderer.invoke("nexo:automation:cancel",id),
+  resumeAutomationRun:(runId:string,mode:"retry"|"continue")=>ipcRenderer.invoke("nexo:automation:resume-run",runId,mode),
   testAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:test",id),
   listAutomationRuns:(id:string,limit=50)=>ipcRenderer.invoke("nexo:automation:runs",id,limit),
   getAutomationRun:(id:string)=>ipcRenderer.invoke("nexo:automation:run-get",id),

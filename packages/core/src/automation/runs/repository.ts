@@ -31,6 +31,21 @@ export class AutomationRunRepository {
     this.db.run("UPDATE automation_runs SET context_json=?,next_action_index=? WHERE id=?", [JSON.stringify(context), nextActionIndex, id]);
   }
 
+  failedContext(id:string):{context:AutomationExecutionContext;nextActionIndex:number}|undefined{
+    const row=this.db.get<{status:string;context_json:string|null;next_action_index:number|null}>("SELECT status,context_json,next_action_index FROM automation_runs WHERE id=?",[id]);
+    if(row?.status!=="failed"||!row.context_json)return undefined;
+    try{return{context:JSON.parse(row.context_json) as AutomationExecutionContext,nextActionIndex:Number(row.next_action_index??0)};}catch{return undefined;}
+  }
+
+  prepareResume(id:string,context:AutomationExecutionContext,nextActionIndex:number):void{
+    this.db.run("UPDATE automation_runs SET status='running',finished_at=NULL,duration_ms=NULL,summary=NULL,error=NULL,approval_id=NULL,context_json=?,next_action_index=? WHERE id=? AND status='failed'",[JSON.stringify(context),nextActionIndex,id]);
+  }
+
+  skipFailedStep(runId:string,ordinal:number):void{
+    const row=this.db.get<{id:string}>("SELECT id FROM automation_run_steps WHERE run_id=? AND ordinal=? AND status='failed' ORDER BY started_at DESC LIMIT 1",[runId,ordinal]);
+    if(row)this.finishStep(row.id,"skipped",{summary:"Etapa ignorada por solicitação do usuário."});
+  }
+
   startStep(runId: string, ordinal: number, actionId: string, actionType: string): string {
     const id = randomUUID();
     this.db.run("INSERT INTO automation_run_steps(id,run_id,ordinal,action_id,action_type,status,started_at) VALUES(?,?,?,?,?,'running',?)", [id, runId, ordinal, actionId, actionType, new Date().toISOString()]);
@@ -71,7 +86,7 @@ export class AutomationRunRepository {
 
   private mapRun(row: RunRow, includeSteps: boolean): AutomationRunViewModel {
     const run: AutomationRunViewModel = { id: row.id, automationId: row.automation_id, triggerType: row.trigger_type, status: asStatus(row.status), startedAt: row.started_at, finishedAt: row.finished_at ?? undefined, durationMs: row.duration_ms ?? undefined, summary: row.summary ?? undefined, error: row.error ?? undefined, taskId: row.task_id ?? undefined, conversationId: row.conversation_id ?? undefined, approvalId: row.approval_id ?? undefined };
-    if (includeSteps) run.steps = this.db.all<StepRow>("SELECT * FROM automation_run_steps WHERE run_id=? ORDER BY ordinal", [row.id]).map(mapStep);
+    if (includeSteps) run.steps = this.db.all<StepRow>("SELECT * FROM automation_run_steps WHERE run_id=? ORDER BY ordinal,started_at", [row.id]).map(mapStep);
     return run;
   }
 

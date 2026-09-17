@@ -144,7 +144,10 @@ function rootLabel(value: string) {
 
 function rootIdentity(value: string) {
   const normalized = canonical(value);
-  return path.win32.isAbsolute(normalized) || process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  const windowsPath = path.win32.isAbsolute(normalized);
+  const root = windowsPath ? path.win32.parse(normalized).root : path.parse(normalized).root;
+  const comparable = normalized === root ? normalized : normalized.replace(/[\\/]+$/, "");
+  return windowsPath || process.platform === "win32" ? comparable.toLowerCase() : comparable;
 }
 
 function isFilesystemRoot(value: string) {

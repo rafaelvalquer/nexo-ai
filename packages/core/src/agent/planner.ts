@@ -60,7 +60,7 @@ export class AgentPlanner{
       if(fallback)return withPresentationPolicy({...fallback,origin:"fast",intent:filesystemIntent},filesystemIntent);
       return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
     }
-    const local=fastRouter.route(userText),semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
+    const local=fastRouter.route(userText);if(local?.tool&&/^\s*\[\[NEXO_TOOL:(?:browser_download|browser_click|browser_type)\]\]/.test(userText))return withPresentationPolicy({...local,origin:"fast"});const semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);

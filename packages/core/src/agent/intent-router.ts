@@ -19,6 +19,8 @@ function normalizeUrl(raw: string) {
   return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
 }
 
+function explicitWebUrl(text:string){const value=text.match(/https?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i)?.[0];if(!value)return undefined;const clean=value.replace(/[),.;!?]+$/g,"");return /^https?:\/\//i.test(clean)?clean:`https://${clean}`;}
+
 function siteFromText(text: string): string | null {
   const explicit = text.match(/\b((?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:\/[^\s]*)?)/i);
   if (explicit) return normalizeUrl(explicit[1]);
@@ -53,6 +55,11 @@ function isBrowserAgentTask(text:string) {
 export class FastIntentRouter {
   route(text: string): Plan | null {
     const normalized = text.toLowerCase().trim();
+
+    const macroDownload=text.match(/^\s*\[\[NEXO_TOOL:browser_download\]\]\s*(\{[\s\S]*\})\s*$/);
+    if(macroDownload){try{const input=JSON.parse(macroDownload[1]) as Record<string,unknown>;if(typeof input.selector==="string"&&typeof input.path==="string")return{tool:"browser_download",input:{selector:input.selector,path:input.path},explanation:"Baixando o arquivo na página aberta; a ação será validada e confirmada conforme suas permissões…"};}catch{/* Invalid internal action payload falls through to normal intent handling. */}}
+    const macroBrowserAction=text.match(/^\s*\[\[NEXO_TOOL:(browser_click|browser_type)\]\]\s*(\{[\s\S]*\})\s*$/);
+    if(macroBrowserAction){try{const input=JSON.parse(macroBrowserAction[2]) as Record<string,unknown>;if(typeof input.selector==="string"&&(macroBrowserAction[1]==="browser_click"||typeof input.text==="string"))return{tool:macroBrowserAction[1],input,explanation:macroBrowserAction[1]==="browser_click"?"Clicando no elemento selecionado…":"Preenchendo o campo selecionado…"};}catch{/* Invalid internal action payload falls through to normal intent handling. */}}
 
     if (/computador.*lento|pc.*lento|porque.*(?:computador|pc).*lento|por que.*(?:computador|pc).*lento/.test(normalized)) {
       return { steps: [
@@ -107,7 +114,11 @@ export class FastIntentRouter {
 
     if (isBrowserAgentTask(text)) {
       const personal=/\b(minha\s+conta|log(?:in|ar)|autenticad[oa]|sess[aã]o\s+salva|meu\s+perfil)\b/i.test(text);
-      return { tool:"browser_agent_run", input:{request:text,mode:personal?"personal":"research"}, explanation:"Abrindo o Browser Agent para pesquisar na web…" };
+      if(personal)return { tool:"browser_agent_run", input:{request:text,mode:"personal"}, explanation:"Executando a tarefa autenticada no navegador…" };
+      const page=explicitWebUrl(text);
+      if(page&&/\b(leia|ler|resuma|resumir|extraia|extrair|conte[uú]do)\b/i.test(text))return{tool:"web_fetch",input:{url:page,maxChars:16000},explanation:"Lendo a página sem abrir navegador…"};
+      const query=text.replace(/^\s*(?:por favor[, ]*)?(?:pesquise|pesquisar|pesquisa|procure|procurar|busque|buscar|encontre|veja|consulte)\s+/i,"").replace(/^\s*(?:sobre|na internet|na web)\s+/i,"").trim()||text;
+      return { tool:"web_search", input:{query,maxResults:6}, explanation:"Pesquisando na web…" };
     }
 
     if (isBrowserAction(text)) {

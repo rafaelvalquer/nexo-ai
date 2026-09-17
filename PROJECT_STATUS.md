@@ -16,7 +16,7 @@
 - Abertura segura de aplicativos conhecidos, URL, arquivo e pasta.
 - Shell somente-leitura com allowlist.
 - Browser Agent com perfil isolado, navegação, extração, abas, clique/digitação com aprovação e screenshot.
-- Permission Engine com READ / SAFE_WRITE / SENSITIVE / CRITICAL.
+- Permission Engine com READ / WRITE / CRITICAL.
 - Aprovações e histórico de auditoria.
 - SQLite local via sql.js.
 - Memória explícita local e Modo Privado impedindo novas memórias.
