@@ -89,12 +89,12 @@ export function filesystemTools(): ToolDefinition[] {
       }
     },
     {
-      name: "search_files", description: "Pesquisa arquivos por nome", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
-      inputSchema: z.object({ path:z.string(), query:z.string(), maxDepth:z.number().int().min(0).max(8).default(4) }),
-      async execute({path:base,query,maxDepth}) {
-        const out:any[]=[];
-        const walk=async(dir:string,depth:number)=>{if(depth>maxDepth||out.length>=300)return;for(const e of await fs.readdir(dir,{withFileTypes:true}).catch(()=>[])){const full=path.join(dir,e.name);if(e.name.toLowerCase().includes(query.toLowerCase()))out.push({name:e.name,path:full,type:e.isDirectory()?"directory":"file"});if(e.isDirectory())await walk(full,depth+1);}};
-        await walk(base,0);
+      name: "search_files", description: "Pesquisa arquivos por nome em uma ou mais pastas permitidas", risk: "READ", permissions:["filesystem.read"], pathFields:["path","paths"],
+      inputSchema: z.object({ path:z.string().optional(), paths:z.array(z.string()).min(1).max(32).optional(), query:z.string().trim().min(1).max(260), maxDepth:z.number().int().min(0).max(8).default(4) }).refine(input=>Boolean(input.path||input.paths?.length),"Informe uma pasta permitida."),
+      async execute({path:base,paths,query,maxDepth}) {
+        const out:any[]=[];const roots:string[]=[...new Set<string>((paths as string[]|undefined)??(base?[String(base)]:[]))];
+        const walk=async(dir:string,depth:number)=>{if(depth>maxDepth||out.length>=300)return;for(const e of await fs.readdir(dir,{withFileTypes:true}).catch(()=>[])){const full=path.join(dir,e.name);if(e.name.toLowerCase().includes(query.toLowerCase()))out.push({name:e.name,path:full,type:e.isDirectory()?"directory":"file"});if(e.isDirectory()&&!e.isSymbolicLink())await walk(full,depth+1);}};
+        for(const root of roots){if(out.length>=300)break;await walk(root,0);}
         const visible=out.slice(0,100);
         const summary=visible.length
           ? `${out.length} resultado(s) encontrado(s).\n${visible.map(row=>`${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.path}`).join("\n")}`

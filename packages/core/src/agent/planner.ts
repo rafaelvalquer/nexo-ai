@@ -41,7 +41,7 @@ export class AgentPlanner{
   private readonly synthesizer:ResponseSynthesizer;
   private intentRetriever?:IntentMemoryRetriever;
   private retrieverStore?:IntentMemoryStore;
-  constructor(private llm:LLMProvider,private registry:ToolRegistry,private intentMemory?:IntentMemoryStore,private intentLearningEnabled:()=>boolean=()=>true,private metrics?:LocalMetricsService){
+  constructor(private llm:LLMProvider,private registry:ToolRegistry,private intentMemory?:IntentMemoryStore,private intentLearningEnabled:()=>boolean=()=>true,private metrics?:LocalMetricsService,private readonly authorizedRoots:()=>string[]=()=>[]){
     this.orchestrator=new IntentOrchestrator(llm,diagnostic=>this.recordIntentDiagnostic(diagnostic));this.synthesizer=new ResponseSynthesizer(llm);if(intentMemory){this.intentRetriever=new IntentMemoryRetriever(intentMemory,text=>llm.embed(text));this.retrieverStore=intentMemory;}
   }
   /** Transitional access for AgentLoop; it does not expose planning/orchestration. */
@@ -56,11 +56,11 @@ export class AgentPlanner{
     if(filesystemIntent){
       const built=buildIntentPlan(filesystemIntent,tools,previous);
       if(built.steps?.length||built.direct&&!isUnavailableToolPlan(built.direct))return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
-      const fallback=fastRouter.route(userText);
+      const fallback=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});
       if(fallback)return withPresentationPolicy({...fallback,origin:"fast",intent:filesystemIntent},filesystemIntent);
       return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
     }
-    const local=fastRouter.route(userText);if(local?.tool&&/^\s*\[\[NEXO_TOOL:(?:browser_download|browser_click|browser_type)\]\]/.test(userText))return withPresentationPolicy({...local,origin:"fast"});const semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
+    const local=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});if(local?.tool&&/^\s*\[\[NEXO_TOOL:(?:browser_download|browser_click|browser_type)\]\]/.test(userText))return withPresentationPolicy({...local,origin:"fast"});const semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);

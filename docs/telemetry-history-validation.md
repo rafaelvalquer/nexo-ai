@@ -13,17 +13,7 @@
 
 ## Verificações
 
-TypeScript: shared, core, renderer e Electron passaram. Browser-agent não foi alterado.
-
-A suíte completa executada durante a implementação teve 487 testes aprovados e cinco falhas. As cinco falhas foram reproduzidas separadamente em uma cópia temporária do HEAD original `586d561`, sem as alterações desta entrega:
-
-- `agent-email-send-tool-refresh`: mock sem `allowedFilesystemRoots`.
-- `agent-v2-routing`: um caso de roteamento de browser e dois mocks sem `allowedRoots`.
-- `authorized-filesystem-roots`: deduplicação de caminhos Windows com diferenças de maiúsculas/minúsculas.
-
-A última execução direcionada passou em 26 testes (incluindo retenção). As regressões desta entrega cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
-
-Os cenários Playwright `chat-history`, `chat-layout` e `chat-resources` passaram (10 casos distintos): paginação, posição de leitura, streaming, troca de chats, retry, cards e controles por teclado.
+TypeScript completo (`pnpm typecheck`) passou para shared, browser-agent, core e desktop. A suíte unitária e de segurança completa (`pnpm test`) passou em 123 arquivos e 530 testes. Os cenários Playwright direcionados de histórico/chat e os fluxos de macros/configurações passaram; macros e configurações: 4/4. As regressões cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
 
 ## Benchmark reproduzível
 
@@ -35,16 +25,16 @@ node scripts/benchmark-chat-persistence.mjs
 
 O script usa duas cópias idênticas de um banco sintético de 1.593.344 bytes, 1.000 eventos de telemetria e 10 gravações operacionais explícitas por cenário. Não acessa dados do usuário. O buffer é descarregado ao final da carga, como no encerramento normal; o teste com relógio controlado verifica separadamente o prazo de 5 segundos.
 
-Medição local em 16/09/2026, Node 22.16.0:
+Medição local em 17/09/2026, Node 22.19.0:
 
 | Medida | Por evento (antes) | Em lote (depois) |
 |---|---:|---:|
 | Exportações de telemetria | 1.000 | 1 |
 | Exportações operacionais | 10 | 10 |
 | Amostras preservadas | 1.000 | 1.000 |
-| Tempo em exportações | 2.793 ms | 28 ms |
-| Tempo da carga | 3.410 ms | 244 ms |
-| Atraso p95 do event loop | 179 ms | 23 ms |
-| Atraso máximo do event loop | 185 ms | 29 ms |
+| Tempo em exportações | 14.010 ms | 187 ms |
+| Tempo da carga | 16.791 ms | 547 ms |
+| Atraso p95 do event loop | 1.245 ms | 61 ms |
+| Atraso máximo do event loop | 1.255 ms | 80 ms |
 
 Resultado sintético de uma execução, não uma garantia de desempenho da aplicação inteira. Tempos variam com disco, tamanho do banco e carga da máquina.

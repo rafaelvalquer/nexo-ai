@@ -1,6 +1,8 @@
 import path from "node:path";
 import os from "node:os";
 import type { Plan } from "./planner.js";
+import { LocationRegistry } from "../locations/location-registry.js";
+import { PathIntentResolver } from "../locations/path-intent-resolver.js";
 
 function homeFolder(name: "Downloads" | "Documents" | "Desktop") {
   return path.join(os.homedir(), name);
@@ -41,11 +43,12 @@ function siteFromText(text: string): string | null {
 
 function isBrowserAction(text: string) {
   return /\b(abra|abrir|abre|acesse|acessar|entre|entrar|navegue|navegar|ir\s+para)\b/i.test(text) &&
-    /\b(navegador|browser|site|p[aá]gina|chrome|edge|google|instagram|youtube|github|infomoney|investing|linkedin)|https?:\/\/|\bwww\./i.test(text);
+    /\b(navegador|browser|site|p[aá]gina|url|google|instagram|youtube|github|infomoney|investing|linkedin)|https?:\/\/|\bwww\./i.test(text);
 }
 
 /** Explicit web research must never fall back to e-mail or local-file search. */
 function isBrowserAgentTask(text:string) {
+  if(/\b(resuma|resumir|analise|analisar|leia|ler|explique)\b/i.test(text)&&/\.(?:pdf|docx?|xlsx?|txt|md|csv|json)\b/i.test(text))return false;
   if (/\b(e-?mails?|gmail|caixa\s+de\s+entrada|agenda|calend[aá]rio|arquivos?|pastas?|downloads?|desktop|[aá]rea\s+de\s+trabalho)\b/i.test(text)) return false;
   const researchVerb=/\b(pesquise|pesquisar|procure|procurar|busque|buscar|investigue|investigar|analise|analisar|leia|ler|resuma|resumir|compare|comparar|verifique|verificar|consulte|consultar|encontre|encontrar|veja)\b/i.test(text);
   const explicitWeb=/\b(internet|web|site|p[aá]gina|not[ií]cias?\s+(?:de|do|da|no|na)|infomoney|investing|valor(?:\s+econ[oô]mico|\s+investe)?|g1|uol|linkedin|youtube|github)\b|https?:\/\/|\bwww\./i.test(text);
@@ -53,8 +56,17 @@ function isBrowserAgentTask(text:string) {
 }
 
 export class FastIntentRouter {
-  route(text: string): Plan | null {
+  route(text: string, options:{allowedRoots?:string[]}={}): Plan | null {
     const normalized = text.toLowerCase().trim();
+    const locations=new LocationRegistry({},[],options.allowedRoots??[]);
+
+    if(/\b(confirmo|pode\s+criar|salve|salvar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return{tool:"macro_confirm_draft",input:{confirm:true},explanation:"Salvando o rascunho da macro pausada…"};
+    if(/\b(cancele|cancelar|descarte|descartar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return{tool:"macro_confirm_draft",input:{confirm:false},explanation:"Descartando o rascunho da macro…"};
+    const macroCreate=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)?["“]?(.+?)["”]?\s+(?:que|para)\s+(.+?)[.!?]*$/i);
+    if(macroCreate&&macroCreate[2])return{tool:"macro_create_draft",input:{name:macroCreate[1].trim(),description:macroCreate[2].trim()},explanation:"Preparando um rascunho de macro para sua revisão…"};
+    if(/\b(liste|listar|mostre|mostrar|quais|minhas)\b/i.test(text)&&/\bmacros?\b/i.test(text))return{tool:"macro_list",input:{},explanation:"Consultando suas macros…"};
+    const macroRun=text.match(/\b(?:execute|executa|rode|rodar|inicie|iniciar)\s+(?:a\s+)?(?:minha\s+)?macro\s+["“]?(.+?)["”]?[.!?]*$/i);
+    if(macroRun)return{tool:"macro_run",input:{name:macroRun[1].trim()},explanation:`Preparando a execução da macro ${macroRun[1].trim()}…`};
 
     const macroDownload=text.match(/^\s*\[\[NEXO_TOOL:browser_download\]\]\s*(\{[\s\S]*\})\s*$/);
     if(macroDownload){try{const input=JSON.parse(macroDownload[1]) as Record<string,unknown>;if(typeof input.selector==="string"&&typeof input.path==="string")return{tool:"browser_download",input:{selector:input.selector,path:input.path},explanation:"Baixando o arquivo na página aberta; a ação será validada e confirmada conforme suas permissões…"};}catch{/* Invalid internal action payload falls through to normal intent handling. */}}
@@ -68,6 +80,9 @@ export class FastIntentRouter {
         { tool: "disk_usage", input: {}, explanation: "Verificando espaço em disco…" },
         { tool: "process_list", input: { limit: 12 }, explanation: "Analisando processos em execução…" }
       ] };
+    }
+    if (/\b(programas?|processos?)\b/i.test(text) && /\b(mem[oó]ria|ram)\b/i.test(text) && /\b(consumindo|usando|gastando|maior|mais)\b/i.test(text)) {
+      return { tool:"process_list",input:{limit:25,sortBy:"memory"},explanation:"Verificando quais processos consomem mais memória…" };
     }
     if (/uso.*mem[oó]ria|mem[oó]ria.*uso/.test(normalized)) return { tool: "memory_usage", input: {}, explanation: "Verificando o uso de memória…" };
     if (/uso.*disco|disco.*ocupado/.test(normalized)) return { tool: "disk_usage", input: {}, explanation: "Verificando o uso dos discos…" };
@@ -112,7 +127,8 @@ export class FastIntentRouter {
       return { direct: "Abra Configurações → Segurança → Pastas permitidas. Downloads, Documents e Desktop são autorizadas por padrão; você pode adicionar outras pastas manualmente." };
     }
 
-    if (isBrowserAgentTask(text)) {
+    const refersToCurrentPage=/\b(esta|essa|a atual)\s+(p[aá]gina|site|artigo)\b/i.test(text);
+    if (isBrowserAgentTask(text) && !(refersToCurrentPage&&!explicitWebUrl(text))) {
       const personal=/\b(minha\s+conta|log(?:in|ar)|autenticad[oa]|sess[aã]o\s+salva|meu\s+perfil)\b/i.test(text);
       if(personal)return { tool:"browser_agent_run", input:{request:text,mode:"personal"}, explanation:"Executando a tarefa autenticada no navegador…" };
       const page=explicitWebUrl(text);
@@ -127,8 +143,20 @@ export class FastIntentRouter {
       if (/\b(navegador|browser|chrome|edge)\b/i.test(text)) return { tool: "browser_launch", input: {}, explanation: "Abrindo o navegador controlado do Nexo…" };
     }
 
+    const openFolder=/\b(?:abra|abrir|abre|acesse|acessar)\b.*\b(?:pasta|diret[oó]rio)\s+(?:chamad[oa]\s+)?(.+?)\s*[.!?]*$/i.exec(text);
+    if(openFolder){
+      const requested=openFolder[1].replace(/^["'“”]|["'“”]$/g,"").trim();
+      const resolved=new PathIntentResolver(locations).resolve(requested);
+      if(resolved.status==="resolved"&&resolved.resolvedPath)return{tool:"open_path",input:{path:resolved.resolvedPath},explanation:`Abrindo a pasta ${requested}…`};
+    }
+
     const app = text.match(/\b(?:abra|abrir|abre)\s+(?:o\s+)?(chrome|google chrome|edge|microsoft edge|vscode|visual studio code|android studio|explorer)\b/i);
     if (app) return { tool: "open_application", input: { application: app[1] }, explanation: `Abrindo ${app[1]}…` };
+
+    const supportedExtension="(?:pdf|docx?|xlsx?|txt|md|csv|json|png|jpe?g)";
+    const fileName=text.match(new RegExp(`[\"“]([^\"”]+\\.${supportedExtension})[\"”]` ,"iu"))?.[1]?.trim()??text.match(new RegExp(`(?:^|\\s)([^\\\\/:*?\"<>|\\s]+\\.${supportedExtension})(?=\\s|[.!?,;:]?$)`,"iu"))?.[1]?.trim();
+    if(fileName&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return{tool:"document_summarize_named",input:{fileName},explanation:`Localizando e analisando ${fileName} nas pastas permitidas…`};
+    if(fileName&&/\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text)&&options.allowedRoots?.length)return{tool:"search_files",input:{paths:options.allowedRoots,query:fileName},explanation:`Procurando ${fileName} nas pastas permitidas…`};
 
     const folder = knownFolderFromText(text);
     if (folder && /\b(maiores?|mais\s+pesados?|ocupam?\s+mais\s+espa[cç]o|arquivos?\s+grandes?)\b/i.test(text)) {

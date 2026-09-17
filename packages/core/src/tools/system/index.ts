@@ -14,8 +14,8 @@ export function systemTools(): ToolDefinition[] {
       async execute(){const [cpu,mem,gpu,osInfo]=await Promise.all([si.cpu(),si.mem(),si.graphics(),si.osInfo()]);return {ok:true,summary:"Informações do sistema coletadas",data:{hostname:os.hostname(),platform:osInfo.platform,distro:osInfo.distro,cpu:cpu.brand,cores:cpu.cores,memoryGB:Math.round(mem.total/1024/1024/1024),gpu:gpu.controllers.map(x=>({model:x.model,vramMB:x.vram}))}};}
     },
     {
-      name:"process_list", description:"Lista processos com maior uso de CPU", risk:"READ", permissions:["system.read"], inputSchema:z.object({limit:z.number().int().min(1).max(100).default(25)}),
-      async execute({limit}){const p=await si.processes();const rows=[...p.list].filter(x=>!isIdleProcess(x.name)).sort((a,b)=>b.cpu-a.cpu).slice(0,limit).map(x=>({pid:x.pid,name:x.name,cpu:x.cpu,mem:x.mem}));return {ok:true,summary:`Top ${rows.length} processos por CPU`,data:rows};}
+      name:"process_list", description:"Lista os processos com maior uso de CPU ou memória", risk:"READ", permissions:["system.read"], inputSchema:z.object({limit:z.number().int().min(1).max(100).default(25),sortBy:z.enum(["cpu","memory"]).default("cpu")}),
+      async execute({limit,sortBy}){const p=await si.processes();const rows=[...p.list].filter(x=>!isIdleProcess(x.name)).sort((a,b)=>sortBy==="memory"?b.mem-a.mem:b.cpu-a.cpu).slice(0,limit).map(x=>({pid:x.pid,name:x.name,cpu:x.cpu,mem:x.mem}));return {ok:true,summary:`Top ${rows.length} processos por ${sortBy==="memory"?"memória":"CPU"}`,data:rows};}
     },
     {
       name:"disk_usage", description:"Uso dos discos", risk:"READ", permissions:["system.read"], inputSchema:z.object({}),

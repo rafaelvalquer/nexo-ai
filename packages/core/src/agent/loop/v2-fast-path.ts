@@ -24,8 +24,18 @@ type FolderResolution = { path: string } | V2FastPathRejection;
 export class V2FastPathRouter {
   constructor(private readonly locations: LocationRegistry = new LocationRegistry()) {}
 
-  resolve(text: string, tools: AgentToolDescriptor[]): V2FastPathResult | null {
+  resolve(text: string, tools: AgentToolDescriptor[], allowedRoots:string[]=[]): V2FastPathResult | null {
     const available = new Map(tools.map(tool => [tool.name, tool]));
+
+    if(/\b(confirmo|pode\s+criar|salve|salvar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:true},"Salvando o rascunho da macro pausada…");
+    if(/\b(cancele|cancelar|descarte|descartar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:false},"Descartando o rascunho da macro…");
+    const macroCreate=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)?["“]?(.+?)["”]?\s+(?:que|para)\s+(.+?)[.!?]*$/i);
+    if(macroCreate&&macroCreate[2])return this.call(available,"macro_create_draft",{name:macroCreate[1].trim(),description:macroCreate[2].trim()},"Preparando um rascunho de macro para sua revisão…");
+    if(/\b(liste|listar|mostre|mostrar|quais|minhas)\b/i.test(text)&&/\bmacros?\b/i.test(text))return this.call(available,"macro_list",{},"Consultando suas macros…");
+    const macroRun=text.match(/\b(?:execute|executa|rode|rodar|inicie|iniciar)\s+(?:a\s+)?(?:minha\s+)?macro\s+["“]?(.+?)["”]?[.!?]*$/i);
+    if(macroRun)return this.call(available,"macro_run",{name:macroRun[1].trim()},`Preparando a execução da macro ${macroRun[1].trim()}…`);
+
+    if(/\b(programas?|processos?)\b/i.test(text)&&/\b(mem[oó]ria|ram)\b/i.test(text)&&/\b(consumindo|usando|gastando|maior|mais)\b/i.test(text))return this.call(available,"process_list",{limit:25,sortBy:"memory"},"Verificando quais processos consomem mais memória…");
 
     if (/\b(analise|analisar|diagnostique|diagnosticar).*(computador|pc)\b|\b(computador|pc).*(lento|desempenho|an[aá]lise)\b/i.test(text)) {
       return this.call(available, "daily_summary", {}, "Analisando o computador…")
@@ -73,6 +83,8 @@ export class V2FastPathRouter {
     }
 
     const hasFilesystemTarget=/\b(arquivos?|pastas?|diret[oó]rios?|downloads|documentos|[aá]rea de trabalho|desktop)\b/i.test(text);
+    const openFolder=/\b(?:abra|abrir|abre|acesse|acessar)\b.*\b(?:pasta|diret[oó]rio)\s+(?:chamad[oa]\s+)?(.+?)\s*[.!?]*$/i.exec(text);
+    if(openFolder){const requested=openFolder[1].replace(/^["'“”]|["'“”]$/g,"").trim(),folder=resolveFolder(requested,new LocationRegistry({},[],allowedRoots));if(folder&&"rejected" in folder)return folder;if(folder)return this.call(available,"open_path",{path:folder.path},`Abrindo a pasta ${requested}…`);}
     const isListRequest=hasFilesystemTarget&&/\b(liste|listar|lista|mostre|mostrar|quais|ver|veja)\b/i.test(text);
     const move=text.match(/\b(?:mova|mover)\s+(?:o\s+)?arquivo\s+["']([^"']+)["']\s+(?:para|a)\s+["']([^"']+)["']/i);
     if(move)return this.call(available,"move_file",{source:move[1],destination:move[2]},"Preparando a movimentação do arquivo…");
@@ -113,7 +125,8 @@ export class V2FastPathRouter {
     if(directPage&&/\b(leia|ler|resuma|resumir|extraia|extrair|conte[uú]do)\b/i.test(text)){
       return this.call(available,"web_fetch",{url:directPage,maxChars:16000},"Lendo a página sem abrir navegador…");
     }
-    if (isBrowserResearch(text)) {
+    const refersToCurrentPage=/\b(esta|essa|a atual)\s+(p[aá]gina|site|artigo)\b/i.test(text);
+    if (isBrowserResearch(text)&&!(refersToCurrentPage&&!directPage)) {
       const personal=/\b(minha\s+conta|log(?:in|ar)|autenticad[oa]|sess[aã]o\s+salva|meu\s+perfil|clique|preencha|formul[aá]rio)\b/i.test(text);
       if(personal)return this.call(available,"browser_agent_run",{request:text,mode:"personal"},"Executando a tarefa no navegador…");
       const query=text.replace(/^\s*(?:por favor[, ]*)?(?:pesquise|pesquisar|pesquisa|procure|procurar|busque|buscar|encontre|veja|consulte)\s+/i,"").replace(/^\s*(?:sobre|na internet|na web)\s+/i,"").trim()||text;
@@ -125,6 +138,10 @@ export class V2FastPathRouter {
       return this.call(available, "open_url", { url }, `Preparando a abertura de ${url}…`)
         ?? this.call(available, "browser_open", { url }, `Abrindo ${url}…`);
     }
+    const extension="(?:pdf|docx?|xlsx?|txt|md|csv|json|png|jpe?g)";
+    const fileName=text.match(new RegExp(`[\"“]([^\"”]+\\.${extension})[\"”]`,"iu"))?.[1]?.trim()??text.match(new RegExp(`(?:^|\\s)([^\\\\/:*?\"<>|\\s]+\\.${extension})(?=\\s|[.!?,;:]?$)`,"iu"))?.[1]?.trim();
+    if(fileName&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return this.call(available,"document_summarize_named",{fileName},`Localizando e analisando ${fileName} nas pastas permitidas…`);
+    if(fileName&&/\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text)&&allowedRoots.length)return this.call(available,"search_files",{paths:allowedRoots,query:fileName},`Procurando ${fileName} nas pastas permitidas…`);
     return null;
   }
 
@@ -220,6 +237,7 @@ function siteFromText(text: string) {
 }
 
 function isBrowserResearch(text: string) {
+  if(/\b(resuma|resumir|analise|analisar|leia|ler|explique)\b/i.test(text)&&/\.(?:pdf|docx?|xlsx?|txt|md|csv|json)\b/i.test(text))return false;
   const research = /\b(pesquise|pesquisar|procure|procurar|busque|buscar|investigue|analise|leia|resuma|compare|verifique|consulte|encontre|veja)\b/i.test(text);
   const web = /\b(internet|web|site|p[aá]gina|not[ií]cias?|infomoney|uol|g1|github|linkedin|youtube)\b|https?:\/\//i.test(text);
   return research && web;

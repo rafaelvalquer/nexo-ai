@@ -1,10 +1,12 @@
 import { z } from "zod";
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { DocumentAssistantService } from "../../documents/assistant.js";
 import type { DocumentService } from "../../documents/service.js";
 import { DocumentWriterService } from "../../documents/writer.js";
 import type { ToolDefinition } from "../types.js";
 
-export function documentTools(documents: DocumentService, assistant: DocumentAssistantService, writer = new DocumentWriterService()): ToolDefinition[] {
+export function documentTools(documents: DocumentService, assistant: DocumentAssistantService, writer = new DocumentWriterService(), allowedRoots:()=>string[]=()=>[]): ToolDefinition[] {
   const ids = z.array(z.string().min(1)).min(1);
   const idsOrPath=<T extends z.ZodRawShape>(shape:T)=>z.object({documentIds:ids.optional(),path:z.string().min(1).optional()}).extend(shape).refine(input=>Boolean(input.documentIds?.length||input.path),"Informe documentIds ou path.");
   const resolveIds=async(input:{documentIds?:string[];path?:string})=>input.documentIds??[(await documents.importFromTrustedPicker(input.path!)).id];
@@ -13,9 +15,32 @@ export function documentTools(documents: DocumentService, assistant: DocumentAss
     { name:"document_get",description:"Obtém metadados e conteúdo indexado de um documento anexado",domain:"document",operation:"get",risk:"READ",permissions:[],agent:{outputTrust:"sensitive_local"},inputSchema:z.object({documentId:z.string()}),async execute({documentId}){const document=documents.get(documentId);if(!document)return{ok:false,summary:"Documento não encontrado.",error:"DOCUMENT_NOT_FOUND"};return{ok:true,summary:`Documento carregado: ${document.name}`,data:{document,chunks:documents.getChunks(documentId)}};} },
     { name:"document_search",description:"Busca trechos relevantes em documentos anexados ou em um path local confiável",domain:"document",operation:"search",risk:"READ",permissions:["filesystem.read"],pathFields:["path"],agent:{outputTrust:"sensitive_local"},inputSchema:idsOrPath({query:z.string().min(1)}),async execute(input){const documentIds=await resolveIds(input);const matches=await documents.retrieve(documentIds,input.query);return{ok:true,summary:`${matches.length} trecho(s) relevante(s) encontrado(s).`,data:matches};} },
     { name:"document_summarize",description:"Resume documentos anexados ou importa automaticamente um path local confiável",domain:"document",operation:"summarize",risk:"READ",permissions:["filesystem.read"],pathFields:["path"],agent:{outputTrust:"sensitive_local"},inputSchema:idsOrPath({instruction:z.string().default("Resuma os pontos principais.")}),async execute(input,context){const documentIds=await resolveIds(input);const result=await assistant.process(documentIds,`Resuma o documento. ${input.instruction}`,{signal:context?.signal});return{ok:true,summary:"Resumo do documento concluído.",data:{...result,documentIds}};} },
+    { name:"document_summarize_named",description:"Localiza pelo nome exato e resume um documento dentro das pastas permitidas",domain:"document",operation:"summarize_named",risk:"READ",permissions:["filesystem.read"],agent:{outputTrust:"sensitive_local"},inputSchema:z.object({fileName:z.string().trim().min(1).max(260),instruction:z.string().max(1000).default("Resuma os pontos principais.")}),async execute({fileName,instruction},context){const source=await findUniqueAllowedFile(fileName,allowedRoots());const document=await documents.importFromTrustedPicker(source);const result=await assistant.process([document.id],`Resuma o documento. ${instruction}`,{signal:context?.signal});return{ok:true,summary:`Resumo de ${path.basename(source)} concluído.`,data:{...result,documentIds:[document.id],path:source}};} },
     { name:"document_extract",description:"Extrai informações de documentos anexados ou de um path local confiável",domain:"document",operation:"extract",risk:"READ",permissions:["filesystem.read"],pathFields:["path"],agent:{outputTrust:"sensitive_local"},inputSchema:idsOrPath({instruction:z.string().min(1)}),async execute(input,context){const documentIds=await resolveIds(input);const result=await assistant.process(documentIds,`Extraia do documento: ${input.instruction}`,{signal:context?.signal});return{ok:true,summary:"Extração documental concluída.",data:{...result,documentIds}};} },
     { name:"document_compare",description:"Compara exatamente dois documentos anexados",domain:"document",operation:"compare",risk:"READ",permissions:[],agent:{outputTrust:"sensitive_local"},inputSchema:z.object({documentIds:z.array(z.string()).length(2),instruction:z.string().default("Compare os documentos.")}),async execute({documentIds,instruction},context){const result=await assistant.process(documentIds,`Compare os documentos. ${instruction}`,{signal:context?.signal});return{ok:true,summary:"Comparação documental concluída.",data:result};} },
     { name:"document_create",description:"Cria e valida um documento TXT, Markdown ou DOCX novo",domain:"document",operation:"create",risk:"WRITE",permissions:["filesystem.write"],pathFields:["path"],mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"supported"},inputSchema:z.object({path:z.string(),format:z.enum(["txt","md","docx"]),title:z.string().optional(),content:z.string()}),async execute(input,context){const data=await writer.write({...input,createOnly:true,executionId:context?.executionId});return{ok:true,summary:`Documento criado e validado: ${data.path}`,data};} },
     { name:"document_transform",description:"Transforma documentos anexados e grava uma versão reduzida validada",domain:"document",operation:"transform",risk:"CRITICAL",permissions:["filesystem.write"],pathFields:["outputPath"],mutatesState:true,mutationSafety:{idempotency:"nexo",reconciliation:"supported"},inputSchema:z.object({sourceDocumentIds:ids,instruction:z.string().min(1),outputPath:z.string(),format:z.enum(["txt","md","docx"])}),async execute({sourceDocumentIds,instruction,outputPath,format},context){const transformed=await assistant.process(sourceDocumentIds,`Resuma e transforme o documento conforme esta instrução: ${instruction}`,{signal:context?.signal});const data=await writer.write({path:outputPath,format,content:transformed.text,createOnly:true,executionId:context?.executionId});return{ok:true,summary:`Documento transformado e validado: ${data.path}`,data:{...data,sourceDocumentIds}};} }
   ];
+}
+
+export async function findUniqueAllowedFile(fileName:string,roots:string[]):Promise<string>{
+  const clean=fileName.trim();
+  if(!clean||clean!==path.basename(clean)||/[\\/]/.test(clean))throw new Error("Informe somente o nome do arquivo, sem caminho.");
+  if(!/\.(pdf|docx?|txt|md)$/i.test(clean))throw new Error("Formato não suportado para resumo. Use PDF, DOCX, TXT ou MD.");
+  const matches:string[]=[];let visited=0;
+  for(const root of roots){
+    const stack:[string,number][]=[[root,0]];
+    while(stack.length&&visited<20000&&matches.length<2){
+      const[current,depth]=stack.pop()!;let entries;
+      try{entries=await fs.readdir(current,{withFileTypes:true});}catch{continue;}
+      for(const entry of entries){if(++visited>20000)break;const target=path.join(current,entry.name);
+        if(entry.isFile()&&entry.name.toLocaleLowerCase()===clean.toLocaleLowerCase()){matches.push(target);if(matches.length===2)break;}
+        else if(entry.isDirectory()&&!entry.isSymbolicLink()&&depth<6)stack.push([target,depth+1]);
+      }
+    }
+    if(visited>=20000||matches.length>=2)break;
+  }
+  if(!matches.length)throw new Error(`Não encontrei ${clean} nas pastas permitidas. Informe o caminho ou autorize a pasta em Configurações.`);
+  if(matches.length>1)throw new Error(`Encontrei mais de um arquivo chamado ${clean}. Informe o caminho completo para escolher o correto.`);
+  return matches[0]!;
 }

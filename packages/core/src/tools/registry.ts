@@ -18,10 +18,11 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import type { BrowserAgentService } from "../browser-agent/service.js";
 import { browserAgentTools } from "./browser-agent/index.js";
 import { webReaderTools } from "./web/index.js";
+import { macroTools } from "./macros/index.js";
 
 let activeToolRegistry: ToolRegistry | undefined;
 
-export type ToolRegistryOptions = { memory?:MemoryService;email?:EmailService;calendar?:CalendarService;browserSessions?:BrowserSessionManager;browserAgent?:BrowserAgentService;documents?:DocumentService;documentAssistant?:DocumentAssistantService };
+export type ToolRegistryOptions = { memory?:MemoryService;email?:EmailService;calendar?:CalendarService;browserSessions?:BrowserSessionManager;browserAgent?:BrowserAgentService;documents?:DocumentService;documentAssistant?:DocumentAssistantService;filesystemRoots?:()=>string[] };
 
 export class ToolRegistry {
   private tools = new Map<string,ToolDefinition>();
@@ -29,11 +30,12 @@ export class ToolRegistry {
     const configured=isOptions(options)?options:{memory:options as MemoryService|undefined,email,calendar,browserSessions};
     const base=[...filesystemTools(),...systemTools(),...applicationTools(),...shellTools(),...browserTools(configured.browserSessions),...webReaderTools()];
     const mem=configured.memory?memoryTools(configured.memory):[];
-    this.register(...base,...mem,...(configured.email?emailTools(configured.email):[]),...(configured.calendar?calendarTools(configured.calendar):[]),...(configured.browserAgent?browserAgentTools(configured.browserAgent):[]),...(configured.documents&&configured.documentAssistant?documentTools(configured.documents,configured.documentAssistant):[]));
+    this.register(...base,...mem,...(configured.email?emailTools(configured.email):[]),...(configured.calendar?calendarTools(configured.calendar):[]),...(configured.browserAgent?browserAgentTools(configured.browserAgent):[]),...(configured.documents&&configured.documentAssistant?documentTools(configured.documents,configured.documentAssistant,undefined,configured.filesystemRoots):[]));
     activeToolRegistry=this;
   }
   register(...tools:ToolDefinition[]) { for (const tool of tools) {const mutates=tool.mutatesState??tool.risk!=="READ";tool.mutatesState=mutates;tool.agent??={category:tool.domain??domain(tool.name),outputTrust:outputTrust(tool)};this.tools.set(tool.name,tool);} return this; }
   unregister(name:string) { return this.tools.delete(name); }
+  registerMacros(automation:import("../automation/engine.js").AutomationEngine,db:import("../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../automation/natural-draft.js").MacroDraft>){return this.register(...macroTools(automation,db,draft));}
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}
   agentSchema(name:string){const tool=this.tools.get(name);return tool?describeProperties(zodToJsonSchema(tool.inputSchema,{$refStrategy:"none"})):undefined;}
@@ -46,4 +48,4 @@ export function getActiveToolRegistry(): ToolRegistry | undefined { return activ
 function domain(name:string){return name.split("_")[0]??"general";}
 function outputTrust(tool:ToolDefinition):"trusted_local"|"untrusted_external"|"sensitive_local"{if(tool.domain==="web"||/^(email|calendar|browser)_/.test(tool.name))return"untrusted_external";if(tool.pathFields?.length||tool.name.startsWith("memory_"))return"sensitive_local";return"trusted_local";}
 function describeProperties(schema:any):any{const labels:Record<string,string>={connectionId:"ID da conexão autorizada a usar.",path:"Caminho absoluto dentro de uma raiz permitida.",source:"Caminho absoluto da origem autorizada.",destination:"Caminho absoluto do destino autorizado.",query:"Consulta de pesquisa fornecida pelo usuário.",messageId:"ID estável da mensagem retornado por uma ferramenta anterior.",messageIds:"IDs estáveis das mensagens retornados por ferramentas anteriores.",eventId:"ID estável do compromisso retornado por uma ferramenta anterior.",url:"URL HTTP ou HTTPS a acessar.",start:"Início em data/hora ISO 8601.",end:"Término em data/hora ISO 8601.",title:"Título explícito da entidade.",to:"Destinatários explícitos confirmados pelo usuário.",subject:"Assunto do e-mail.",bodyText:"Corpo textual do e-mail."};if(schema?.properties)for(const[key,value]of Object.entries<any>(schema.properties)){value.description??=labels[key]??`Valor do parâmetro ${key}.`;describeProperties(value);}if(schema?.items)describeProperties(schema.items);return schema;}
-function isOptions(value:ToolRegistryOptions|MemoryService|undefined):value is ToolRegistryOptions{return Boolean(value&&typeof value==="object"&&("memory" in value||"email" in value||"calendar" in value||"browserSessions" in value||"browserAgent" in value||"documents" in value||"documentAssistant" in value));}
+function isOptions(value:ToolRegistryOptions|MemoryService|undefined):value is ToolRegistryOptions{return Boolean(value&&typeof value==="object"&&("memory" in value||"email" in value||"calendar" in value||"browserSessions" in value||"browserAgent" in value||"documents" in value||"documentAssistant" in value||"filesystemRoots" in value));}
