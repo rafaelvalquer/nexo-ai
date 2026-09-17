@@ -10,10 +10,13 @@
 - `conversationMessagePage(id, { limit?, before? })` retorna `{ messages, hasMore, nextCursor? }`. Limite padrão 50, intervalo 1–200. O cursor contém `conversationId`, `createdAt` e `id`; a ordem é `(created_at, id)`.
 - A API antiga de histórico continua retornando um array, agora com as últimas 200 mensagens. O contexto da IA usa o histórico recente do banco, não o estado de paginação da interface.
 - A migração 17 adiciona o índice composto sem regravar mensagens. Aprovações antigas são verificadas por mensagem e conversa, independentemente da página aberta.
+- Os comandos determinísticos cobrem abertura de apps/pastas, arquivos recentes, ordenação de processos, Web Reader e macros. “Resuma esta página” reutiliza a URL pública lida mais recentemente na mesma conversa; quando não existe referência, o roteador não inventa uma busca.
+- A criação conversacional de macro pergunta o que fazer quando a pessoa fornece somente o nome, gera um rascunho validado pelo catálogo, aguarda confirmação explícita e salva como macro manual.
+- A navegação principal contém Assistente, Macros, Ferramentas e Configurações. A automação do navegador segue opcional e as leituras de web passam pelo Web Reader.
 
 ## Verificações
 
-TypeScript completo (`pnpm typecheck`) passou para shared, browser-agent, core e desktop. A suíte unitária e de segurança completa (`pnpm test`) passou em 123 arquivos e 530 testes. Os cenários Playwright direcionados de histórico/chat e os fluxos de macros/configurações passaram; macros e configurações: 4/4. As regressões cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
+TypeScript completo (`pnpm typecheck`) passou para shared, browser-agent, core e desktop. A suíte unitária e de segurança completa (`pnpm test`) passou em 126 arquivos e 539 testes. Os E2E de histórico e macros passaram (5/5). Dois testes antigos de `nexo-nucleus.e2e.ts` ainda procuram o botão “Hoje” removido pela navegação simplificada; ambos expiram nesse seletor descontinuado, antes de testar a cena. O instalador Windows x64 foi compilado para `release-final-5` e validado por cabeçalho PE e blockmap. As regressões cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
 
 ## Benchmark reproduzível
 

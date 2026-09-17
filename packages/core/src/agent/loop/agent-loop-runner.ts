@@ -51,6 +51,11 @@ export class AgentLoopRunner {
     const available = this.availableForMode(options.mode);
     const locations=this.filesystemLocations();
 
+    const pendingMacro=options.conversationId?this.runtime?.getApplicationState<{name?:string;waitingForDescription?:boolean}>(`macro-draft:${options.conversationId}`):undefined;
+    if(pendingMacro?.waitingForDescription&&pendingMacro.name&&userRequest.trim().length>=8&&!/\b(cancele|cancelar|descarte|descartar)\b/i.test(userRequest)){
+      const continued=await this.executeFastPath(userRequest,"macro_create_draft",{name:pendingMacro.name,description:userRequest.trim()},{runId,conversationId:options.conversationId,taskId:options.taskId,messages,signal:options.signal});if(continued)return continued;
+    }
+
     const currentPage=options.conversationId&&this.runtime?new EntityReferenceResolver(this.runtime.entities).resolve(options.conversationId,userRequest):undefined;
     if(currentPage?.kind==="page"&&/\b(leia|ler|resuma|resumir|analise|analisar|extraia|extrair|conte[uú]do)\b/i.test(userRequest)){
       const fastPage=available.some(tool=>tool.name==="web_fetch")?{name:"web_fetch",arguments:{url:currentPage.id,maxChars:16000},explanation:`Lendo ${currentPage.label??"a página"}…`}:undefined;

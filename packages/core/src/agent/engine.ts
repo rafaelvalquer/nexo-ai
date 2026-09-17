@@ -93,6 +93,13 @@ export class AgentEngine{
       return{text:"Não consegui validar a etapa de navegador da macro."};
     }
 
+    const pendingMacro=conversationId?this.runtime?.getApplicationState<{name?:string;waitingForDescription?:boolean}>(`macro-draft:${conversationId}`):undefined;
+    if(pendingMacro?.waitingForDescription&&pendingMacro.name&&resolvedUserText.trim().length>=8&&!/\b(cancele|cancelar|descarte|descartar)\b/i.test(resolvedUserText)){
+      const continuedRequest=`Crie uma macro chamada ${pendingMacro.name} que ${resolvedUserText.trim()}`;
+      try{const plan=await this.planner.plan(continuedRequest,context,hooks.signal,previous,this.toolCatalog.list());if(plan.tool==="macro_create_draft")return this.executePlan(continuedRequest,plan,hooks,context);}
+      catch(error){const text=this.formatOllamaError(error,"continuar o rascunho da macro");hooks.onReplaceText?.(text);return{text};}
+    }
+
     if(this.agentLoopMode()==="read_only")return this.runAgentLoop(resolvedUserText,hooks,context,"read_only");
     if(this.agentLoopMode()==="full"){try{return await this.runAgentLoop(resolvedUserText,hooks,context,"full");}catch(error){const runId=(error as any)?.runId as string|undefined,safety=executionSafetyState(runId?this.runtime?.loadLoopState(runId):undefined),reason=error instanceof Error?error.message:String(error);if(!this.legacyFallbackEnabled()||!canFallbackToLegacy(safety)){this.metrics?.record("agent.v2_controlled_failure",1,{safety});const text="O Agent V2 não conseguiu concluir este pedido com segurança. Nenhuma ação será repetida automaticamente.";return{text,engine:"v2-full",fallbackReason:reason};}this.metrics?.record("agent.legacy_fallback",1,{reason,safety});hooks.onStatus?.("Agent V2 indisponível; usando o modo de compatibilidade seguro.");}}
     let plan:Plan;

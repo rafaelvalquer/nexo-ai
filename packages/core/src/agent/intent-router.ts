@@ -64,6 +64,8 @@ export class FastIntentRouter {
     if(/\b(cancele|cancelar|descarte|descartar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return{tool:"macro_confirm_draft",input:{confirm:false},explanation:"Descartando o rascunho da macro…"};
     const macroCreate=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)?["“]?(.+?)["”]?\s+(?:que|para)\s+(.+?)[.!?]*$/i);
     if(macroCreate&&macroCreate[2])return{tool:"macro_create_draft",input:{name:macroCreate[1].trim(),description:macroCreate[2].trim()},explanation:"Preparando um rascunho de macro para sua revisão…"};
+    const macroStart=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)(?:["“](.+?)["”]|(.+?))[.!?]*$/i);
+    if(macroStart)return{tool:"macro_create_draft",input:{name:(macroStart[1]??macroStart[2]).trim()},explanation:`Iniciando a macro ${(macroStart[1]??macroStart[2]).trim()}…`};
     if(/\b(liste|listar|mostre|mostrar|quais|minhas)\b/i.test(text)&&/\bmacros?\b/i.test(text))return{tool:"macro_list",input:{},explanation:"Consultando suas macros…"};
     const macroRun=text.match(/\b(?:execute|executa|rode|rodar|inicie|iniciar)\s+(?:a\s+)?(?:minha\s+)?macro\s+["“]?(.+?)["”]?[.!?]*$/i);
     if(macroRun)return{tool:"macro_run",input:{name:macroRun[1].trim()},explanation:`Preparando a execução da macro ${macroRun[1].trim()}…`};

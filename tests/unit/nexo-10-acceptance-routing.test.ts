@@ -30,4 +30,7 @@ describe("Nexo 1.0 acceptance command routing",()=>{
     expect(router.route("Crie uma macro chamada Início do Trabalho que abra Chrome e VS Code.",options)).toMatchObject({tool:"macro_create_draft",input:{name:"Início do Trabalho",description:"abra Chrome e VS Code"}});
     expect(router.route("Confirmo a criação da macro.",options)).toMatchObject({tool:"macro_confirm_draft",input:{confirm:true}});
   });
+  it("starts the guided macro dialogue when only a name is given",()=>{
+    expect(router.route("Crie uma macro chamada Desenvolvimento.",options)).toMatchObject({tool:"macro_create_draft",input:{name:"Desenvolvimento"}});
+  });
 });

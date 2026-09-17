@@ -31,6 +31,8 @@ export class V2FastPathRouter {
     if(/\b(cancele|cancelar|descarte|descartar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:false},"Descartando o rascunho da macro…");
     const macroCreate=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)?["“]?(.+?)["”]?\s+(?:que|para)\s+(.+?)[.!?]*$/i);
     if(macroCreate&&macroCreate[2])return this.call(available,"macro_create_draft",{name:macroCreate[1].trim(),description:macroCreate[2].trim()},"Preparando um rascunho de macro para sua revisão…");
+    const macroStart=text.match(/\b(?:crie|criar|monte|montar)\s+(?:uma\s+)?macro\s+(?:chamada\s+)(?:["“](.+?)["”]|(.+?))[.!?]*$/i);
+    if(macroStart)return this.call(available,"macro_create_draft",{name:(macroStart[1]??macroStart[2]).trim()},`Iniciando a macro ${(macroStart[1]??macroStart[2]).trim()}…`);
     if(/\b(liste|listar|mostre|mostrar|quais|minhas)\b/i.test(text)&&/\bmacros?\b/i.test(text))return this.call(available,"macro_list",{},"Consultando suas macros…");
     const macroRun=text.match(/\b(?:execute|executa|rode|rodar|inicie|iniciar)\s+(?:a\s+)?(?:minha\s+)?macro\s+["“]?(.+?)["”]?[.!?]*$/i);
     if(macroRun)return this.call(available,"macro_run",{name:macroRun[1].trim()},`Preparando a execução da macro ${macroRun[1].trim()}…`);

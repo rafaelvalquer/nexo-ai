@@ -12,7 +12,8 @@ afterEach(()=>fs.rmSync(root,{recursive:true,force:true}));
 
 describe("current web page references",()=>{
   it("resolves ‘esta página’ to the most recently read public URL in the conversation",()=>{
-    const ledger=new ConversationEntityLedger(db);ledger.record("chat-1",{toolCallId:"1",toolName:"web_fetch",ok:true,summary:"Lido",trust:"UNTRUSTED_CONTENT",truncated:false,data:{url:"https://example.com/article",title:"Artigo"}});
+    const ledger=new ConversationEntityLedger(db);ledger.record("chat-1",{toolCallId:"0",toolName:"web_search",ok:true,summary:"Pesquisa",trust:"UNTRUSTED_CONTENT",truncated:false,data:{results:[{url:"https://irrelevant.example/last-search-result",title:"Resultado"}]}});
+    ledger.record("chat-1",{toolCallId:"1",toolName:"web_fetch",ok:true,summary:"Lido",trust:"UNTRUSTED_CONTENT",truncated:false,data:{url:"https://example.com/article",title:"Artigo"}});
     const resolver=new EntityReferenceResolver(ledger);
     expect(resolver.resolve("chat-1","Resuma esta página.")).toMatchObject({kind:"page",id:"https://example.com/article",label:"Artigo"});
     expect(resolver.resolve("chat-1","Resuma esta página.")).toMatchObject({kind:"page",id:"https://example.com/article"});
