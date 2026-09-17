@@ -16,7 +16,7 @@
 
 ## Verificações
 
-TypeScript completo (`pnpm typecheck`) passou para shared, browser-agent, core e desktop. A suíte unitária e de segurança completa (`pnpm test`) passou em 126 arquivos e 539 testes. Os E2E de histórico e macros passaram (5/5). Dois testes antigos de `nexo-nucleus.e2e.ts` ainda procuram o botão “Hoje” removido pela navegação simplificada; ambos expiram nesse seletor descontinuado, antes de testar a cena. O instalador Windows x64 foi compilado para `release-final-5` e validado por cabeçalho PE e blockmap. As regressões cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
+TypeScript completo (`pnpm typecheck`) passou para shared, browser-agent, core e desktop. A suíte unitária e de segurança completa (`pnpm test`) passou em 126 arquivos e 539 testes. Os E2E direcionados de histórico, macros e navegação passaram (7/7); os testes da navegação agora verificam as quatro áreas acordadas e a ausência de overflow em viewport estreita. O instalador Windows x64 foi compilado para `release-final-5` e validado por cabeçalho PE e blockmap. As regressões cobrem buffering, prazo fixo, flush idempotente, falhas antes/depois do commit, backpressure, aprovação durável, backup, shutdown, migração, 551 mensagens, timestamps iguais, pertencimento, paginação durante atualizações, fechamento de conversa, falha/retry e recuperação de lacunas.
 
 ## Benchmark reproduzível
 

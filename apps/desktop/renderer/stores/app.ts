@@ -3,6 +3,8 @@ import { create } from "zustand";
 type Store = {
   page: string;
   setPage: (p: string) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   status: unknown;
   setStatus: (s: unknown) => void;
 };
@@ -10,12 +12,15 @@ type Store = {
 const canonicalPage = (page: string) => ({
   Hoje: "Assistente", "Automações": "Macros", Atividade: "Macros",
   Aprovações: "Assistente", Conexões: "Configurações", Memória: "Configurações",
-  Documentos: "Assistente", Diagnóstico: "Configurações", Escritório: "Assistente"
+  Documentos: "Assistente", Diagnóstico: "Configurações", "Pixel Office": "Escritório"
 }[page] ?? page);
 
-export const useAppStore = create<Store>(set => ({
+const savedSidebarCollapsed = typeof localStorage !== "undefined" && localStorage.getItem("nexo.sidebar.collapsed") === "true";
+export const useAppStore = create<Store>((set) => ({
   page: "Assistente",
   setPage: page => set({ page: canonicalPage(page) }),
+  sidebarCollapsed: savedSidebarCollapsed,
+  setSidebarCollapsed: sidebarCollapsed => { if(typeof localStorage!=="undefined")localStorage.setItem("nexo.sidebar.collapsed",String(sidebarCollapsed));set({sidebarCollapsed}); },
   status: null,
   setStatus: status => set({ status })
 }));

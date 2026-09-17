@@ -1,2 +1,3 @@
-import type { ButtonHTMLAttributes } from "react";
-export function Button({className="",...props}:ButtonHTMLAttributes<HTMLButtonElement>){return <button className={className} {...props}/>;}
+import type { ButtonHTMLAttributes,ReactNode } from "react";
+type Props=ButtonHTMLAttributes<HTMLButtonElement>&{variant?:"primary"|"secondary"|"ghost"|"danger";size?:"sm"|"md"|"icon";children:ReactNode};
+export function Button({variant="secondary",size="md",className="",...props}:Props){return <button {...props} className={`uiButton ${variant} ${size} ${className}`.trim()}/>;}
