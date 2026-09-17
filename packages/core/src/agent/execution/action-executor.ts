@@ -121,8 +121,9 @@ function validatePaths(value: unknown, use: (path: string) => void) { if (typeof
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function normalizeToolResult(result: import("@nexo/shared").ToolResultInput): import("@nexo/shared").ToolResult {
   if ("success" in result) return result;
-  const code = result.error && /^[A-Z][A-Z0-9_]{2,}$/.test(result.error) ? result.error : "TOOL_EXECUTION_FAILED";
-  return { success: result.ok, ok: result.ok, summary: result.summary, ...(result.data === undefined ? {} : { data: result.data }), ...(!result.ok ? { error: { code, message: result.error ?? result.summary } } : {}) };
+  const legacyError = typeof result.error === "string" ? result.error : undefined;
+  const code = legacyError && /^[A-Z][A-Z0-9_]{2,}$/.test(legacyError) ? legacyError : "TOOL_EXECUTION_FAILED";
+  return { success: result.ok, ok: result.ok, summary: result.summary, ...(result.data === undefined ? {} : { data: result.data }), ...(!result.ok ? { error: { code, message: legacyError ?? result.summary } } : {}) };
 }
 function isAmbiguous(error: unknown) { return error instanceof DOMException && error.name === "AbortError" || /timeout|timed? out|network|connection reset|socket/i.test(message(error)); }
 function defaultToolTimeout(tool:ToolDefinition){if(tool.domain==="web"||tool.name.startsWith("web_"))return 15_000;if(tool.domain==="browser"||tool.name.startsWith("browser_"))return 30_000;if(tool.domain==="document"||tool.name.startsWith("document_"))return 120_000;return 60_000;}
