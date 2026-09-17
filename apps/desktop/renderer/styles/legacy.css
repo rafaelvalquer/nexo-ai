@@ -4,6 +4,7 @@
 @import "./legacy-components.css";
 @import "./legacy-assistant.css";
 @import "./legacy-content-settings.css";
+@import "./settings.css";
 @import "./assistant-live.css";
 @import "./nexo-identity.css";
 @import "./documents.css";

@@ -21,6 +21,19 @@ test("the simplified navigation exposes developer tool logs only when enabled",a
   await expect(page.getByText("42 ms",{exact:true})).toBeVisible();
 });
 
+test("settings bootstrap exposes a retry state after a temporary local read failure",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(()=>{const api=(window as any).nexo,original=api.getSettings;let attempts=0;api.getSettings=async()=>{attempts++;if(attempts===1)throw new Error("database temporarily unavailable");return original();};(window as any).__settingsReadAttempts=()=>attempts;});
+  await page.getByRole("button",{name:"Configurações",exact:true}).click();
+  const error=page.getByRole("alert");
+  await expect(error.getByRole("heading",{name:"Não foi possível abrir esta área"})).toBeVisible();
+  await expect(error.getByText("Não consegui carregar suas configurações locais.")).toBeVisible();
+  await error.getByRole("button",{name:"Tentar novamente"}).click();
+  await expect(page.getByRole("heading",{name:"Configurações",exact:true})).toBeVisible();
+  await expect(page.getByLabel("URL do Ollama")).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__settingsReadAttempts())).toBe(2);
+});
+
 test("dangerous settings actions use an accessible confirmation drawer",async({page})=>{
   await page.goto(url);
   await page.evaluate(async()=>{const api=(window as any).nexo;api.intentLearningCount=async()=>2;api.clearMemory=async()=>({ok:true});const current=await api.getSettings();api.updateSettings=async(patch:any)=>Object.assign({},current,patch);});

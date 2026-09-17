@@ -1,0 +1,85 @@
+.settingsLoadState {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  width: min(980px, 100%);
+  min-height: 260px;
+  padding: 28px;
+  border: 1px solid var(--nexo-border);
+  border-radius: var(--nexo-r-lg);
+  background: linear-gradient(145deg, var(--nexo-surface-1), var(--nexo-bg-raised));
+}
+
+.settingsVisuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.settingsLoadingSkeleton {
+  display: grid;
+  gap: 14px;
+  width: min(620px, 100%);
+}
+
+.settingsLoadingSkeleton i {
+  display: block;
+  height: 15px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--nexo-surface-2), var(--nexo-surface-3), var(--nexo-surface-2));
+  background-size: 200% 100%;
+  animation: settingsSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
+.settingsLoadingSkeleton i:first-child { width: 42%; height: 25px; margin-bottom: 8px; }
+.settingsLoadingSkeleton i:nth-child(3) { width: 76%; }
+.settingsLoadingSkeleton i:nth-child(5) { width: 88%; }
+.settingsLoadingSkeleton i:nth-child(6) { width: 62%; }
+
+@keyframes settingsSkeletonShimmer {
+  to { background-position-x: -200%; }
+}
+
+.settingsLoadError {
+  align-content: center;
+  justify-items: start;
+}
+
+.settingsLoadEyebrow {
+  color: var(--nexo-cyan);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.settingsLoadError h1 { margin: 0; font-size: clamp(20px, 3vw, 27px); }
+.settingsLoadError p { max-width: 48ch; margin: 0; color: var(--nexo-text-secondary); line-height: 1.55; }
+
+.settingsRetryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--nexo-border-strong);
+  border-radius: 9px;
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
+  cursor: pointer;
+}
+
+.settingsRetryButton:hover { border-color: var(--nexo-cyan); background: var(--nexo-surface-3); }
+
+@media(prefers-reduced-motion:reduce) {
+  .settingsLoadingSkeleton i { animation: none; }
+}
+
+@media(max-width:600px) {
+  .settingsLoadState { min-height: 220px; padding: 20px; }
+}
