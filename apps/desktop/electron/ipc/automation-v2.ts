@@ -6,26 +6,26 @@ const TRIGGERS = new Set(["schedule","interval","manual","app-start","file.creat
 const CONDITION_OPERATORS = new Set(["equals","notEquals","contains","notContains","startsWith","endsWith","greaterThan","lessThan","exists"]);
 
 export function registerAutomationV2Ipc(core: NexoCore): void {
-  ipcMain.handle("nexo:automation:create-v2",(_,value)=>core.automation.create(validateCreate(core,value)));
-  ipcMain.handle("nexo:automation:cancel",(_,id)=>core.automation.cancel(requireId(id)));
-  ipcMain.handle("nexo:automation:resume-run",(_,id,mode)=>{const runId=requireId(id);if(mode!=="retry"&&mode!=="continue")throw new Error("Ação de retomada inválida.");return core.automation.resumeFailedRun(runId,mode);});
+  ipcMain.handle("nexo:automation:create-v2",(_,value)=>core.macros.create(validateCreate(core,value)));
+  ipcMain.handle("nexo:automation:cancel",(_,id)=>core.macros.cancel(requireId(id)));
+  ipcMain.handle("nexo:automation:resume-run",(_,id,mode)=>{const runId=requireId(id);if(mode!=="retry"&&mode!=="continue")throw new Error("Ação de retomada inválida.");return core.macros.resumeFailedRun(runId,mode);});
   ipcMain.handle("nexo:automation:draft-natural",(_,value)=>{const data=requireRecord(value,"Rascunho da macro");return core.draftMacroFromNatural(requireText(data.description,"Descrição",3000),data.name===undefined?undefined:requireText(data.name,"Nome",160));});
-  ipcMain.handle("nexo:automation:get",(_,id)=>core.automation.get(requireId(id)));
+  ipcMain.handle("nexo:automation:get",(_,id)=>core.macros.get(requireId(id)));
   ipcMain.handle("nexo:automation:update",(_,id,value)=>{
     const automationId=requireId(id);
-    const current=core.automation.get(automationId);
+    const current=core.macros.get(automationId);
     if(!current)throw new Error("Automação não encontrada.");
     const merged=validateCreate(core,{...pickEditable(current),...requireRecord(value,"Atualização")});
-    return core.automation.update(automationId,merged as UpdateAutomationV2Input);
+    return core.macros.update(automationId,merged as UpdateAutomationV2Input);
   });
-  ipcMain.handle("nexo:automation:duplicate",(_,id)=>core.automation.duplicate(requireId(id)));
-  ipcMain.handle("nexo:automation:test",(_,id)=>core.automation.test(requireId(id)));
-  ipcMain.handle("nexo:automation:test-draft",(_,value)=>core.automation.testDraft(validateCreate(core,value)));
-  ipcMain.handle("nexo:automation:runs",(_,id,limit)=>core.automation.listRuns(requireId(id),Number.isInteger(limit)?Math.min(Math.max(Number(limit),1),100):50));
-  ipcMain.handle("nexo:automation:run-get",(_,id)=>core.automation.getRun(requireId(id)));
-  ipcMain.handle("nexo:automation:presets",()=>core.automation.presets());
-  ipcMain.handle("nexo:automation:action-catalog",()=>core.automation.actionCatalog());
-  ipcMain.handle("nexo:automation:trigger-catalog",()=>core.automation.triggerCatalog());
+  ipcMain.handle("nexo:automation:duplicate",(_,id)=>core.macros.duplicate(requireId(id)));
+  ipcMain.handle("nexo:automation:test",(_,id)=>core.macros.test(requireId(id)));
+  ipcMain.handle("nexo:automation:test-draft",(_,value)=>core.macros.testDraft(validateCreate(core,value)));
+  ipcMain.handle("nexo:automation:runs",(_,id,limit)=>core.macros.listRuns(requireId(id),Number.isInteger(limit)?Math.min(Math.max(Number(limit),1),100):50));
+  ipcMain.handle("nexo:automation:run-get",(_,id)=>core.macros.getRun(requireId(id)));
+  ipcMain.handle("nexo:automation:presets",()=>core.macros.presets());
+  ipcMain.handle("nexo:automation:action-catalog",()=>core.macros.actionCatalog());
+  ipcMain.handle("nexo:automation:trigger-catalog",()=>core.macros.triggerCatalog());
 }
 
 function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
@@ -38,7 +38,7 @@ function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
   const trigger=validateTrigger(data.trigger);
   const conditions=validateConditions(data.conditions);
   const conditionOperator=data.conditionOperator==="OR"?"OR":"AND";
-  const allowedActions=new Set(core.automation.actionCatalog().map(item=>item.id));
+  const allowedActions=new Set(core.macros.actionCatalog().map(item=>item.id));
   const actions=validateActions(data.actions,allowedActions);
   const output=validateOutput(data.output);
   const policy=validatePolicy(data.policy);

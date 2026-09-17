@@ -100,6 +100,16 @@ export class AgentEngine{
       catch(error){const text=this.formatOllamaError(error,"continuar o rascunho da macro");hooks.onReplaceText?.(text);return{text};}
     }
 
+    // Common local commands, macros and ordinary chat avoid constructing an
+    // LLM plan. Mutations still go through executePlan and the regular policy.
+    const deterministic=this.planner.routeDeterministic(resolvedUserText);
+    if(deterministic){
+      this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.directStream?"chat":"command"});
+      if(deterministic.tool||deterministic.steps?.length)return this.executePlan(resolvedUserText,deterministic,hooks,context);
+      if(typeof deterministic.direct==="string"){hooks.onReplaceText?.(deterministic.direct);hooks.onStatus?.("Resposta concluída.");return{text:deterministic.direct,engine:"fast-path"};}
+      if(deterministic.directStream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.planner.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
+    }
+
     if(this.agentLoopMode()==="read_only")return this.runAgentLoop(resolvedUserText,hooks,context,"read_only");
     if(this.agentLoopMode()==="full"){try{return await this.runAgentLoop(resolvedUserText,hooks,context,"full");}catch(error){const runId=(error as any)?.runId as string|undefined,safety=executionSafetyState(runId?this.runtime?.loadLoopState(runId):undefined),reason=error instanceof Error?error.message:String(error);if(!this.legacyFallbackEnabled()||!canFallbackToLegacy(safety)){this.metrics?.record("agent.v2_controlled_failure",1,{safety});const text="O Agent V2 não conseguiu concluir este pedido com segurança. Nenhuma ação será repetida automaticamente.";return{text,engine:"v2-full",fallbackReason:reason};}this.metrics?.record("agent.legacy_fallback",1,{reason,safety});hooks.onStatus?.("Agent V2 indisponível; usando o modo de compatibilidade seguro.");}}
     let plan:Plan;

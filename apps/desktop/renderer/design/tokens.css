@@ -1,0 +1,78 @@
+:root {
+  color-scheme: dark;
+  --nexo-bg: #070910;
+  --nexo-bg-raised: #0a0d15;
+  --nexo-surface-1: #0d111b;
+  --nexo-surface-2: #111827;
+  --nexo-surface-3: #161d2c;
+  --nexo-surface-popover: #1a2232;
+  --nexo-border-subtle: rgba(255, 255, 255, .055);
+  --nexo-border: rgba(255, 255, 255, .085);
+  --nexo-border-strong: rgba(255, 255, 255, .14);
+  --nexo-text: #f5f7ff;
+  --nexo-text-secondary: #a0aabd;
+  --nexo-text-muted: #677389;
+  --nexo-violet: #765cff;
+  --nexo-violet-soft: rgba(118, 92, 255, .14);
+  --nexo-cyan: #49d6ff;
+  --nexo-cyan-soft: rgba(73, 214, 255, .12);
+  --nexo-success: #3bd89f;
+  --nexo-warning: #f5b74f;
+  --nexo-danger: #ff5d78;
+
+  /* Compatibility aliases keep existing screens on the same four surfaces. */
+  --nexo-surface: var(--nexo-surface-1);
+  --nexo-surface-soft: var(--nexo-surface-2);
+  --nexo-muted: var(--nexo-text-secondary);
+  --nexo-dim: var(--nexo-text-muted);
+  --nexo-cyan-bright: var(--nexo-cyan);
+  --nexo-r-sm: 8px;
+  --nexo-r-md: 12px;
+  --nexo-r-lg: 16px;
+  --nexo-r-xl: 24px;
+  --nexo-shadow-sm: 0 2px 8px rgba(0, 0, 0, .18);
+  --nexo-shadow-md: 0 12px 32px rgba(0, 0, 0, .28);
+  --nexo-shadow-lg: 0 24px 70px rgba(0, 0, 0, .42);
+  --nexo-glow-accent: 0 0 32px rgba(118, 92, 255, .14);
+  --nexo-shadow: var(--nexo-shadow-md);
+  --nexo-font: Inter, "Segoe UI", system-ui, sans-serif;
+  --nexo-motion-instant: 80ms;
+  --nexo-motion-fast: 140ms;
+  --nexo-motion-normal: 220ms;
+  --nexo-motion-slow: 360ms;
+
+  --nexo-space-1: 4px;
+  --nexo-space-2: 8px;
+  --nexo-space-3: 12px;
+  --nexo-space-4: 16px;
+  --nexo-space-6: 24px;
+  --nexo-space-8: 32px;
+  --nexo-sidebar-expanded: 224px;
+  --nexo-sidebar-collapsed: 68px;
+}
+
+* { scrollbar-color: #283849 transparent; }
+html { background: var(--nexo-bg); }
+body {
+  min-width: 0;
+  color: var(--nexo-text);
+  font-family: var(--nexo-font);
+  background: radial-gradient(ellipse at 74% -18%, rgba(30, 100, 132, .13), transparent 43%), var(--nexo-bg);
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid rgba(118, 92, 255, .75);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

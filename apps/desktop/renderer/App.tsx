@@ -9,12 +9,12 @@ import { OllamaModelInstaller } from "./components/shell/OllamaModelInstaller";
 import { ToastViewport } from "./components/shell/ToastViewport";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useNotificationsStore } from "./stores/notifications";
+import { motionTokens } from "./design/motion";
 
 const pages: Record<string, ComponentType> = {
   Assistente: lazy(()=>import("./pages/Assistant").then(module=>({default:module.Assistant}))),
   Macros: lazy(()=>import("./pages/Automations").then(module=>({default:module.Automations}))),
   Escritório: lazy(()=>import("./pages/Office").then(module=>({default:module.Office}))),
-  Ferramentas: lazy(()=>import("./pages/Tools").then(module=>({default:module.Tools}))),
   "Configurações": lazy(()=>import("./pages/Settings").then(module=>({default:module.Settings})))
 };
 
@@ -41,5 +41,5 @@ export function App() {
   }, [syncAssistant, handleTaskEvent]);
 
   const collapsed=useAppStore(s=>s.sidebarCollapsed); const reduceMotion=useReducedMotion();
-  return <div className={`app${collapsed?" sidebarCollapsed":""}`}><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><AnimatePresence mode="wait" initial={false}><motion.div key={page} className={`pageMotion${page==="Assistente"?" assistantPageMotion":""}`} initial={reduceMotion?false:{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={reduceMotion?{opacity:0}:{opacity:0,y:-2}} transition={{duration:reduceMotion?0:.18}}><PageErrorBoundary key={page}><Suspense fallback={<div className="pageLoading"><span className="loadingDot"/>Abrindo {page}…</div>}><Page /></Suspense></PageErrorBoundary></motion.div></AnimatePresence></main><CommandPalette /><Onboarding /><OllamaModelInstaller /><ToastViewport /></div>;
+  return <div className={`app${collapsed?" sidebarCollapsed":""}`}><Sidebar /><main className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><AnimatePresence mode="wait" initial={false}><motion.div key={page} className={`pageMotion${page==="Assistente"?" assistantPageMotion":""}`} initial={reduceMotion?false:{opacity:0,y:motionTokens.distance.subtle}} animate={{opacity:1,y:0}} exit={reduceMotion?{opacity:0}:{opacity:0,y:-2}} transition={{duration:reduceMotion?0:motionTokens.duration.page/1000,ease:motionTokens.ease.out}}><PageErrorBoundary key={page}><Suspense fallback={<div className="pageLoading"><span className="loadingDot"/>Abrindo {page}…</div>}><Page /></Suspense></PageErrorBoundary></motion.div></AnimatePresence></main><CommandPalette /><Onboarding /><OllamaModelInstaller /><ToastViewport /></div>;
 }

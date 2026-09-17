@@ -68,6 +68,19 @@ export class AgentPlanner{
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
+  /** Routes common local commands and ordinary chat without invoking semantic planning. */
+  routeDeterministic(userText:string):Plan|undefined{
+    const routed=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});
+    if(routed){
+      const names=routed.steps?.map(step=>step.tool)??(routed.tool?[routed.tool]:[]);
+      const macroOrInternal=names.length>0&&names.every(name=>name.startsWith("macro_")||name==="browser_download"||name==="browser_click"||name==="browser_type");
+      if(names.every(name=>DETERMINISTIC_SAFE_TOOLS.has(name))||macroOrInternal)
+        return withPresentationPolicy({...routed,origin:"fast"});
+      if(typeof routed.direct==="string")return{...routed,origin:"fast"};
+    }
+    if(isLikelyConversation(userText))return{directStream:true,origin:"fast"};
+    return undefined;
+  }
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){

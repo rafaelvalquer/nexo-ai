@@ -35,7 +35,7 @@ export class ToolRegistry {
   }
   register(...tools:ToolDefinition[]) { for (const tool of tools) {const mutates=tool.mutatesState??tool.risk!=="READ";tool.mutatesState=mutates;tool.agent??={category:tool.domain??domain(tool.name),outputTrust:outputTrust(tool)};this.tools.set(tool.name,tool);} return this; }
   unregister(name:string) { return this.tools.delete(name); }
-  registerMacros(automation:import("../automation/engine.js").AutomationEngine,db:import("../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../automation/natural-draft.js").MacroDraft>){return this.register(...macroTools(automation,db,draft));}
+  registerMacros(macros:import("../macros/macro-engine.js").MacroEngine,db:import("../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../automation/natural-draft.js").MacroDraft>){return this.register(...macroTools(macros,db,draft));}
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}
   agentSchema(name:string){const tool=this.tools.get(name);return tool?describeProperties(zodToJsonSchema(tool.inputSchema,{$refStrategy:"none"})):undefined;}

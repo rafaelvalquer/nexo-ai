@@ -4,7 +4,8 @@
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && concurrently -k -n CORE,BROWSER,RENDERER,ELECTRON \"pnpm --filter @nexo/core dev\" \"pnpm --filter @nexo/browser-agent dev\" \"pnpm --filter @nexo/desktop dev:renderer\" \"wait-on tcp:5173 && pnpm --filter @nexo/desktop dev:electron\"",
+    "dev": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && concurrently -k -n CORE,RENDERER,ELECTRON \"pnpm --filter @nexo/core dev\" \"pnpm --filter @nexo/desktop dev:renderer\" \"wait-on tcp:5173 && pnpm --filter @nexo/desktop dev:electron\"",
+    "dev:browser": "pnpm --filter @nexo/browser-agent dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && pnpm -r typecheck",
     "test": "vitest run",

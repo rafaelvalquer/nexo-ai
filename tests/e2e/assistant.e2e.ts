@@ -15,12 +15,10 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await server?.close(); });
 
 const primaryNavigation = ["Assistente", "Macros", "Escritório", "Configurações"];
-const retiredNavigation = ["Hoje", "Atividade", "Aprovações", "Automações", "Conexões", "Memória"];
-
-test("menu principal apresenta somente as quatro áreas do produto", async ({ page }) => {
+test("menu principal apresenta as quatro áreas do produto", async ({ page }) => {
   await page.goto(url);
   for (const label of primaryNavigation) await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
-  for (const label of retiredNavigation) await expect(page.getByRole("button", { name: label, exact: true })).toHaveCount(0);
+  await expect(page.locator(".sidebar nav button")).toHaveCount(4);
 });
 
 test("navegação simplificada mantém o layout sem overflow em viewport estreita", async ({ page }) => {

@@ -42,6 +42,13 @@ describe("AgentPlanner routing", () => {
     expect(llm.planCalls).toBe(0);
   });
 
+  it("classifica conversas e comandos locais antes da fase de planejamento", () => {
+    const planner = new AgentPlanner(new FakeLLM(), new ToolRegistry());
+    expect(planner.routeDeterministic("vamos conversar sobre javascript")).toMatchObject({ directStream: true, origin: "fast" });
+    expect(planner.routeDeterministic("verifique uso da memória")).toMatchObject({ tool: "memory_usage", origin: "fast" });
+    expect(planner.routeDeterministic("execute uma ação avançada no meu ambiente")).toBeUndefined();
+  });
+
   it.each([
     ["abrir navegador", "browser_launch"],
     ["listar arquivos da pasta download", "list_files"],

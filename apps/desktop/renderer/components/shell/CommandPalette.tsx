@@ -4,7 +4,7 @@ import { ArrowRight,Command as CommandIcon,Search,Sparkles } from "lucide-react"
 import { useAppStore } from "../../stores/app";
 
 type Command = { label:string; keywords:string; page?:string; run?:()=>Promise<void> };
-const pages=["Assistente","Macros","Escritório","Configurações","Ferramentas"];
+const pages=["Assistente","Macros","Escritório","Configurações"];
 
 export function CommandPalette() {
   const [open,setOpen]=useState(false),[query,setQuery]=useState(""),[selected,setSelected]=useState(0),[recent,setRecent]=useState<string[]>([]); const setPage=useAppStore(s=>s.setPage);
@@ -15,7 +15,7 @@ export function CommandPalette() {
     {label:"Conectar Google",keywords:"gmail google conta conexão",page:"Configurações"},
     {label:"Conectar Microsoft",keywords:"outlook microsoft conta conexão",page:"Configurações"},
     {label:"Criar macro",keywords:"macro automação agendar rotina",page:"Macros"},
-    {label:"Ver ferramentas",keywords:"tools arquivos sistema web",page:"Ferramentas"},
+    {label:"Ver ferramentas",keywords:"tools arquivos sistema web",page:"Configurações"},
     {label:"Ativar/desativar modo privado",keywords:"privacidade privado",run:async()=>{const current=await window.nexo.getSettings();await window.nexo.updateSettings({privateMode:!current.privateMode});setPage("Configurações");}}
   ],[setPage]);
   const visible=useMemo(()=>commands.map((command,index)=>({command,index,score:fuzzyScore(`${command.label} ${command.keywords}`,query),recentIndex:recent.indexOf(command.label)})).filter(item=>item.score>=0).sort((a,b)=>query.trim()?b.score-a.score||a.index-b.index:(a.recentIndex<0?Infinity:a.recentIndex)-(b.recentIndex<0?Infinity:b.recentIndex)||a.index-b.index).map(item=>item.command),[commands,query,recent]);

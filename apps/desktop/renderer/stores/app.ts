@@ -12,7 +12,7 @@ type Store = {
 const canonicalPage = (page: string) => ({
   Hoje: "Assistente", "Automações": "Macros", Atividade: "Macros",
   Aprovações: "Assistente", Conexões: "Configurações", Memória: "Configurações",
-  Documentos: "Assistente", Diagnóstico: "Configurações", "Pixel Office": "Escritório"
+  Documentos: "Assistente", Diagnóstico: "Configurações", "Pixel Office": "Escritório", Ferramentas: "Configurações"
 }[page] ?? page);
 
 const savedSidebarCollapsed = typeof localStorage !== "undefined" && localStorage.getItem("nexo.sidebar.collapsed") === "true";

@@ -62,7 +62,7 @@ test("Electron abre o Pixel Office e recebe evento real", async () => {
     await page.evaluate(() => window.nexo.updateSettings({ agentLoopMode: "legacy" }));
     await page.getByRole("button", { name: "Escritório", exact: true }).click();
     await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole("heading", { name: "Escritório", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pixel Office", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Assistente", exact: true }).click();
     await expect(page.locator(".assistantPage")).toBeVisible();
     await page.getByRole("button", { name: "Escritório", exact: true }).click();

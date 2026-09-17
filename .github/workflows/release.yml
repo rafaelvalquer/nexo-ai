@@ -27,6 +27,9 @@ jobs:
       - run: pnpm test
       - run: pnpm eval:agent
       - run: pnpm version:check
+      - run: pnpm build
+      - run: pnpm exec playwright install chromium
+      - run: pnpm test:e2e
       - name: Agent model-backed smoke
         if: ${{ vars.NEXO_MODEL_EVAL_URL != '' }}
         env:
@@ -37,3 +40,6 @@ jobs:
       - run: pnpm --filter @nexo/browser-agent build
       - run: pnpm --filter @nexo/core build
       - run: pnpm --filter @nexo/desktop exec electron-builder --win nsis --publish always
+      - run: node scripts/verify-installer.mjs
+      - shell: powershell
+        run: ./scripts/smoke-installer.ps1
