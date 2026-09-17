@@ -47,6 +47,8 @@ describe("AgentPlanner routing", () => {
     expect(planner.routeDeterministic("vamos conversar sobre javascript")).toMatchObject({ directStream: true, origin: "fast" });
     expect(planner.routeDeterministic("verifique uso da memória")).toMatchObject({ tool: "memory_usage", origin: "fast" });
     expect(planner.routeDeterministic("execute uma ação avançada no meu ambiente")).toBeUndefined();
+    expect(planner.routeDeterministic("Crie teste.txt em Downloads\\NexoTeste")).toBeUndefined();
+    expect(planner.routeDeterministic("Crie stale.txt na pasta permitida")).toBeUndefined();
   });
 
   it("preserva caminhos explicitamente citados ao despachar listagens determinísticas", () => {

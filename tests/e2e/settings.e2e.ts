@@ -57,5 +57,6 @@ test("settings use a side navigation on desktop and become scrollable tabs on co
   await page.setViewportSize({width:390,height:844});
   expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("row");
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(await navigation.evaluate(()=>{const panel=document.querySelector(".settings")!.getBoundingClientRect();return [...document.querySelectorAll<HTMLInputElement|HTMLSelectElement>(".settings input,.settings select")].every(control=>control.getBoundingClientRect().right<=panel.right+1);})).toBe(true);
   await page.screenshot({path:testInfo.outputPath("settings-compact-navigation.png")});
 });

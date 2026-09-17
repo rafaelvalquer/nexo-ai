@@ -7,7 +7,7 @@ test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("app
 test.afterAll(async()=>{await server?.close();});
 
 test("Configurações > integrações preserva configuração, conexão, permissões e diagnóstico",async({page})=>{
-  await page.goto(url);await page.getByRole("button",{name:"Configurações",exact:true}).click();
+  await page.goto(url);await page.evaluate(()=>{const api=window.nexo as any;const disconnect=api.disconnect.bind(api);api.disconnect=async(id:string)=>{(window as any).__disconnectCalls=((window as any).__disconnectCalls??0)+1;return disconnect(id);};});await page.getByRole("button",{name:"Configurações",exact:true}).click();
   await page.getByRole("button",{name:"Contas e integrações",exact:true}).click();
   await page.locator(".settingsConnections summary").click();
   await expect(page.getByRole("heading",{name:"Conexões"})).toBeVisible();await expect(page.getByText("Configuração necessária").first()).toBeVisible();
@@ -19,5 +19,9 @@ test("Configurações > integrações preserva configuração, conexão, permiss
   await page.getByRole("button",{name:"Gerenciar conexão"}).click();await expect(page.getByRole("button",{name:/^Permissões \d+ de \d+ operacionais$/})).toHaveAttribute("aria-expanded","true");
   await page.getByRole("button",{name:/Estado da conexão/}).press("Enter");await expect(page.getByRole("button",{name:/Estado da conexão/})).toHaveAttribute("aria-expanded","true");
   await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Diagnóstico",exact:true}).click();
-  await expect(page.getByText("✓ Token presente",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Copiar diagnóstico"}).click();
+  await expect(page.getByText("✓ Token presente",{exact:true})).toBeVisible();await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("button",{name:"Copiar diagnóstico"}).click();
+  await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Desconectar",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Desconectar Google?"})).toBeVisible();await page.getByRole("button",{name:"Cancelar"}).click();
+  await expect(page.evaluate(()=>((window as any).__disconnectCalls??0))).resolves.toBe(0);await page.getByRole("button",{name:"Mais ações"}).click();await page.getByRole("main").getByRole("button",{name:"Desconectar",exact:true}).click();
+  await page.getByRole("button",{name:"Desconectar conta"}).click();await expect(page.getByText("Ação concluída")).toBeVisible();await expect(page.evaluate(()=>((window as any).__disconnectCalls??0))).resolves.toBe(1);
 });

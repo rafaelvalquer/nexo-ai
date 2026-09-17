@@ -1,4 +1,5 @@
 import { useRef,useState } from "react";
+import { PanelLeft } from "lucide-react";
 import { AssistantHeader } from "../components/chat/AssistantHeader";
 import { Composer } from "../components/chat/composer/Composer";
 import { EmptyState } from "../components/chat/EmptyState";
@@ -11,10 +12,12 @@ import { WideExecutionRail } from "../components/chat/WideExecutionRail";
 import { ChatTabs } from "../components/chat/ChatTabs";
 import { useAssistant } from "../hooks/useAssistant";
 import { useChatAutoScroll } from "../hooks/useChatAutoScroll";
+import { NexoDrawer } from "../components/ui/NexoDrawer";
 export function Assistant() {
   const assistant = useAssistant();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [chatsOpen, setChatsOpen] = useState(false);
   const session = assistant.activeSession;
   const streamRevision = `${assistant.activeTask?.progressText?.length ?? 0}:${assistant.activeTask?.statusHistory?.length ?? 0}:${assistant.activeTask?.statusMessage ?? ""}`;
   const scroll = useChatAutoScroll(viewportRef, {
@@ -42,6 +45,7 @@ export function Assistant() {
         onCreate={() => void assistant.createSession()} onSelect={assistant.selectSession}
         onClose={id => void assistant.closeSession(id)} />
       <div className="assistantSessionPanel">
+        <button type="button" className="mobileChatsTrigger" aria-label="Abrir conversas" onClick={() => setChatsOpen(true)}><PanelLeft size={17}/></button>
         <AssistantHeader model={assistant.model} busy={assistant.isStreaming} elapsed={assistant.elapsed} onExecution={() => setDrawerOpen(true)} />
         {session && <div className="activeChatIdentity">
           <span>{session.agentId ? session.agentId.replace("agent-", "Polvo ") : "Agente livre"}</span>
@@ -67,6 +71,9 @@ export function Assistant() {
         <WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed} />
         <ExecutionDrawer task={assistant.activeTask} elapsed={assistant.elapsed} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       </div>
+      <NexoDrawer open={chatsOpen} onClose={() => setChatsOpen(false)} eyebrow="ASSISTENTE LOCAL" title="Conversas" side="left" className="mobileChatDrawer">
+        <ChatTabs sessions={assistant.sessions} activeId={assistant.activeSessionId} onCreate={() => void assistant.createSession()} onSelect={id => {assistant.selectSession(id);setChatsOpen(false);}} onClose={id => void assistant.closeSession(id)}/>
+      </NexoDrawer>
     </div>
   </section>;
 }
