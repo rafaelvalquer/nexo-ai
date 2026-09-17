@@ -19,3 +19,8 @@ test-results/
 .nexo-agent-v2-*/
 .nexo-current-*/
 .nexo-other-*/
+.tmp-smoke-installer*/
+.tmp-startup-check/
+.nexo-chat-test-*/
+release-final-2/
+apps/desktop/release-final*/

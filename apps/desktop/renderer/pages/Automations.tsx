@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, CirclePlay, Clock3, History, MoreHorizontal, Pause, Play, Plus, Search, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, CirclePlay, Clock3, History, MoreHorizontal, Pause, Play, Plus, RefreshCw, Search, Sparkles, Trash2, X, Zap } from "lucide-react";
 import type { AutomationConditionOperator, AutomationExecutionResult, AutomationRunViewModel, AutomationViewModel } from "@nexo/shared";
 import { useAppStore } from "../stores/app";
 import { useAssistantStore } from "../stores/assistant";
@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { GripVertical } from "lucide-react";
 import { NexoDrawer } from "../components/ui/NexoDrawer";
 import "./automations.css";
+import "./automations-data.css";
 
 const status: Record<string, string> = { active: "Ativa", paused: "Pausada", running: "Executando", waiting_approval: "Aguardando aprovação", attention: "Precisa de atenção" };
 const ago = (value?: string) => { if (!value) return "Ainda não executada"; const n = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000)); return n < 1 ? "agora" : n < 60 ? `há ${n} min` : n < 1440 ? `há ${Math.floor(n / 60)} h` : `há ${Math.floor(n / 1440)} d`; };
@@ -16,8 +17,8 @@ const scheduleLabel = (a: AutomationViewModel) => { const t = a.trigger; if (t.t
 const actionRiskLabel = (risk:string) => risk === "critical" ? "CRÍTICA" : risk === "write" ? "ESCRITA" : "LEITURA";
 
 export function Automations() {
-  const [rows, setRows] = useState<AutomationViewModel[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState(""), [query, setQuery] = useState(""), [filter, setFilter] = useState("Todas"), [editor, setEditor] = useState(false), [details, setDetails] = useState<AutomationViewModel | null>(null), [deleteTarget, setDeleteTarget] = useState<AutomationViewModel | null>(null), [deleting, setDeleting] = useState(false);
-  const load = async () => { try { setError(""); setRows(await window.nexo.listAutomations() as AutomationViewModel[]); } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível carregar as macros."); } finally { setLoading(false); } };
+  const [rows, setRows] = useState<AutomationViewModel[]>([]), [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(false), [error, setError] = useState(""), [query, setQuery] = useState(""), [filter, setFilter] = useState("Todas"), [editor, setEditor] = useState(false), [details, setDetails] = useState<AutomationViewModel | null>(null), [deleteTarget, setDeleteTarget] = useState<AutomationViewModel | null>(null), [deleting, setDeleting] = useState(false);
+  const load = async () => { if (!rows.length) setLoading(true); try { setLoadError(false); const next = await window.nexo.listAutomations() as AutomationViewModel[]; setRows(Array.isArray(next) ? next : []); } catch (cause) { console.error("Falha ao carregar macros locais", cause); setLoadError(true); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, []);
   const attention = rows.filter(a => a.status === "attention" || a.status === "waiting_approval" || a.consecutiveFailures > 0);
   const filtered = useMemo(() => rows.filter(a => { const text = `${a.name} ${promptOf(a)} ${scheduleLabel(a)}`.toLowerCase(); const state = filter === "Todas" || (filter === "Ativas" && ["active", "running"].includes(a.status)) || (filter === "Pausadas" && a.status === "paused") || (filter === "Atenção" && attention.some(x => x.id === a.id)); return state && text.includes(query.toLowerCase()); }), [rows, query, filter, attention]);
@@ -29,7 +30,15 @@ export function Automations() {
     <section className="automationStats">{stats.map(([value, label, tone]) => <div key={label} className={tone}><strong>{value}</strong><span>{label}</span></div>)}</section>
     <section className="automationToolbar"><label><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar macros..."/></label><div className="automationFilters">{["Todas", "Ativas", "Pausadas", "Atenção"].map(x => <button className={filter === x ? "active" : ""} onClick={() => setFilter(x)} key={x}>{x}</button>)}</div></section>
     {attention.length > 0 && <section className="attentionSection"><h2>Precisa da sua atenção</h2>{attention.map(a => <article key={a.id}><AlertTriangle/><div><b>{a.name}</b><p>{a.status === "waiting_approval" ? "Há uma execução aguardando sua aprovação." : "Verifique a última execução."}</p></div><button className="ghost" onClick={() => setDetails(a)}>Revisar <ChevronRight size={14}/></button></article>)}</section>}
-    <section className="automationSection"><div className="sectionTitle"><h2>Suas macros</h2><span>{filtered.length} rotina{filtered.length === 1 ? "" : "s"}</span></div>{loading ? <div className="automationGrid">{[1, 2, 3].map(i => <div className="automationSkeleton" key={i}/>)}</div> : filtered.length ? <div className="automationGrid">{filtered.map(a => <Card key={a.id} item={a} open={() => setDetails(a)} action={action} requestDelete={() => setDeleteTarget(a)}/>)}</div> : <div className="automationEmpty"><Sparkles size={28}/><h3>Ainda não há macros</h3><p>Crie uma rotina para repetir tarefas com um só comando.</p><button onClick={() => setEditor(true)}><Plus size={15}/> Criar macro</button></div>}</section>
+    <section className="automationSection"><div className="sectionTitle"><h2>Suas macros</h2><span>{filtered.length} rotina{filtered.length === 1 ? "" : "s"}</span><button className="automationRefresh" type="button" onClick={() => void load()} disabled={loading} aria-label="Atualizar macros"><RefreshCw size={14}/><span>Atualizar</span></button></div>
+      {loading && rows.length === 0 ? <div className="automationGrid" role="status" aria-label="Carregando macros">{[1, 2, 3].map(i => <div className="automationSkeleton" key={i}/>)}</div> : null}
+      {loadError && rows.length === 0 && <div className="automationLoadError" role="alert"><AlertTriangle size={18}/><div><b>Não foi possível carregar suas macros</b><p>Confira se os dados locais estão disponíveis e tente novamente.</p></div><button type="button" onClick={() => void load()} disabled={loading}><RefreshCw size={14}/> Tentar novamente</button></div>}
+      {loadError && rows.length > 0 && <div className="automationStale" role="status"><span>Não foi possível atualizar. Exibindo a lista carregada anteriormente.</span><button type="button" onClick={() => void load()} disabled={loading}><RefreshCw size={14}/> Tentar novamente</button></div>}
+      {loading && rows.length > 0 && <div className="automationRefreshStatus" role="status">Atualizando macros…</div>}
+      {!loading && rows.length > 0 && filtered.length > 0 && <div className="automationGrid">{filtered.map(a => <Card key={a.id} item={a} open={() => setDetails(a)} action={action} requestDelete={() => setDeleteTarget(a)}/>)}</div>}
+      {!loading && !loadError && rows.length === 0 && <div className="automationEmpty"><Sparkles size={28}/><h3>Ainda não há macros</h3><p>Crie uma rotina para repetir tarefas com um só comando.</p><button onClick={() => setEditor(true)}><Plus size={15}/> Criar macro</button></div>}
+      {!loading && rows.length > 0 && filtered.length === 0 && <div className="automationEmpty"><Search size={22}/><h3>Nenhuma macro encontrada</h3><p>Ajuste a busca ou o filtro para ver outras rotinas.</p></div>}
+    </section>
     {editor && <MacroForm close={() => setEditor(false)} done={async () => { setEditor(false); await load(); useToastStore.getState().show({title:"Macro salva",description:"A rotina já está disponível na sua lista.",tone:"success"}); }} fail={setError}/>} {details && <Details item={details} close={() => setDetails(null)} action={action}/>}<NexoDrawer open={Boolean(deleteTarget)} onClose={() => {if(!deleting)setDeleteTarget(null);}} eyebrow="AÇÃO CRÍTICA" title="Excluir macro?" className="confirmationDrawer"><p>A macro “{deleteTarget?.name}” e seu histórico local serão removidos. Esta ação não pode ser desfeita.</p><div className="confirmationActions"><button type="button" className="ghost" disabled={deleting} onClick={() => setDeleteTarget(null)}>Cancelar</button><button type="button" className="danger" disabled={deleting} onClick={() => void removeMacro()}>{deleting?"Excluindo…":"Excluir macro"}</button></div></NexoDrawer></div>;
 }
 

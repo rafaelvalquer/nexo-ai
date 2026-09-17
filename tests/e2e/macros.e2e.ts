@@ -7,6 +7,26 @@ test.use({channel:process.env.PLAYWRIGHT_CHANNEL});
 test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("apps/desktop/vite.config.ts"),root:path.resolve("apps/desktop/renderer"),server:{host:"127.0.0.1",port:0},logLevel:"error"});await server.listen();const address=server.httpServer!.address();if(!address||typeof address==="string")throw new Error("Preview unavailable");url=`http://127.0.0.1:${address.port}`;});
 test.afterAll(async()=>{await server?.close();});
 
+test("macro library distinguishes empty, unavailable, and stale data states",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(()=>{
+    const api=(window as any).nexo;let fail=true;
+    api.listAutomations=async()=>{if(fail)throw new Error("SQLITE_BUSY: private database details");return[{id:"macro-local",name:"Resumo local",description:"Resumo de arquivos",prompt:"Resumir arquivos",enabled:true,status:"active",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0}];};
+    (window as any).__setMacroLoadFailure=(value:boolean)=>{fail=value;};
+  });
+  await page.getByRole("button",{name:"Macros",exact:true}).click();
+  await expect(page.getByRole("alert").getByText("Não foi possível carregar suas macros")).toBeVisible();
+  await expect(page.locator(".automationEmpty")).toHaveCount(0);
+  await expect(page.getByRole("alert")).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(()=> (window as any).__setMacroLoadFailure(false));
+  await page.getByRole("button",{name:"Tentar novamente"}).click();
+  await expect(page.getByText("Resumo local",{exact:true})).toBeVisible();
+  await page.evaluate(()=> (window as any).__setMacroLoadFailure(true));
+  await page.getByRole("button",{name:"Atualizar macros"}).click();
+  await expect(page.getByRole("status")).toContainText("Exibindo a lista carregada anteriormente.");
+  await expect(page.getByText("Resumo local",{exact:true})).toBeVisible();
+});
+
 test("natural macro drafts are reviewed and completed before saving",async({page})=>{
   await page.goto(url);
   await page.evaluate(()=>{
