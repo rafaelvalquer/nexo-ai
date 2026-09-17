@@ -108,3 +108,5 @@ export type ConnectionResolution =
 export type DocumentStatus = "importing" | "extracting" | "indexing" | "ready" | "failed";
 export type DocumentRecord = { id:string;name:string;mimeType:string;sizeBytes:number;status:DocumentStatus;metadata?:Record<string,unknown>;createdAt:string;updatedAt:string };
 export type ChatAttachment = { id:string;documentId:string;name:string;mimeType:string;sizeBytes:number;status:"importing"|"ready"|"failed" };
+
+export * from "./conversation-pagination.js";

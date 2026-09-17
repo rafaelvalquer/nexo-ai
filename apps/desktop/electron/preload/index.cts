@@ -1,5 +1,5 @@
 import type {
-  ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest,
+  ConversationPageOptions, ConversationMessagePage, ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest,
   CreateAutomationV2Input, UpdateAutomationV2Input, AutomationExecutionResult, AutomationViewModel,
   EmailComposeDraftUpdateRequest, EmailComposeDraftCancelRequest, EmailComposeDraftSubmitRequest
 } from "@nexo/shared";
@@ -48,6 +48,7 @@ const api={
   createConversation:(title?:string)=>ipcRenderer.invoke("nexo:conversations:create",title),
   renameConversation:(id:string,title:string)=>ipcRenderer.invoke("nexo:conversations:rename",id,title),
   deleteConversation:(id:string)=>ipcRenderer.invoke("nexo:conversations:delete",id),
+  conversationMessagePage:(id:string,options:ConversationPageOptions={}):Promise<ConversationMessagePage>=>ipcRenderer.invoke("nexo:conversations:messages-page",id,options),
   conversationMessages:(id:string)=>ipcRenderer.invoke("nexo:conversations:messages",id),
   startChatTask:(conversationOrText:string,textOrAttachments?:string|string[],attachmentIds:string[]=[])=>typeof textOrAttachments==="string"?ipcRenderer.invoke("nexo:chat:start",conversationOrText,textOrAttachments,attachmentIds):legacyStart(conversationOrText,Array.isArray(textOrAttachments)?textOrAttachments:[]),
   listConnections:()=>ipcRenderer.invoke("nexo:connections:list"),
