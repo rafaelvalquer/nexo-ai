@@ -1,6 +1,6 @@
 import type { RiskLevel,ToolResultInput } from "@nexo/shared";
 import { z } from "zod";
-export type ToolExecutionContext={runId?:string;taskId?:string;conversationId?:string;agentId?:string;executionId?:string;idempotencyKey?:string;approvalId?:string;/** @internal Set only after ApprovalCoordinator consumes an exact approval. */dispatchAuthorized?:boolean;signal?:AbortSignal};
+export type ToolExecutionContext={runId?:string;taskId?:string;conversationId?:string;agentId?:string;executionId?:string;idempotencyKey?:string;approvalId?:string;/** @internal injected from PermissionEngine, never model-controlled. */filesystemRoots?:string[];/** @internal revalidation callback injected from PermissionEngine. */assertFilesystemPath?:(path:string)=>void;/** @internal Set only after ApprovalCoordinator consumes an exact approval. */dispatchAuthorized?:boolean;signal?:AbortSignal};
 export type ToolExposure="PUBLIC_AGENT_TOOL"|"CORE_INTERNAL_TOOL"|"UI_ACTION_TOOL";
 export type ToolDefinition={
   name:string;

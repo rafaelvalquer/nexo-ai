@@ -1,0 +1,334 @@
+.sidebar nav button .navBusy {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b;
+  animation: nexoPulse 1.2s ease-in-out infinite;
+}
+
+.liveBody {
+  min-width: 280px;
+  max-width: 760px;
+}
+
+.liveStatus {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #8f9aae;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.typingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8b7cff;
+  box-shadow: 0 0 9px #8b7cff;
+  animation: nexoPulse 1s ease-in-out infinite;
+}
+
+.liveHint {
+  font-size: 12px;
+  color: #7f8998;
+}
+
+.streamText {
+  color: #f2f4f8;
+  white-space: pre-wrap;
+}
+
+.streamCursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: #9c8cff;
+  animation: nexoCursor .85s steps(1) infinite;
+}
+
+@keyframes nexoPulse {
+  0%,100% {
+    opacity: .45;
+    transform: scale(.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes nexoCursor {
+  0%,48% {
+    opacity: 1;
+  }
+  49%,100% {
+    opacity: 0;
+  }
+}
+
+/* Assistente v0.2.2: conversa compacta, alinhada no topo e feedback operacional. */
+
+section.assistant {
+  height: calc(100vh - 76px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.assistantHeader {
+  flex: 0 0 auto;
+  margin-bottom: 10px !important;
+}
+
+.assistant .chat {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 2px 8px !important;
+  scroll-behavior: smooth;
+}
+
+.messageStack {
+  width: min(940px,100%);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0;
+}
+
+.assistant .msg {
+  display: flex;
+  width: fit-content;
+  max-width: 86%;
+  gap: 7px;
+  margin: 0 !important;
+  line-height: 1.4;
+  align-items: flex-start;
+}
+
+.assistant .msgsection.assistant {
+  align-self: flex-start;
+}
+
+.assistant .msg.user {
+  align-self: flex-end;
+  margin-left: 0 !important;
+  flex-direction: row-reverse;
+}
+
+.assistant .msg .messageBody {
+  padding: 8px 11px;
+  border-radius: 11px;
+  max-width: 760px;
+}
+
+.assistant .avatar {
+  width: 27px !important;
+  height: 27px !important;
+  min-width: 27px !important;
+  border-radius: 8px !important;
+  font-size: 12px;
+}
+
+.assistant .composer {
+  flex: 0 0 auto;
+  width: min(940px,100%);
+  margin-top: 8px;
+  padding: 7px;
+  border-radius: 12px;
+}
+
+.assistant .composer textarea {
+  min-height: 38px;
+  padding: 8px 9px;
+}
+
+.assistant .composer button {
+  width: 40px;
+  min-width: 40px;
+  padding: 8px;
+}
+
+.liveBody {
+  min-width: 310px;
+  max-width: 760px !important;
+}
+
+.processingHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  color: #8f9aae;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 6px;
+}
+
+.processingTrail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 7px;
+}
+
+.processingStep {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #7f8998;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.processingStep.done {
+  color: #697381;
+}
+
+.processingStep.done .processingDot {
+  background: #3f9f72;
+  box-shadow: none;
+}
+
+.processingStep.active {
+  color: #aeb8ca;
+}
+
+.processingDot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: 50%;
+  margin-top: 4px;
+  background: #8b7cff;
+  box-shadow: 0 0 8px #8b7cff;
+  animation: nexoPulse 1s ease-in-out infinite;
+}
+
+.streamText {
+  border-top: 1px solid #242b36;
+  padding-top: 8px;
+  margin-top: 5px;
+  line-height: 1.5;
+  color: #f2f4f8;
+  white-space: pre-wrap;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row small {
+  font-size: 11px;
+  color: #6f7b8d;
+}
+
+.notice {
+  white-space: pre-wrap;
+}
+
+.notice.error {
+  color: #ff8797;
+}
+
+.muted {
+  color: #8e9ab2;
+  font-size: 13px;
+}
+
+.attachmentChip {
+  position: absolute;
+  bottom: 66px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #182033;
+  border: 1px solid #39476a;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: #b9c5e8;
+}
+
+.attachmentChip button {
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: #2e3b59;
+}
+
+.providerRow {
+  align-items: flex-start;
+}
+
+.capabilities {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.capabilities label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #aeb9ca;
+}
+
+.capabilities input {
+  accent-color: #765cff;
+}
+
+.folderTrigger {
+  display: flex;
+  gap: 8px;
+}
+
+.folderTrigger input {
+  flex: 1;
+}
+
+.modelInstaller {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  display: grid;
+  gap: 7px;
+  max-width: 310px;
+  padding: 14px;
+  border: 1px solid #765cff;
+  background: #111729;
+  box-shadow: 0 14px 42px #0008;
+  border-radius: 12px;
+  color: #dce4f5;
+}
+
+.modelInstaller b {
+  font-size: 13px;
+}
+
+.modelInstaller span {
+  font-size: 12px;
+  color: #aeb8ca;
+}
+
+.modelInstaller button {
+  justify-self: start;
+  font-size: 12px;
+}

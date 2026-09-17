@@ -1,0 +1,43 @@
+.executionSummary {
+  min-width: 0;
+  margin: 4px 0 12px;
+  padding-left: 11px;
+  border-left: 1px solid var(--nexo-border-strong);
+}
+
+.executionSummary > button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 0;
+  color: var(--nexo-text-secondary);
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+}
+
+.executionSummary > button > span { flex: 1; min-width: 0; }
+.executionSummary > button > small,
+.executionSummary li > small { color: var(--nexo-text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.executionSummary > button > svg:first-child { flex: 0 0 auto; transition: transform var(--nexo-motion-fast) ease; }
+.executionSummary > button > svg:first-child.closed { transform: rotate(-90deg); }
+.executionSummary > ol { overflow: hidden; margin: 0; padding: 2px 0 3px; list-style: none; }
+.executionSummary li { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: start; gap: 7px; margin: 6px 0; color: var(--nexo-text-muted); font-size: 11px; line-height: 1.45; }
+.executionSummary li > svg { margin-top: 1px; color: var(--nexo-success); }
+.executionSummary li.active { color: var(--nexo-text-secondary); }
+.executionSummary li.active > svg { color: var(--nexo-cyan); }
+.executionSummary li.active:has(svg.lucide-loader-circle) > svg { animation: nexoExecutionSpin 1s linear infinite; }
+.executionSummary.isWaiting li.active > svg { color: var(--nexo-warning); }
+.executionSummary li.failed { color: var(--nexo-danger); }
+.executionSummary li.failed > svg,
+.executionSummary li.cancelled > svg { color: var(--nexo-danger); }
+.executionSummary.isIdle { border-color: var(--nexo-border); }
+.executionSummary.isIdle > button { color: var(--nexo-text-muted); }
+
+@keyframes nexoExecutionSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .executionSummary *, .executionSummary *::before, .executionSummary *::after { animation: none !important; transition: none !important; }
+}

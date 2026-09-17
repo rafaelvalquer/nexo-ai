@@ -25,6 +25,32 @@ test("menu principal apresenta as quatro áreas do produto", async ({ page }) =>
   await expect(page.locator('.sidebar nav button[aria-current="page"] .navActiveIndicator')).toHaveCount(1);
 });
 
+test("status da IA oferece um caminho direto para Configurações",async({page})=>{
+  await page.goto(url);
+  await page.getByRole("button",{name:"Estado da IA local"}).click();
+  await expect(page.getByText("Ollama conectado")).toBeVisible();
+  await expect(page.getByText("qwen3:1.7b",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Configurar IA"}).click();
+  await expect(page.getByRole("heading",{name:"Configurações"})).toBeVisible();
+});
+
+test("a execução ativa mostra timeline operacional no chat e no drawer",async({page})=>{
+  await page.goto(url);
+  await page.getByRole("button",{name:"Assistente",exact:true}).click();
+  await page.evaluate(()=>{const api=(window as any).nexo;const task={id:"ui-running-task",type:"assistant-chat",status:"running",input:{text:"resuma um arquivo"},conversationId:"preview-1",createdAt:new Date().toISOString(),startedAt:new Date().toISOString(),statusMessage:"Analisando a solicitação…",statusHistory:["Entendendo a solicitação","Localizando arquivos"]};api.listActiveTasks=async()=>[];api.startChatTask=async()=>{api.listActiveTasks=async()=>[task];return task;};});
+  await page.getByRole("textbox",{name:"Mensagem para o Nexo"}).fill("resuma um arquivo");
+  await page.getByRole("button",{name:"Enviar mensagem"}).click();
+  const executions=page.getByRole("button",{name:"1 execução ativa"});
+  await expect(executions).toBeVisible();
+  const liveSummary=page.locator(".streaming .executionSummary");
+  await expect(liveSummary).toHaveClass(/isActive/);
+  await expect(liveSummary.locator('li[aria-current="step"]')).toBeVisible();
+  await page.locator(".assistantHeader").getByRole("button",{name:"Execução"}).click();
+  const executionDrawer=page.getByRole("dialog",{name:"Etapas"});
+  await expect(executionDrawer.locator(".executionSummary")).toHaveClass(/isActive/);
+  await expect(executionDrawer.locator('li[aria-current="step"]')).toBeVisible();
+});
+
 test("navegação mantém controles visíveis e sem overflow nos breakpoints do produto", async ({ page }, testInfo) => {
   await page.emulateMedia({reducedMotion:"reduce"});
   await page.setViewportSize({ width: 800, height: 700 });
@@ -61,6 +87,7 @@ test("a command palette indexes macros and saved conversations by title", async 
     const api=(window as any).nexo;
     api.listAutomations=async()=>[{id:"macro-report",name:"Relatório semanal",description:"Compilar planilhas",prompt:""}];
     api.listConversations=async()=>[{id:"conversation-project",title:"Projeto Nexo",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}];
+    api.listRecentDocuments=async()=>[{id:"doc-budget",name:"Orçamento 2026.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",sizeBytes:1200,status:"ready",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}];
     api.runAutomation=async(id:string)=>{(window as any).__runMacro=id;return{};};
   });
   await page.keyboard.press("Control+K");
@@ -68,6 +95,23 @@ test("a command palette indexes macros and saved conversations by title", async 
   await expect(page.getByRole("option",{name:/Executar macro: Relatório semanal/})).toBeVisible();
   await page.getByPlaceholder("O que deseja fazer?").fill("projeto nexo");
   await expect(page.getByRole("option",{name:/Abrir conversa: Projeto Nexo/})).toBeVisible();
+  await page.getByPlaceholder("O que deseja fazer?").fill("orçamento 2026");
+  await expect(page.getByRole("option",{name:/Abrir documento: Orçamento 2026.xlsx/})).toBeVisible();
+  await page.getByPlaceholder("O que deseja fazer?").fill("projeto nexo");
   await page.getByRole("option",{name:/Abrir conversa: Projeto Nexo/}).click();
   await expect(page.locator(".assistantPage")).toBeVisible();
+});
+
+test("a palette expõe todas as rotas e mostra erro de comando como toast",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(()=>{(window as any).nexo.runAutomation=async()=>{throw new Error("Macro indisponível");};(window as any).nexo.listAutomations=async()=>[{id:"macro-fail",name:"Macro indisponível",description:"",prompt:""}];});
+  await page.keyboard.press("Control+K");
+  for(const label of ["Ferramentas","Memória","Diagnóstico"]) {
+    await page.getByPlaceholder("O que deseja fazer?").fill(label.toLowerCase());
+    await expect(page.getByRole("option",{name:new RegExp(`Abrir ${label}`)})).toBeVisible();
+  }
+  await page.getByPlaceholder("O que deseja fazer?").fill("Macro indisponível");
+  await page.getByRole("option",{name:/Executar macro: Macro indisponível/}).click();
+  await expect(page.getByRole("alert").getByText("Macro indisponível")).toBeVisible();
+  await expect(page.getByRole("dialog",{name:"Paleta de comandos"})).toBeVisible();
 });

@@ -26,7 +26,7 @@ export type PlanOrigin="fast"|"llm";
 export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences";emailDraft?:EmailComposePlanDraft};
 
 const fastRouter=new FastIntentRouter();
-const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","memory_usage","disk_usage","system_info","process_list"]);
+const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","find_file","memory_usage","disk_usage","system_info","process_list"]);
 const MUTATION_INTENTS=new Set<AgentIntent["intent"]>(["create","send","update","delete","move"]);
 let defaultIntentMemory:IntentMemoryStore|undefined;
 let defaultIntentLearningEnabled:()=>boolean=()=>true;
@@ -73,14 +73,15 @@ export class AgentPlanner{
     const filesystemIntent=deterministicFilesystemIntent(userText);
     if(filesystemIntent){
       const filesystemPlan=this.buildIntentPlan(filesystemIntent,previous,availableTools);
-      if(filesystemPlan.steps?.length||filesystemPlan.direct)return filesystemPlan;
+      if(filesystemPlan.steps?.length)return filesystemPlan;
+      if(filesystemPlan.direct&&!MUTATION_INTENTS.has(filesystemIntent.intent)&&!/\b(crie|criar|apague|apagar|remova|remover|mova|mover|renomeie|renomear|salve|salvar|atualize|atualizar)\b/i.test(userText))return filesystemPlan;
       return undefined;
     }
     const routed=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});
     if(routed){
       const names=routed.steps?.map(step=>step.tool)??(routed.tool?[routed.tool]:[]);
       const macroOrInternal=names.length>0&&names.every(name=>name.startsWith("macro_")||name==="browser_download"||name==="browser_click"||name==="browser_type");
-      if(names.every(name=>DETERMINISTIC_SAFE_TOOLS.has(name))||macroOrInternal)
+      if(names.length>0&&(names.every(name=>DETERMINISTIC_SAFE_TOOLS.has(name))||macroOrInternal))
         return withPresentationPolicy({...routed,origin:"fast"});
       if(typeof routed.direct==="string"&&isLikelyConversation(userText))return{...routed,origin:"fast"};
     }

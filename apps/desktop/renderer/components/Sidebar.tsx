@@ -1,10 +1,11 @@
-import { MessageSquare, Zap, Settings, PanelLeftClose, PanelLeftOpen, Building2 } from "lucide-react";
+import { MessageSquare, Zap, Settings, PanelLeftClose, PanelLeftOpen, Building2, LayoutDashboard } from "lucide-react";
 import { useAppStore } from "../stores/app";
 import { useAssistantStore } from "../stores/assistant";
 import { motion, useReducedMotion } from "motion/react";
 import { motionTokens } from "../design/motion";
 
 const items = [
+  ["Dashboard", "Dashboard", LayoutDashboard],
   ["Assistente", "Assistente", MessageSquare],
   ["Macros", "Macros", Zap],
   ["Escritório", "Escritório", Building2],

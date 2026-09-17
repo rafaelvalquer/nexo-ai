@@ -46,16 +46,21 @@ test("the settings confirmation drawer fits narrow screens without horizontal ov
   await page.screenshot({path:"test-results/settings-confirmation-mobile.png"});
 });
 
-test("settings use a side navigation on desktop and become scrollable tabs on compact screens",async({page},testInfo)=>{
+test("settings use side navigation on desktop and a destination selector on compact screens",async({page},testInfo)=>{
   await page.setViewportSize({width:1280,height:800});
   await page.goto(url);
   await page.getByRole("button",{name:"Configurações",exact:true}).click();
   const navigation=page.locator(".settingsNav");
   await expect(navigation).toBeVisible();
   expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("column");
+  await expect(page.getByLabel("Navegar pelas configurações")).toBeHidden();
   await page.screenshot({path:testInfo.outputPath("settings-desktop-navigation.png")});
   await page.setViewportSize({width:390,height:844});
   expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("row");
+  const sectionSelector=page.getByLabel("Navegar pelas configurações");
+  await expect(sectionSelector).toBeVisible();
+  await sectionSelector.selectOption("Catálogo");
+  await expect(page.locator(".settingsToolsCatalog")).toHaveAttribute("open","");
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await navigation.evaluate(()=>{const panel=document.querySelector(".settings")!.getBoundingClientRect();return [...document.querySelectorAll<HTMLInputElement|HTMLSelectElement>(".settings input,.settings select")].every(control=>control.getBoundingClientRect().right<=panel.right+1);})).toBe(true);
   await page.screenshot({path:testInfo.outputPath("settings-compact-navigation.png")});

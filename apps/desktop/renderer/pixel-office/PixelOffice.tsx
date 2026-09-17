@@ -11,6 +11,7 @@ import { AgentFlowView } from "./ui/AgentFlowView";
 import { useAppStore } from "../stores/app";
 import { useAssistantStore } from "../stores/assistant";
 import "./styles/pixel-office.css";
+import "./styles/pixel-office-multi.css";
 export function PixelOffice(){
   useAgentEvents();const setPage=useAppStore(s=>s.setPage),selectSession=useAssistantStore(s=>s.selectSession),activeCount=useAssistantStore(s=>s.sessions.filter(session=>session.status==="running"||session.status==="waiting_approval").length),[drawer,setDrawer]=useState<{open:boolean;station?:OfficeStationId}>({open:false}),[flowVisible,setFlowVisible]=useState(false),[immersive,setImmersive]=useState(false);
   useEffect(()=>{if(!immersive)return;const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")setImmersive(false);};window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);},[immersive]);

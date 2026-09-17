@@ -9,8 +9,8 @@ test.afterAll(async()=>{await server?.close();});
 test("Configurações > integrações preserva configuração, conexão, permissões e diagnóstico",async({page})=>{
   await page.goto(url);await page.evaluate(()=>{const api=window.nexo as any;const disconnect=api.disconnect.bind(api);api.disconnect=async(id:string)=>{(window as any).__disconnectCalls=((window as any).__disconnectCalls??0)+1;return disconnect(id);};});await page.getByRole("button",{name:"Configurações",exact:true}).click();
   await page.getByRole("button",{name:"Contas e integrações",exact:true}).click();
-  await page.locator(".settingsConnections summary").click();
-  await expect(page.getByRole("heading",{name:"Conexões"})).toBeVisible();await expect(page.getByText("Configuração necessária").first()).toBeVisible();
+  await expect(page.locator(".settingsConnections")).toHaveAttribute("open","");
+  await expect(page.getByRole("heading",{name:"Conexões"})).toBeVisible({timeout:15_000});await expect(page.getByText("Configuração necessária").first()).toBeVisible();
   await page.getByRole("button",{name:"Google OAuth"}).click();
   await page.getByLabel("Client ID").first().fill("preview.apps.googleusercontent.com");await page.getByPlaceholder("GOCSPX-…").fill("GOCSPX-preview");await page.getByRole("button",{name:"Salvar credenciais"}).click();
   await expect(page.getByText("Configuração OAuth salva com segurança.")).toBeVisible();

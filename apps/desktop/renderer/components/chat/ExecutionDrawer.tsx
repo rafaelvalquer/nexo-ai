@@ -7,6 +7,6 @@ export function ExecutionDrawer({ task, elapsed, open, onClose }: { task?: Backg
   const history = task?.statusHistory?.length ? task.statusHistory : [task?.statusMessage ?? "Nenhuma execução ativa."];
   return <NexoDrawer open={open} onClose={onClose} eyebrow="ASSISTENTE LOCAL" title="Etapas" className="executionDrawer">
     <AgentFlowView task={task} />
-    <ExecutionSummary history={history} elapsed={elapsed} />
+    <ExecutionSummary history={history} elapsed={elapsed} status={task?.status ?? "idle"} />
   </NexoDrawer>;
 }

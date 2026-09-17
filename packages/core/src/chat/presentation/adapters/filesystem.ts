@@ -17,6 +17,8 @@ export function fileActions(folder: boolean): ResourceAction[] {
   ];
 }
 export const filesystemAdapter: PresentationAdapter = (result, context) => {
+  const findResult = z.object({ matches: z.array(z.object({ name:z.string(),path:z.string(),root:z.string().optional(),size:z.number().optional(),modifiedAt:z.string().optional() })) }).safeParse(result.data);
+  if(findResult.success){const blockId=randomUUID();const items:ResourceItem[]=findResult.data.matches.map(file=>({id:randomUUID(),resource:{kind:"file",path:file.path,name:file.name,extension:path.extname(file.name).slice(1),size:file.size,modifiedAt:file.modifiedAt},actions:fileActions(false)}));return{presentation:{version:1,blocks:[{id:blockId,version:1,type:"resource_collection",domain:"filesystem",title:"Arquivo encontrado",total:items.length,items}]},bindings:items.map(item=>({blockId,itemId:item.id,toolName:context.toolName,input:{path:item.resource.kind==="file"?item.resource.path:undefined}}))};}
   const largest = z.object({ files: z.array(z.unknown()) }).safeParse(result.data);
   const rows = largest.success ? largest.data.files : result.data;
   const parsed = z.array(fileSchema).safeParse(rows);

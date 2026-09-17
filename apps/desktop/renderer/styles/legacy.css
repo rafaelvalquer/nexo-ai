@@ -1,0 +1,13 @@
+/* CSS legado separado em módulos, preservando a sequência de cascata original. */
+@import "./globals.css";
+@import "./shell.css";
+@import "./legacy-components.css";
+@import "./legacy-assistant.css";
+@import "./legacy-content-settings.css";
+@import "./assistant-live.css";
+@import "./nexo-identity.css";
+@import "./documents.css";
+@import "./connections.css";
+@import "./assistant-execution.css";
+@import "./onboarding.css";
+@import "./tools.css";

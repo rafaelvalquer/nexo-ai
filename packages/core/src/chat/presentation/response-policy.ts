@@ -5,6 +5,7 @@ export type ResponseMode = "deterministic" | "synthesize" | "presentation";
 const PRESENTATION_ONLY_TOOLS = new Set([
   "list_files",
   "search_files",
+  "find_file",
   "largest_files",
   "email_search",
   "email_latest",

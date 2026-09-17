@@ -1,0 +1,80 @@
+.assistantWorkspace {
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
+}
+
+.assistantWorkspace .chat {
+  flex: 1;
+}
+
+.executionRail {
+  width: 270px;
+  flex: 0 0 270px;
+  border: 1px solid #263047;
+  background: #0d111b;
+  border-radius: 16px;
+  padding: 14px;
+  align-self: stretch;
+  overflow: auto;
+}
+
+.executionRail header {
+  margin: 0 0 14px;
+  align-items: flex-start;
+}
+
+.executionRail h3 {
+  font-size: 14px;
+  margin: 3px 0 0;
+}
+
+.executionSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.executionStep {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: #8e9ab2;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.executionStep svg {
+  flex: 0 0 auto;
+  color: #3bd89f;
+}
+
+.executionStep.active svg {
+  color: #49d6ff;
+  animation: nexoPulse 1s infinite;
+}
+
+.executionRail small {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #71809a;
+  font-size: 11px;
+}
+
+@media (max-width:1180px) {
+  .executionRail {
+    display: none;
+  }
+}
+
+@media (max-width:1150px) {
+  .messageStack,.assistant .composer {
+    width: 100%;
+  }
+  .assistant .msg {
+    max-width: 92%;
+  }
+}

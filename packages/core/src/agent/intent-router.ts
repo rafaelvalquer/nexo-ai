@@ -3,6 +3,7 @@ import os from "node:os";
 import type { Plan } from "./planner.js";
 import { LocationRegistry } from "../locations/location-registry.js";
 import { PathIntentResolver } from "../locations/path-intent-resolver.js";
+import { parseFileIntent } from "./intent/file-intent.js";
 
 function homeFolder(name: "Downloads" | "Documents" | "Desktop") {
   return path.join(os.homedir(), name);
@@ -155,10 +156,9 @@ export class FastIntentRouter {
     const app = text.match(/\b(?:abra|abrir|abre)\s+(?:o\s+)?(chrome|google chrome|edge|microsoft edge|vscode|visual studio code|android studio|explorer)\b/i);
     if (app) return { tool: "open_application", input: { application: app[1] }, explanation: `Abrindo ${app[1]}…` };
 
-    const supportedExtension="(?:pdf|docx?|xlsx?|txt|md|csv|json|png|jpe?g)";
-    const fileName=text.match(new RegExp(`[\"“]([^\"”]+\\.${supportedExtension})[\"”]` ,"iu"))?.[1]?.trim()??text.match(new RegExp(`(?:^|\\s)([^\\\\/:*?\"<>|\\s]+\\.${supportedExtension})(?=\\s|[.!?,;:]?$)`,"iu"))?.[1]?.trim();
-    if(fileName&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return{tool:"document_summarize_named",input:{fileName},explanation:`Localizando e analisando ${fileName} nas pastas permitidas…`};
-    if(fileName&&/\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text)&&options.allowedRoots?.length)return{tool:"search_files",input:{paths:options.allowedRoots,query:fileName},explanation:`Procurando ${fileName} nas pastas permitidas…`};
+    const fileIntent=parseFileIntent(text);
+    if(fileIntent?.kind==="find_file"&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return{tool:"document_summarize_named",input:{fileName:fileIntent.fileName},explanation:`Localizando e analisando ${fileIntent.fileName} nas pastas permitidas…`};
+    if(fileIntent?.kind==="find_file")return{tool:"find_file",input:{fileName:fileIntent.fileName,...(fileIntent.folder?{root:fileIntent.folder}:{})},explanation:`Procurando ${fileIntent.fileName} nas pastas autorizadas…`};
 
     const folder = knownFolderFromText(text);
     if (folder && /\b(maiores?|mais\s+pesados?|ocupam?\s+mais\s+espa[cç]o|arquivos?\s+grandes?)\b/i.test(text)) {

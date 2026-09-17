@@ -1,0 +1,188 @@
+.list {
+  padding: 0;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px 20px;
+  border-bottom: 1px solid #202631;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.row>div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.row span {
+  font-size: 12px;
+  color: #7f8998;
+}
+
+.row code {
+  font-size: 11px;
+  color: #8ea2c9;
+  max-width: 700px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 8px !important;
+}
+
+.empty {
+  padding: 30px;
+  text-align: center;
+  color: #717b89;
+}
+
+.tag {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #222936;
+  color: #a9b1bf !important;
+}
+
+.tag.success {
+  background: #123326;
+  color: #66d79e !important;
+}
+
+.tag.error,.tag.failed {
+  background: #3a1d24;
+  color: #ff8797 !important;
+}
+
+.tag.pending,.tag.awaiting_approval {
+  background: #342d16;
+  color: #eecf6a !important;
+}
+
+.inline {
+  display: flex;
+  gap: 10px;
+}
+
+.inline input,.form3 input,.settings input,.settings select {
+  background: #0c1015;
+  border: 1px solid #28303c;
+  color: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+}
+
+.inline input {
+  flex: 1;
+}
+
+.form3 {
+  display: grid;
+  grid-template-columns: 1.1fr .7fr 2fr auto;
+  gap: 8px;
+}
+
+.panel small {
+  display: block;
+  color: #6f7886;
+  margin-top: 10px;
+}
+
+.settings {
+  max-width: 850px;
+}
+
+.settings h3 {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid #202631;
+}
+
+.settings h3:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border: 0;
+}
+
+.settings label {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  margin: 11px 0;
+  color: #a7afbb;
+}
+
+.settings select {
+  width: 100%;
+}
+
+.settingBlock {
+  margin: 13px 0;
+}
+
+.settingBlock>span {
+  display: block;
+  color: #a7afbb;
+  margin-bottom: 8px;
+}
+
+.folder {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0b0e13;
+  border: 1px solid #232a34;
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin: 6px 0;
+}
+
+.folder code {
+  font-size: 12px;
+  color: #aeb9ca;
+}
+
+.check {
+  grid-template-columns: auto 1fr !important;
+  gap: 10px;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+}
+
+.settings>button {
+  margin-top: 12px;
+}
+
+@media (max-width:1150px) {
+  .grid4 {
+    grid-template-columns: repeat(2,1fr);
+  }
+  .hero .orb {
+    display: none;
+  }
+  .form3 {
+    grid-template-columns: 1fr;
+  }
+  .app {
+    grid-template-columns: 205px 1fr;
+  }
+  main {
+    padding: 30px;
+  }
+}

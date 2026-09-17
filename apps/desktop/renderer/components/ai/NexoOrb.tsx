@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowUpRight, FileText, MessageSquare, Orbit, Pause, Play, Plus, X } from "lucide-react";
+import { ArrowUpRight, FileText, MessageSquare, Orbit, Pause, Play, Plus, X, Zap, Settings2 } from "lucide-react";
 import { useVisualStore } from "../../stores/visual";
 import { useAppStore } from "../../stores/app";
 import type { OrbInteraction } from "./orb/OrbScene";
@@ -53,6 +53,8 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
       <button onClick={() => navigate("Assistente")}><MessageSquare size={14} />Conversar<ArrowUpRight size={12} /></button>
       <button onClick={() => navigate("Documentos")}><FileText size={14} />Documentos<ArrowUpRight size={12} /></button>
       <button onClick={() => navigate("Escritório")}><Orbit size={14} />Escritório<ArrowUpRight size={12} /></button>
+      <button onClick={() => navigate("Macros")}><Zap size={14} />Macros<ArrowUpRight size={12} /></button>
+      <button onClick={() => navigate("Configurações")}><Settings2 size={14} />Configurações<ArrowUpRight size={12} /></button>
     </nav>}
     <div className="nucleusFooter">
       <div className="nucleusState" role="status"><i /><span>{label}</span></div>

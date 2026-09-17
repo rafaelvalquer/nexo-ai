@@ -185,11 +185,33 @@ ALTER TABLE agent_graph_checkpoints ADD COLUMN writes_json TEXT NOT NULL DEFAULT
 CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_checkpoint_identity ON agent_graph_checkpoints(run_id,namespace,id);
 `], [17, `
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_cursor ON messages(conversation_id,created_at,id);
+`], [18, `
+CREATE TABLE IF NOT EXISTS dashboard_gadgets (
+  instance_id TEXT PRIMARY KEY,
+  gadget_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  size TEXT NOT NULL,
+  configuration_json TEXT NOT NULL DEFAULT '{}',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dashboard_gadgets_position ON dashboard_gadgets(position);
+CREATE TABLE IF NOT EXISTS dashboard_cache (
+  provider TEXT NOT NULL,
+  cache_key TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  PRIMARY KEY(provider,cache_key)
+);
 `]];
 
 export class NexoDatabase {
+  private static active?: NexoDatabase;
   private db!: Database;private filePath:string;private readyPromise:Promise<void>;private transactionDepth=0;
-  constructor(dataDir=defaultDataDir()){fs.mkdirSync(dataDir,{recursive:true});this.filePath=path.join(dataDir,"nexo.db");this.readyPromise=this.init();}
+  constructor(dataDir=defaultDataDir()){NexoDatabase.active=this;fs.mkdirSync(dataDir,{recursive:true});this.filePath=path.join(dataDir,"nexo.db");this.readyPromise=this.init();}
+  static activeDatabase(){const active=NexoDatabase.active;return active&&fs.existsSync(path.dirname(active.filePath))?active:undefined;}
   private async init(){const SQL=await initSqlJs();const bytes=fs.existsSync(this.filePath)?fs.readFileSync(this.filePath):undefined;this.db=bytes?new SQL.Database(bytes):new SQL.Database();const hasMemories=this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")[0]?.values.length>0;if(hasMemories){const columns=this.db.exec("PRAGMA table_info(memories)")[0]?.values.map(v=>v[1]);if(!columns?.includes("key"))this.db.run("ALTER TABLE memories RENAME TO legacy_memories");}this.db.run(SCHEMA);this.db.run("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");for(const[version,sql]of MIGRATIONS){if(this.db.exec(`SELECT version FROM schema_migrations WHERE version=${version}`)[0]?.values.length)continue;for(const statement of sql.split(";").map(part=>part.trim()).filter(Boolean)){try{this.db.run(statement);}catch(error){if(!String(error).includes("duplicate column name"))throw error;}}this.db.run("INSERT OR REPLACE INTO schema_migrations(version, applied_at) VALUES(?, ?)",[version,new Date().toISOString()]);}this.persist();}
   async ready(){await this.readyPromise;}
   run(sql:string,params:unknown[]=[]){this.db.run(sql,params as any[]);if(!this.transactionDepth)this.persist();}

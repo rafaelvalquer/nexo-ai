@@ -15,7 +15,7 @@ describe("Nexo 1.0 acceptance command routing",()=>{
     expect(router.route("Mostre os programas consumindo mais memória.",options)).toMatchObject({tool:"process_list",input:{sortBy:"memory"}});
   });
   it("searches and summarizes an exact filename inside configured roots",()=>{
-    expect(router.route("Procure arquivo relatorio.csv.",options)).toMatchObject({tool:"search_files",input:{paths:[projects],query:"relatorio.csv"}});
+    expect(router.route("Procure arquivo relatorio.csv.",options)).toMatchObject({tool:"find_file",input:{fileName:"relatorio.csv"}});
     expect(router.route("Resuma contrato.pdf.",options)).toMatchObject({tool:"document_summarize_named",input:{fileName:"contrato.pdf"}});
   });
   it("routes public research to Web Reader and does not invent a query for an unspecified current page",()=>{

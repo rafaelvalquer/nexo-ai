@@ -1,0 +1,86 @@
+.onboardingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: #070a10d9;
+  backdrop-filter: blur(10px);
+  padding: 24px;
+}
+
+.onboardingCard {
+  width: min(620px,100%);
+  padding: 30px;
+  border: 1px solid #394761;
+  border-radius: 20px;
+  background: #101723;
+  box-shadow: 0 24px 80px #0009;
+}
+
+.onboardingCard h1 {
+  font-size: 25px;
+  line-height: 1.2;
+  margin: 9px 0 24px;
+}
+
+.onboardingCard ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.onboardingCard li {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #29364a;
+  border-radius: 12px;
+  color: #aebbd0;
+}
+
+.onboardingCard li.done b {
+  color: #71e2ab;
+}
+
+.onboardingCard li span {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.onboardingCard .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+@media (max-width:620px) {
+  .onboardingCard li {
+    grid-template-columns: 1fr;
+  }
+  .onboardingCard {
+    padding: 20px;
+  }
+}
+
+@media (max-width:760px) {
+  .sidebar {
+    display: block;
+    height: auto;
+  }
+  .sidebar nav {
+    display: flex;
+    overflow-x: auto;
+  }
+  .sidebar nav button {
+    flex: 0 0 auto;
+  }
+  .sidebar .brand,.sidebarFoot {
+    display: none;
+  }
+}

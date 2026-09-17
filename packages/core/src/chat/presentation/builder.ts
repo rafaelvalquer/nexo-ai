@@ -15,7 +15,7 @@ import { unwrapPresentationData } from "./internal-metadata.js";
 export function defaultPresentationRegistry() {
   return new PresentationRegistry()
     .register(["email_search", "email_get", "email_get_many", "email_get_thread", "email_latest"], emailAdapter)
-    .register(["list_files", "search_files", "largest_files"], filesystemAdapter)
+    .register(["list_files", "search_files", "find_file", "largest_files"], filesystemAdapter)
     .register(["calendar_list", "calendar_list_agent", "calendar_search", "calendar_get"], calendarAdapter)
     .register(["email_stats"], emailStatsAdapter)
     .register(["system_info"],systemInfoAdapter)

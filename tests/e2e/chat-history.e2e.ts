@@ -15,7 +15,8 @@ test.beforeEach(async({page})=>{
     await useAssistantStore.getState().sync();
   },"/stores/assistant.ts");
   await expect(page.locator("[data-message-id]")).toHaveCount(50);
-  await expect.poll(()=>page.locator(".chatViewport").evaluate(node=>node.scrollTop)).toBeGreaterThan(100);
+  await expect(page.locator('[data-message-id="history-0550"]')).toBeVisible();
+  await expect(page.locator('[data-message-id="history-0000"]')).toHaveCount(0);
 });
 test("paginates without moving the visible message and preserves pages across sync and tabs",async({page})=>{
   const viewport=page.locator(".chatViewport");

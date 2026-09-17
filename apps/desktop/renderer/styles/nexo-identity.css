@@ -1,0 +1,152 @@
+.topbar {
+  height: 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #263047;
+  color: #8e9ab2;
+}
+
+.topbarEyebrow {
+  display: block;
+  font-size: 10px;
+  letter-spacing: .13em;
+}
+
+.topbar strong {
+  font-size: 13px;
+  color: #f5f7ff;
+}
+
+.coreBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #263047;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.coreBadge.ok {
+  border-color: #245c49;
+  color: #7be2b4;
+}
+
+.nexoOrb {
+  width: 154px;
+  height: 154px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+
+.orbCore {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 31px;
+  font-weight: 800;
+  color: #f5f7ff;
+  background: radial-gradient(circle at 34% 28%,#c1b7ff,#765cff 40%,#102143 72%);
+  box-shadow: 0 0 42px #765cff8f;
+  animation: orbBreathe 4s ease-in-out infinite;
+  z-index: 2;
+}
+
+.orbRing {
+  position: absolute;
+  width: 124px;
+  height: 124px;
+  border: 1px solid #49d6ff70;
+  border-radius: 50%;
+  animation: orbSpin 12s linear infinite;
+}
+
+.orbRing.second {
+  width: 149px;
+  height: 149px;
+  border-color: #765cff66;
+  animation-direction: reverse;
+  animation-duration: 16s;
+}
+
+.orbLabel {
+  position: absolute;
+  top: calc(100% + 5px);
+  font-size: 10px;
+  color: #8e9ab2;
+  white-space: nowrap;
+}
+
+.nexoOrb.executing-tool .orbCore,.nexoOrb.responding .orbCore {
+  background: radial-gradient(circle at 34% 28%,#bdedff,#49d6ff 40%,#102143 72%);
+}
+
+.nexoOrb.awaiting-approval .orbCore {
+  background: radial-gradient(circle at 34% 28%,#ffe8ac,#f5b74f 42%,#3d2a10 72%);
+}
+
+.nexoOrb.success .orbCore {
+  background: radial-gradient(circle at 34% 28%,#b6ffe0,#3bd89f 42%,#103526 72%);
+}
+
+.nexoOrb.error .orbCore,.nexoOrb.offline .orbCore {
+  background: radial-gradient(circle at 34% 28%,#ffb8c5,#ff5d78 42%,#40131f 72%);
+}
+
+.nexoOrb.compact {
+  transform: scale(.48);
+  transform-origin: left center;
+  width: 80px;
+  height: 52px;
+}
+
+.nexoOrb.compact .orbLabel {
+  display: none;
+}
+
+@keyframes orbBreathe {
+  0%,100% {
+    transform: scale(.96);
+    filter: brightness(.9);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.14);
+  }
+}
+
+@keyframes orbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .orbCore,.orbRing {
+    animation: none !important;
+  }
+}
+
+.orbCanvas {
+  position: absolute !important;
+  inset: -12px;
+  width: calc(100% + 24px) !important;
+  height: calc(100% + 24px) !important;
+  pointer-events: none;
+}
+
+.orbCanvas+ .orbLabel {
+  z-index: 3;
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .orbCanvas {
+    display: none;
+  }
+}

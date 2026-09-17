@@ -2,6 +2,7 @@ import path from "node:path";
 import { LocationRegistry } from "../../locations/location-registry.js";
 import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import { containsPathTraversal, parseTextFileIntent } from "../intent/text-file-intent.js";
+import { parseFileIntent } from "../intent/file-intent.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
 
 export type V2FastPathCall = {
@@ -140,10 +141,14 @@ export class V2FastPathRouter {
       return this.call(available, "open_url", { url }, `Preparando a abertura de ${url}…`)
         ?? this.call(available, "browser_open", { url }, `Abrindo ${url}…`);
     }
-    const extension="(?:pdf|docx?|xlsx?|txt|md|csv|json|png|jpe?g)";
-    const fileName=text.match(new RegExp(`[\"“]([^\"”]+\\.${extension})[\"”]`,"iu"))?.[1]?.trim()??text.match(new RegExp(`(?:^|\\s)([^\\\\/:*?\"<>|\\s]+\\.${extension})(?=\\s|[.!?,;:]?$)`,"iu"))?.[1]?.trim();
-    if(fileName&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return this.call(available,"document_summarize_named",{fileName},`Localizando e analisando ${fileName} nas pastas permitidas…`);
-    if(fileName&&/\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text)&&allowedRoots.length)return this.call(available,"search_files",{paths:allowedRoots,query:fileName},`Procurando ${fileName} nas pastas permitidas…`);
+    const fileIntent=parseFileIntent(text);
+    if(fileIntent?.kind==="find_file"&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return this.call(available,"document_summarize_named",{fileName:fileIntent.fileName},`Localizando e analisando ${fileIntent.fileName} nas pastas permitidas…`);
+    if(fileIntent?.kind==="find_file"){
+      let root:string|undefined;
+      if(fileIntent.folder){const folder=resolveFolder(fileIntent.folder,new LocationRegistry({},[],allowedRoots));if(folder&&"rejected" in folder)return folder;root=folder?.path??fileIntent.folder;}
+      return this.call(available,"find_file",{fileName:fileIntent.fileName,...(root?{root}:{})},`Procurando ${fileIntent.fileName} nas pastas autorizadas…`);
+    }
+    if(fileIntent?.kind==="search_files"&&fileIntent.folder){const folder=resolveFolder(fileIntent.folder,new LocationRegistry({},[],allowedRoots));if(folder&&!("rejected" in folder))return this.call(available,"search_files",{path:folder.path,query:fileIntent.query,maxDepth:6},`Pesquisando ${fileIntent.query} em ${folder.path}…`);}
     return null;
   }
 

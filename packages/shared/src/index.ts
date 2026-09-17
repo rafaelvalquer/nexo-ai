@@ -1,6 +1,7 @@
 import type { ChatBlock, ChatPresentation } from "./chat.js";
 export * from "./chat.js";
 export * from "./automation.js";
+export * from "./dashboard.js";
 export type RiskLevel = "READ" | "WRITE" | "CRITICAL";
 
 export type ToolRequest = { name: string; input: Record<string, unknown> };

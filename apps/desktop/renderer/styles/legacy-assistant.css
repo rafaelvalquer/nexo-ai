@@ -1,0 +1,78 @@
+section.assistant {
+  height: calc(100vh - 76px);
+  display: flex;
+  flex-direction: column;
+}
+
+.chat {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 6px 14px;
+  scroll-behavior: smooth;
+}
+
+.msg {
+  display: flex;
+  gap: 9px;
+  max-width: 850px;
+  margin: 7px 0;
+  line-height: 1.45;
+  align-items: flex-start;
+}
+
+.msg.user {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.msg .messageBody {
+  background: #111722;
+  border: 1px solid #252c39;
+  padding: 10px 13px;
+  border-radius: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg.user .messageBody {
+  background: #29245d;
+  border-color: #3a337b;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px !important;
+  min-width: 30px;
+  border-radius: 9px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center;
+  background: #1a2130 !important;
+  border: 1px solid #2a3344 !important;
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+  border: 1px solid #29303a;
+  background: #11151b;
+  border-radius: 14px;
+  padding: 9px;
+}
+
+.composer textarea {
+  resize: none;
+  min-height: 44px;
+  max-height: 160px;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: white;
+  padding: 10px;
+  font: inherit;
+}
+
+.composer button {
+  width: 44px;
+}

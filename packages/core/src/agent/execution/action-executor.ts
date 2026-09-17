@@ -67,7 +67,7 @@ export class ActionExecutor {
     if (action.mutatesState) { this.options.records?.prepare(action, context.runId); this.options.records?.markDispatching(action.executionId); this.audit.record(tool.name, tool.risk, "DISPATCHING", { executionId: action.executionId, fingerprint: action.fingerprint }); }
     try {
       if (context.signal?.aborted) throw context.signal.reason ?? new DOMException("Cancelada", "AbortError");
-      const rawResult = await this.withResources(tool, action.input, context, () => this.withToolTimeout(tool,context.signal,signal=>tool.execute(action.input, { ...context, signal, executionId: action.executionId, idempotencyKey: action.idempotencyKey })));
+      const rawResult = await this.withResources(tool, action.input, context, () => this.withToolTimeout(tool,context.signal,signal=>tool.execute(action.input, { ...context, filesystemRoots:this.permissions.allowedRoots(), assertFilesystemPath:(target:string)=>this.permissions.assertPath(target), signal, executionId: action.executionId, idempotencyKey: action.idempotencyKey })));
       const result = normalizeToolResult(rawResult);
       const status = result.ok ? "SUCCEEDED" : "FAILED" as const;
       this.options.metrics?.record("tool.duration_ms", Date.now() - startedAt, { tool: tool.name, ok: result.ok });

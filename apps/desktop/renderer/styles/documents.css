@@ -1,0 +1,158 @@
+.documentOverlay {
+  position: fixed;
+  inset: 0;
+  background: #03050bb8;
+  z-index: 20;
+  padding: 32px;
+  display: grid;
+  place-items: center;
+}
+
+.documentPreview {
+  width: min(1120px,100%);
+  height: min(86vh,900px);
+  background: #0d111b;
+  border: 1px solid #263047;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.documentPreview header {
+  padding: 18px 22px;
+  margin: 0;
+  border-bottom: 1px solid #263047;
+}
+
+.documentPreview h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.documentPreview p {
+  margin: 3px 0 0;
+  color: #8e9ab2;
+  font-size: 12px;
+}
+
+.docxFrame,.pdfFrame {
+  flex: 1;
+  min-height: 0;
+  background: #dfe4ed;
+  overflow: auto;
+}
+
+.docxFrame .docx-wrapper {
+  background: #dfe4ed;
+  padding: 24px;
+}
+
+.pdfFrame {
+  border: 0;
+}
+
+.paletteOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: #03050b9e;
+  padding-top: 14vh;
+  display: grid;
+  place-items: start center;
+}
+
+.palette {
+  width: min(560px,calc(100vw - 40px));
+  background: #121827;
+  border: 1px solid #394661;
+  border-radius: 16px;
+  box-shadow: 0 28px 80px #000a;
+  overflow: hidden;
+}
+
+.paletteSearch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 15px;
+  border-bottom: 1px solid #263047;
+  color: #8e9ab2;
+}
+
+.paletteSearch input {
+  flex: 1;
+  background: none;
+  border: 0;
+  outline: 0;
+  color: #f5f7ff;
+  font: inherit;
+}
+
+.paletteList {
+  padding: 7px;
+}
+
+.paletteList button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+  background: transparent;
+  color: #dce4f7;
+}
+
+.paletteList button:hover {
+  background: #202a41;
+}
+
+.paletteList kbd {
+  font-size: 10px;
+  color: #8e9ab2;
+}
+
+.palette small {
+  display: block;
+  padding: 10px 15px;
+  border-top: 1px solid #263047;
+  color: #8e9ab2;
+}
+
+.editBar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #263047;
+  background: #101622;
+}
+
+.editBar input {
+  flex: 1;
+  min-width: 0;
+  background: #090d15;
+  border: 1px solid #2d3b55;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #f5f7ff;
+  font: inherit;
+}
+
+.documentPreview>.notice {
+  margin: 8px 16px;
+}
+
+.scopeRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.scopeRow code {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.scopeRow button {
+  white-space: nowrap;
+}

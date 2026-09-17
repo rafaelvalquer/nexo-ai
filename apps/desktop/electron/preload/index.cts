@@ -29,6 +29,15 @@ ipcRenderer.on("nexo:browser-agent:frame-port", (event, payload:{runId:string}) 
 
 const legacyStart=(text:string,attachments:string[])=>(ipcRenderer.invoke("nexo:conversations:list") as Promise<Array<{id:string}>>).then(async conversations=>{const conversation=conversations[0]??await ipcRenderer.invoke("nexo:conversations:create");return ipcRenderer.invoke("nexo:chat:start",conversation.id,text,attachments);});
 const api={
+  dashboard:{
+    getCatalog:()=>ipcRenderer.invoke("nexo:dashboard:catalog"),getLayout:()=>ipcRenderer.invoke("nexo:dashboard:layout"),
+    addGadget:(id:string,configuration:Record<string,unknown>={},size?:string)=>ipcRenderer.invoke("nexo:dashboard:add",id,configuration,size),
+    removeGadget:(instanceId:string)=>ipcRenderer.invoke("nexo:dashboard:remove",instanceId),
+    configureGadget:(instanceId:string,configuration:Record<string,unknown>,size?:string)=>ipcRenderer.invoke("nexo:dashboard:configure",instanceId,configuration,size),
+    saveLayout:(items:Array<{instanceId:string;size:string;position:number}>)=>ipcRenderer.invoke("nexo:dashboard:save-layout",items),
+    getGadgetData:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:data",id,configuration),
+    refreshGadget:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:refresh",id,configuration)
+  },
   loadMoreChatBlock:(conversationId:string,messageId:string,blockId:string)=>ipcRenderer.invoke("nexo:chat:more",conversationId,messageId,blockId),
   executeChatAction:(request:ChatActionRequest):Promise<ChatActionOutcome>=>ipcRenderer.invoke("nexo:chat:action",request),
   resolveInlineApproval:(conversationId:string,messageId:string,approvalId:string,approved:boolean)=>ipcRenderer.invoke("nexo:chat:approval",conversationId,messageId,approvalId,approved),
@@ -39,9 +48,9 @@ const api={
   updateEmailDraft:(request:EmailComposeDraftUpdateRequest)=>ipcRenderer.invoke("nexo:email-draft:update",request),
   cancelEmailDraft:(request:EmailComposeDraftCancelRequest)=>ipcRenderer.invoke("nexo:email-draft:cancel",request),
   submitEmailDraft:(request:EmailComposeDraftSubmitRequest)=>ipcRenderer.invoke("nexo:email-draft:submit",request),
-  onChatResourceUpdated:(callback:(event:ChatResourceUpdatedEvent)=>void)=>{const listener=(_event:unknown,event:ChatResourceUpdatedEvent)=>callback(event);ipcRenderer.on("nexo:chat:resource",listener);return()=>ipcRenderer.removeListener("nexo:chat:resource",listener);},
-  onTaskEvent:(callback:(event:unknown)=>void)=>{const listener=(_event:unknown,payload:unknown)=>callback(payload);ipcRenderer.on("nexo:task:event",listener);return()=>ipcRenderer.removeListener("nexo:task:event",listener);},
-  onVisualEvent:(callback:(event:unknown)=>void)=>{const listener=(_event:unknown,payload:unknown)=>callback(payload);ipcRenderer.on("nexo:visual:event",listener);return()=>ipcRenderer.removeListener("nexo:visual:event",listener);},
+  onChatResourceUpdated:(callback:(event:ChatResourceUpdatedEvent)=>void)=>{const listener=(_event:unknown,event:ChatResourceUpdatedEvent)=>callback(event);ipcRenderer.on("nexo:chat:resource",listener);return()=>{ipcRenderer.removeListener("nexo:chat:resource",listener);};},
+  onTaskEvent:(callback:(event:unknown)=>void)=>{const listener=(_event:unknown,payload:unknown)=>callback(payload);ipcRenderer.on("nexo:task:event",listener);return()=>{ipcRenderer.removeListener("nexo:task:event",listener);};},
+  onVisualEvent:(callback:(event:unknown)=>void)=>{const listener=(_event:unknown,payload:unknown)=>callback(payload);ipcRenderer.on("nexo:visual:event",listener);return()=>{ipcRenderer.removeListener("nexo:visual:event",listener);};},
   getVisualSnapshot:()=>ipcRenderer.invoke("nexo:visual:snapshot"),
   chat:(text:string)=>ipcRenderer.invoke("nexo:chat",text),
   listConversations:()=>ipcRenderer.invoke("nexo:conversations:list"),

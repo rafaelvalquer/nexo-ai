@@ -12,10 +12,18 @@ import { useNotificationsStore } from "./stores/notifications";
 import { motionTokens } from "./design/motion";
 
 const pages: Record<string, ComponentType> = {
+  Dashboard: lazy(()=>import("./pages/Dashboard").then(module=>({default:module.Dashboard}))),
   Assistente: lazy(()=>import("./pages/Assistant").then(module=>({default:module.Assistant}))),
   Macros: lazy(()=>import("./pages/Automations").then(module=>({default:module.Automations}))),
   Escritório: lazy(()=>import("./pages/Office").then(module=>({default:module.Office}))),
-  "Configurações": lazy(()=>import("./pages/Settings").then(module=>({default:module.Settings})))
+  "Configurações": lazy(()=>import("./pages/Settings").then(module=>({default:module.Settings}))),
+  Aprovações: lazy(()=>import("./pages/Approvals").then(module=>({default:module.Approvals}))),
+  Documentos: lazy(()=>import("./pages/Documents").then(module=>({default:module.Documents}))),
+  Atividade: lazy(()=>import("./pages/Activity").then(module=>({default:module.Activity}))),
+  Memória: lazy(()=>import("./pages/Memory").then(module=>({default:module.Memory}))),
+  Diagnóstico: lazy(()=>import("./pages/Diagnostics").then(module=>({default:module.Diagnostics}))),
+  Ferramentas: lazy(()=>import("./pages/Tools").then(module=>({default:module.Tools}))),
+  Conexões: lazy(()=>import("./pages/Connections").then(module=>({default:module.Connections})))
 };
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {

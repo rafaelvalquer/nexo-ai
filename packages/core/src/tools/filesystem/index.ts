@@ -8,6 +8,12 @@ import { createWriteStream } from "node:fs";
 import { z } from "zod";
 import type { ToolDefinition } from "../types.js";
 import { textFileTools } from "./text-file-tools.js";
+import { PhysicalFileSearch } from "../../filesystem/physical-file-search.js";
+import { WorkspaceFileRepository } from "../../filesystem/workspace-file-repository.js";
+import { normalizeFilename } from "../../filesystem/filename-normalizer.js";
+import type { NexoDatabase } from "../../database/db.js";
+import type { PermissionEngine } from "../../permissions/policy.js";
+import { WorkspaceIndexer } from "../../filesystem/workspace-indexer.js";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -21,9 +27,38 @@ function formatBytes(bytes: number) {
   return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[index]}`;
 }
 
-export function filesystemTools(): ToolDefinition[] {
+export function filesystemTools(options: { roots?:()=>string[]; permissions?:PermissionEngine; database?:NexoDatabase; onSearchProgress?:(event:{query:string;scannedEntries:number;scannedDirectories:number;matches:number;currentRoot:string})=>void; metric?:(name:string,value:number)=>void } = {}): ToolDefinition[] {
+  const physicalSearch = new PhysicalFileSearch();
+  const index = options.database ? new WorkspaceFileRepository(options.database) : undefined;
+  const indexer = index ? new WorkspaceIndexer(index) : undefined;
+  if(indexer&&options.roots){void indexer.indexRoots(options.roots()).catch(()=>undefined);const timer=setInterval(()=>{if(!indexer.getStatus().running)void indexer.indexRoots(options.roots!()).catch(()=>undefined);},30*60_000);timer.unref?.();}
   return [
     ...textFileTools(),
+    {
+      name:"find_file",description:"Localiza um arquivo pelo nome exato nas pastas atualmente autorizadas",domain:"filesystem",operation:"find_file",risk:"READ",permissions:["filesystem.read"],
+      inputSchema:z.object({fileName:z.string().trim().min(1).max(260),root:z.string().optional(),mode:z.enum(["exact","case_insensitive"]).default("case_insensitive"),maxResults:z.number().int().min(1).max(50).default(20)}),
+      async execute({fileName,root,mode,maxResults},context){
+        const roots=context?.filesystemRoots??options.roots?.()??[]; const candidates=root?[root]:roots;
+        const assertPath=context?.assertFilesystemPath??(options.permissions?(candidate:string)=>options.permissions!.assertPath(candidate):undefined);
+        if(root){if(!assertPath)throw new Error("A pasta precisa ser verificada pelo PermissionEngine.");assertPath(root);}
+        if(!candidates.length)return{ok:false,summary:"Não há pastas autorizadas para pesquisar. Adicione uma pasta em Configurações → Segurança → Pastas permitidas."};
+        const normalized=normalizeFilename(fileName),started=Date.now(); let indexState="MISS";
+        if(index&&!root){
+          const cached=index.findExact(normalized,roots),valid=[] as Array<{name:string;path:string;root:string;size:number;modifiedAt:string}>;
+          for(const row of cached){context?.signal?.throwIfAborted();try{assertPath?.(row.path);const stat=await fs.stat(row.path);if(!stat.isFile()){index.delete(row.path);continue;}valid.push({name:row.name,path:row.path,root:row.root,size:stat.size,modifiedAt:stat.mtime.toISOString()});}catch{index.delete(row.path);}}
+          const selected=mode==="exact"?valid.filter(row=>row.name.normalize("NFKC")===fileName.normalize("NFKC")):valid;
+          if(selected.length){options.metric?.("filesystem.find.index_hit",1);options.metric?.("filesystem.find.duration_ms",Date.now()-started);return{ok:true,summary:`${selected.length} arquivo(s) encontrado(s) pelo índice.`,data:{source:"workspace_index",matches:selected.slice(0,maxResults),searchedRoots:roots,scannedEntries:0,elapsedMs:Date.now()-started,truncated:selected.length>maxResults}};}
+          indexState="MISS";
+        }
+        options.metric?.("filesystem.find.index_miss",1);
+        const result=await physicalSearch.find({roots:candidates,query:fileName,mode:mode==="exact"?"exact":"case_insensitive",maxResults,onProgress:event=>options.onSearchProgress?.({query:fileName,...event})},context?.signal,candidate=>assertPath?.(candidate));
+        for(const match of result.matches){assertPath?.(match.path);if(index){index.upsert({id:match.path,root:match.root,path:match.path,parentPath:path.dirname(match.path),name:match.name,nameNormalized:normalized,extension:path.extname(match.name)||undefined,size:match.size,modifiedAt:match.modifiedAt,indexedAt:new Date().toISOString()});}}
+        const metricName=result.matches.length>1?"filesystem.find.multiple_matches":result.matches.length?"filesystem.find.physical_hit":"filesystem.find.not_found";options.metric?.(metricName,1);options.metric?.("filesystem.find.scanned_entries",result.scannedEntries);options.metric?.("filesystem.find.duration_ms",Date.now()-started);
+        const summary=result.matches.length?`${result.matches.length} arquivo(s) encontrado(s).${result.truncated?" A busca foi limitada; pode haver outros resultados.":""}`:`Não encontrei ${fileName}. Pesquisei em: ${candidates.join(", ")}. ${result.scannedEntries} itens verificados.${result.truncated?" A pesquisa foi limitada por segurança/tempo.":""}`;
+        return{ok:true,summary,data:{source:"physical_search",matches:result.matches,searchedRoots:candidates,scannedEntries:result.scannedEntries,scannedDirectories:result.scannedDirectories,elapsedMs:result.elapsedMs,truncated:result.truncated,reason:result.reason,index:indexState}};
+      }
+    },
+    ...(indexer?[{name:"refresh_workspace_index",description:"Atualiza o índice local de nomes e metadados das pastas autorizadas",domain:"filesystem",operation:"refresh_index",risk:"READ" as const,permissions:["filesystem.read"],inputSchema:z.object({}),async execute(_input:any,context:any){const roots=context?.filesystemRoots??options.roots?.()??[];const status=await indexer.indexRoots(roots,context?.signal);return{ok:true,summary:`Índice atualizado: ${status.indexed} arquivo(s) atualizado(s), ${status.scanned} itens verificados.`,data:status};}}]:[]),
     {
       name: "list_files", description: "Lista arquivos de uma pasta", risk: "READ", permissions:["filesystem.read"], pathFields:["path"],
       inputSchema: z.object({
@@ -89,17 +124,13 @@ export function filesystemTools(): ToolDefinition[] {
       }
     },
     {
-      name: "search_files", description: "Pesquisa arquivos por nome em uma ou mais pastas permitidas", risk: "READ", permissions:["filesystem.read"], pathFields:["path","paths"],
-      inputSchema: z.object({ path:z.string().optional(), paths:z.array(z.string()).min(1).max(32).optional(), query:z.string().trim().min(1).max(260), maxDepth:z.number().int().min(0).max(8).default(4) }).refine(input=>Boolean(input.path||input.paths?.length),"Informe uma pasta permitida."),
-      async execute({path:base,paths,query,maxDepth}) {
-        const out:any[]=[];const roots:string[]=[...new Set<string>((paths as string[]|undefined)??(base?[String(base)]:[]))];
-        const walk=async(dir:string,depth:number)=>{if(depth>maxDepth||out.length>=300)return;for(const e of await fs.readdir(dir,{withFileTypes:true}).catch(()=>[])){const full=path.join(dir,e.name);if(e.name.toLowerCase().includes(query.toLowerCase()))out.push({name:e.name,path:full,type:e.isDirectory()?"directory":"file"});if(e.isDirectory()&&!e.isSymbolicLink())await walk(full,depth+1);}};
-        for(const root of roots){if(out.length>=300)break;await walk(root,0);}
-        const visible=out.slice(0,100);
-        const summary=visible.length
-          ? `${out.length} resultado(s) encontrado(s).\n${visible.map(row=>`${row.type === "directory" ? "[Pasta]" : "[Arquivo]"} ${row.path}`).join("\n")}`
-          : "Nenhum arquivo encontrado.";
-        return {ok:true,summary,data:out};
+      name: "search_files", description: "Pesquisa arquivos por termo ou extensão nas pastas permitidas", risk: "READ", permissions:["filesystem.read"], pathFields:["path","paths"],
+      inputSchema: z.object({ path:z.string().optional(), paths:z.array(z.string()).min(1).max(32).optional(), query:z.string().trim().min(1).max(260), maxDepth:z.number().int().min(0).max(8).default(4) }),
+      async execute({path:base,paths,query,maxDepth},context) {
+        const roots:string[]=[...new Set<string>((paths as string[]|undefined)??(base?[String(base)]:context?.filesystemRoots??options.roots?.()??[]))];
+        if(!roots.length)return{ok:false,summary:"Não há pastas autorizadas para pesquisar. Adicione uma pasta em Configurações → Segurança → Pastas permitidas."};
+        const result=await physicalSearch.find({roots,query,mode:query.startsWith(".")?"extension":"contains",maxDepth,maxEntries:20_000,maxResults:100,maxDurationMs:15_000},context?.signal,target=>context?.assertFilesystemPath?.(target));
+        return {ok:true,summary:result.matches.length?`${result.matches.length} resultado(s) encontrado(s).${result.truncated?" A busca foi limitada.":""}`:`Nenhum arquivo encontrado em ${roots.join(", ")}. ${result.scannedEntries} itens verificados.`,data:{...result,searchedRoots:roots}};
       }
     },
     {
