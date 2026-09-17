@@ -42,6 +42,12 @@ async function createWindow(){
   if(dev)await win.loadURL(dev);else await win.loadFile(path.join(__dirname,"../../dist/index.html"));
 }
 
+function reportStartupFailure(error:unknown){
+  const detail=error instanceof Error?error.stack??error.message:String(error);
+  try{fs.mkdirSync(storage.logs,{recursive:true});fs.appendFileSync(path.join(storage.logs,"startup-errors.log"),`[${new Date().toISOString()}] ${detail}\n`);}catch{}
+  console.error("Nexo AI startup failed",error);app.exit(1);
+}
+
 function createTray(){
   const icon=nativeImage.createFromPath(path.resolve(__dirname,"../../resources/icons/icon.png")).resize({width:32,height:32});tray=new Tray(icon);tray.setToolTip("Nexo AI");
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -64,9 +70,10 @@ app.whenReady().then(async()=>{
   browserAgentRuntime=registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")});
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   await createWindow();createTray();
+  if(process.env.NEXO_SMOKE_READY_FILE){const readyFile=path.resolve(process.env.NEXO_SMOKE_READY_FILE);fs.mkdirSync(path.dirname(readyFile),{recursive:true});fs.writeFileSync(readyFile,JSON.stringify({readyAt:new Date().toISOString(),dataDir:storage.root,database:storage.database,windowLoaded:Boolean(win&&!win.isDestroyed())}));}
   setTimeout(()=>{for(const account of core.connections.list().filter(item=>item.status==="connected"))void core.connections.test(account.id).catch(()=>undefined);},1500).unref?.();
   if(app.isPackaged)void import("../updater/index.js").then(({configureUpdater})=>configureUpdater(true));
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});
-}).catch(error=>{console.error("Nexo AI startup failed",error);app.exit(1);});
+}).catch(reportStartupFailure);
 app.on("before-quit",()=>{quitting=true;void browserAgentRuntime?.shutdown();core.shutdown();void httpServer?.close?.();});
 app.on("window-all-closed",()=>{if(process.platform!=="darwin"&&!core.getSettings().runInBackground)app.quit();});

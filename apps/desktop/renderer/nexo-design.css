@@ -128,13 +128,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .topbarSearch span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
-.slashMenu { position:absolute; z-index:16; left:0; right:0; bottom:calc(100% + 8px); display:grid; gap:3px; padding:6px; background:#111a25; border:1px solid var(--nexo-border-strong); border-radius:12px; box-shadow:var(--nexo-shadow); }
+.composerSuggestMenu { position:absolute; z-index:16; left:0; right:0; bottom:calc(100% + 8px); display:grid; gap:3px; padding:6px; background:#111a25; border:1px solid var(--nexo-border-strong); border-radius:12px; box-shadow:var(--nexo-shadow); }
+.mentionMenu { max-height:min(320px,45vh); overflow:auto; }
 .composer { position:relative; }
-.slashMenu button { display:flex; align-items:center; gap:10px; min-height:42px; padding:7px 10px; text-align:left; color:var(--nexo-muted); background:transparent; border:0; border-radius:8px; }
-.slashMenu button:hover { color:var(--nexo-text); background:var(--nexo-cyan-soft); }
-.slashMenu button>span { display:grid; gap:2px; }
-.slashMenu button b { font-size:12px; color:var(--nexo-cyan-bright); }
-.slashMenu button small { font-size:10px; color:var(--nexo-muted); }
+.composerSuggestMenu button { display:flex; align-items:center; gap:10px; min-height:42px; padding:7px 10px; text-align:left; color:var(--nexo-muted); background:transparent; border:0; border-radius:8px; }
+.composerSuggestMenu button:hover, .composerSuggestMenu button[aria-selected="true"] { color:var(--nexo-text); background:var(--nexo-cyan-soft); }
+.composerSuggestMenu button>span { display:grid; gap:2px; min-width:0; }
+.composerSuggestMenu button b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--nexo-cyan-bright); }
+.composerSuggestMenu button small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; color:var(--nexo-muted); }
+.composerSuggestEmpty { padding:12px 10px; color:var(--nexo-muted); font-size:12px; }
 .sidebarToggle { display:grid; place-items:center; min-width:32px; min-height:32px; margin-left:auto; color:var(--nexo-muted); background:transparent; border:1px solid transparent; border-radius:8px; }
 .sidebarToggle:hover { color:var(--nexo-text); background:rgba(255,255,255,.05); }
 .sidebarCollapsed .sidebarToggle { margin-left:0; }
@@ -180,8 +182,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .notificationItem.success svg { color:var(--nexo-success); }.notificationItem.error svg { color:var(--nexo-danger); }.notificationItem.warning svg { color:var(--nexo-warning); }
 .brandMark { color:var(--nexo-cyan-bright); background:linear-gradient(145deg,rgba(72,201,232,.18),rgba(16,35,49,.9)); border:1px solid rgba(72,201,232,.2); box-shadow:0 0 20px rgba(72,201,232,.08); }
 @media(min-width:721px) and (max-width:1050px) {
-  .sidebar nav button, .sidebarCollapsed .sidebar nav button { position:relative; }
-  .sidebar nav button:hover::after, .sidebarCollapsed .sidebar nav button:hover::after { content:attr(data-label); position:absolute; left:calc(100% + 10px); top:50%; z-index:30; transform:translateY(-50%); padding:7px 10px; color:var(--nexo-text); background:#111a25; border:1px solid var(--nexo-border-strong); border-radius:7px; box-shadow:var(--nexo-shadow); white-space:nowrap; font-size:11px; pointer-events:none; }
+  .sidebar nav button { position:relative; }
+  .sidebar nav button:is(:hover,:focus-visible)::after { content:attr(data-label); position:absolute; left:calc(100% + 10px); top:50%; z-index:30; transform:translateY(-50%); padding:7px 10px; color:var(--nexo-text); background:#111a25; border:1px solid var(--nexo-border-strong); border-radius:7px; box-shadow:var(--nexo-shadow); white-space:nowrap; font-size:11px; pointer-events:none; }
+}
+@media(min-width:1051px) {
+  .sidebarCollapsed .sidebar nav button { position:relative; }
+  .sidebarCollapsed .sidebar nav button:is(:hover,:focus-visible)::after { content:attr(data-label); position:absolute; left:calc(100% + 10px); top:50%; z-index:30; transform:translateY(-50%); padding:7px 10px; color:var(--nexo-text); background:#111a25; border:1px solid var(--nexo-border-strong); border-radius:7px; box-shadow:var(--nexo-shadow); white-space:nowrap; font-size:11px; pointer-events:none; }
 }
 .pageMotion { min-width:0; min-height:0; }
 .pageMotion.assistantPageMotion { display:flex; flex:1; min-height:0; height:100%; overflow:hidden; }

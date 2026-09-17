@@ -81,6 +81,23 @@ test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page }) =
   await expect(page.getByRole("option", { name: /Abrir Escritório.*Recente/ })).toBeVisible();
 });
 
+test("navigation icon rail exposes the hovered and keyboard-focused label",async({page})=>{
+  await page.setViewportSize({width:800,height:700});
+  await page.goto(url);
+  const dashboard=page.locator(".sidebar nav button").first();
+  await dashboard.hover();
+  await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".sidebar nav button:focus-visible")).toHaveAttribute("aria-label","Dashboard");
+  await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
+  await page.setViewportSize({width:1440,height:900});
+  await page.getByRole("button",{name:"Recolher menu"}).click();
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".sidebar nav button:focus-visible")).toHaveAttribute("aria-label","Dashboard");
+  await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
+});
+
 test("a command palette indexes macros and saved conversations by title", async ({ page }) => {
   await page.goto(url);
   await page.evaluate(()=>{
@@ -114,4 +131,35 @@ test("a palette expõe todas as rotas e mostra erro de comando como toast",async
   await page.getByRole("option",{name:/Executar macro: Macro indisponível/}).click();
   await expect(page.getByRole("alert").getByText("Macro indisponível")).toBeVisible();
   await expect(page.getByRole("dialog",{name:"Paleta de comandos"})).toBeVisible();
+});
+
+test("composer resolves folder, imported-document and macro mentions as actionable context",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{
+    const api=(window as any).nexo,settings=await api.getSettings();
+    api.getSettings=async()=>({...settings,allowedRoots:["C:\\Projetos\\Projeto Nexo"]});
+    api.listRecentDocuments=async()=>[{id:"document-mention",name:"Relatorio.pdf",mimeType:"application/pdf",sizeBytes:4,status:"ready",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}];
+    api.listAutomations=async()=>[{id:"macro-mention",name:"Relatório diário",description:"Compila o resumo diário",prompt:"",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0,status:"paused",enabled:false}];
+    api.startChatTask=async(conversationId:string,text:string,documentIds:string[])=>{(window as any).__mentionSubmission={conversationId,text,documentIds};return{id:"mention-task",type:"assistant-chat",status:"running",input:{text},conversationId,createdAt:new Date().toISOString(),startedAt:new Date().toISOString(),statusMessage:"Executando…",statusHistory:["Executando…"]};};
+  });
+  await page.getByRole("button",{name:"Assistente",exact:true}).click();
+  const composer=page.getByRole("textbox",{name:"Mensagem para o Nexo"});
+  await composer.fill("@Projeto");
+  await expect(page.getByRole("listbox",{name:"Contextos disponíveis"})).toBeVisible();
+  await page.getByRole("option",{name:/Projeto Nexo/}).click();
+  await composer.press("End");
+  await composer.pressSequentially(" Analise @Relatorio");
+  await expect(page.getByRole("option",{name:/Relatorio\.pdf/})).toBeVisible();
+  await composer.press("ArrowDown");
+  await composer.press("Enter");
+  await expect(page.locator(".attachmentItem.ready")).toContainText("Relatorio.pdf");
+  await composer.press("End");
+  await composer.pressSequentially(" e execute @Relat");
+  await expect(page.getByRole("option",{name:/Relatório diário/})).toBeVisible();
+  await page.getByRole("option",{name:/Relatório diário/}).click();
+  await page.getByRole("button",{name:"Enviar mensagem"}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__mentionSubmission)).toMatchObject({
+    text:/@pasta:"C:\\Projetos\\Projeto Nexo".*@documento:"Relatorio\.pdf".*@macro:"Relatório diário"/,
+    documentIds:["document-mention"]
+  });
 });

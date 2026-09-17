@@ -67,7 +67,7 @@ export function Assistant() {
         </ChatViewport>
         <ScrollToBottom visible={!scroll.isNearBottom || scroll.hasUnreadBelow} unread={scroll.hasUnreadBelow} onClick={() => scroll.scrollToBottom("smooth")} />
         <Composer attachments={assistant.attachments} busy={assistant.isStreaming} onAttach={assistant.attach}
-          onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop} />
+          onAttachDocument={assistant.attachDocument} onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop} />
         <WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed} />
         <ExecutionDrawer task={assistant.activeTask} elapsed={assistant.elapsed} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       </div>

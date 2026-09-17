@@ -1,40 +1,13 @@
-.documentOverlay {
-  position: fixed;
-  inset: 0;
-  background: #03050bb8;
-  z-index: 20;
-  padding: 32px;
-  display: grid;
-  place-items: center;
-}
-
-.documentPreview {
-  width: min(1120px,100%);
-  height: min(86vh,900px);
-  background: #0d111b;
-  border: 1px solid #263047;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.documentPreview header {
-  padding: 18px 22px;
-  margin: 0;
-  border-bottom: 1px solid #263047;
-}
-
-.documentPreview h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.documentPreview p {
-  margin: 3px 0 0;
-  color: #8e9ab2;
-  font-size: 12px;
-}
+.documentPreviewDrawer { width: min(1120px, 96vw); }
+.documentPreviewDrawer .nexoDrawerContent { display: flex; flex-direction: column; min-height: 0; }
+.documentPreviewContent { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.documentPreviewControls { flex: 0 0 auto; max-height: 42%; overflow: auto; border-bottom: 1px solid #263047; }
+.documentVersionLabel { margin: 0 0 8px; color: #8e9ab2; font-size: 12px; }
+.documentVersionHistory { padding: 8px 16px; color: #a0aabd; font-size: 12px; }
+.documentVersionHistory ul { margin: 6px 0; padding-left: 22px; }
+.documentVersionHistory li { margin: 4px 0; }
+.documentPreviewViewer { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; background: #dfe4ed; }
+.documentPreviewLoading { position: absolute; inset: 0; display: grid; place-items: center; color: #526079; background: #dfe4ed; }
 
 .docxFrame,.pdfFrame {
   flex: 1;
@@ -137,8 +110,15 @@
   font: inherit;
 }
 
-.documentPreview>.notice {
+.documentPreviewControls>.notice {
   margin: 8px 16px;
+}
+
+@media(max-width:700px) {
+  .documentPreviewDrawer { width: 100vw; }
+  .editBar { flex-wrap: wrap; }
+  .editBar input { flex-basis: calc(50% - 8px); }
+  .editBar button { flex: 1; }
 }
 
 .scopeRow {
