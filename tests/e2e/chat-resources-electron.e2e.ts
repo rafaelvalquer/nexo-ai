@@ -24,7 +24,7 @@ test("Electron persists real file cards and approves an exact rename inline",asy
   try{
     const page=await app.firstWindow();const errors:string[]=[];page.on("pageerror",error=>errors.push(error.message));
     await expect(page.locator("#root .app")).toBeVisible();await page.getByRole("button",{name:"Pular por enquanto"}).click();
-    await page.evaluate(files=>window.nexo.updateSettings({allowedRoots:[files],fileWritesEnabled:true,agentLoopMode:"legacy"}),files);
+    await page.evaluate(files=>window.nexo.updateSettings({allowedRoots:[files],fileWritesEnabled:true,autonomy:"cautious",agentLoopMode:"legacy"}),files);
     await page.getByRole("button",{name:"Assistente",exact:true}).click();
     await page.getByRole("textbox",{name:"Mensagem para o Nexo"}).fill(`Liste os arquivos da pasta "${files}"`);
     await page.getByRole("button",{name:"Enviar mensagem",exact:true}).click();

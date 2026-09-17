@@ -51,6 +51,9 @@
   --nexo-sidebar-collapsed: 68px;
 }
 
+/* Legacy base CSS declares a 1000px body minimum; override it at every viewport. */
+html, body, #root { min-width: 0; }
+
 * { scrollbar-color: #283849 transparent; }
 html { background: var(--nexo-bg); }
 body {

@@ -190,3 +190,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settingsToolsCatalog .toolsPage.embedded { width:auto; margin:0; padding:4px 18px 18px; }
 .settingsToolsCatalog .toolCard { background:var(--nexo-surface-soft); border-color:var(--nexo-border); }
 .settingsToolsCatalog .toolCardTitle { color:var(--nexo-cyan); }
+.automationCard{transition:transform var(--nexo-motion-fast) ease,border-color var(--nexo-motion-fast) ease,box-shadow var(--nexo-motion-fast) ease}
+.automationCard:hover{transform:translateY(-2px);box-shadow:var(--nexo-shadow-md)}
+.paletteGroupHeading{padding:8px 10px 5px;color:var(--nexo-text-muted);font:700 9px/1.2 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
+.paletteGroup+.paletteGroup .paletteGroupHeading{margin-top:5px;border-top:1px solid var(--nexo-border-subtle);padding-top:11px}
+.paletteCommand.selected{background:var(--nexo-violet-soft);color:var(--nexo-text)}
+.paletteCommand:focus-visible{outline-offset:-2px}
+.pageMotion:has(.settingsNav)>div{display:grid;grid-template-columns:190px minmax(0,1fr);column-gap:18px;align-items:start}
+.pageMotion:has(.settingsNav)>div>header{grid-column:1/-1}
+.pageMotion:has(.settingsNav) .settingsNav{grid-column:1;grid-row:2;position:sticky;top:78px;flex-direction:column;align-items:stretch;max-height:calc(100vh - 100px);overflow:auto;padding:8px;background:rgba(10,16,24,.94);border:1px solid var(--nexo-border);border-radius:14px}
+.pageMotion:has(.settingsNav) .settingsNav button{text-align:left;justify-content:flex-start;border-radius:8px;padding-inline:11px}
+.pageMotion:has(.settingsNav) .settings{grid-column:2;grid-row:2;margin-top:0}
+.pageMotion:has(.settingsNav) .settingsToolsCatalog,.pageMotion:has(.settingsNav) .settingsConnections{grid-column:2}
+.pageMotion:has(.settingsNav) .settings{max-width:none}
+@media(max-width:900px){.pageMotion:has(.settingsNav)>div{display:block}.pageMotion:has(.settingsNav) .settingsNav{position:sticky;top:66px;max-height:none;flex-direction:row;align-items:center}.pageMotion:has(.settingsNav) .settings{max-width:980px}}
+@media(max-width:600px){.settings label:not(.check){grid-template-columns:minmax(0,1fr);gap:6px}.settings input,.settings select{min-width:0;width:100%}.settings .folder{align-items:flex-start;flex-direction:column;gap:6px}.settings .folder code{max-width:100%;overflow-wrap:anywhere;white-space:normal}}
+.settingsNav{position:sticky;top:66px;z-index:6;display:flex;gap:6px;max-width:980px;margin:0 0 14px;padding:8px;overflow-x:auto;background:rgba(10,16,24,.94);border:1px solid var(--nexo-border);border-radius:12px;backdrop-filter:blur(16px);scrollbar-width:thin;overscroll-behavior-x:contain}
+.settingsNav button{flex:0 0 auto;min-height:34px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--nexo-muted);font-size:12px;white-space:nowrap;cursor:pointer}
+.settingsNav button:hover{border-color:var(--nexo-border);background:rgba(255,255,255,.05);color:var(--nexo-text)}
+.settings,.settings h3,.settingsConnections,.settingsToolsCatalog{scroll-margin-top:76px}

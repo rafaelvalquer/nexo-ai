@@ -6,3 +6,14 @@
 .runInspection{margin-top:18px;padding:14px;border:1px solid #2b3850;border-radius:10px;background:#0c131e}.runInspection>h3{margin:0 0 12px;font-size:12px;color:#d7dded}.runStep{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;padding:12px 0;border-top:1px solid #263247;font-size:11px}.runStep>span{color:#a9b4c7}.runStep small{grid-column:1/-1;color:#91a0b5;white-space:pre-wrap;overflow-wrap:anywhere}.runStep .dangerText{color:#ff9eaa}.runStep .detailActions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.runStep .detailActions button{padding:7px 9px;font-size:10px}
 .macroCondition{margin:10px 0;padding:10px;border-left:2px solid #7568bb;background:#111a28}.macroCondition small{display:block;color:#8291a7;font-size:10px;line-height:1.5}.macroStepList label.check{display:flex;grid-template-columns:none;align-items:center;gap:8px}.macroStepList label.check input{accent-color:#a99af1}
 .draftTestResult{display:grid;gap:5px;margin:14px 0;padding:12px;border:1px solid #365444;border-radius:9px;background:#101c18;color:#b8e6c7;font-size:11px}.draftTestResult p{margin:0;color:#9cadb5}.draftTestResult small{color:#a7b8ad}
+.macroEditorDrawer .nexoDrawerContent,.macroDetailsDrawer .nexoDrawerContent{padding:0}
+.macroEditorDrawer .automationBuilder,.macroDetailsDrawer .automationBuilder{display:flex;flex-direction:column;width:100%;height:100%;max-height:none;overflow:hidden;border:0;border-radius:0;background:transparent;box-shadow:none}
+.macroEditorDrawer .automationBuilder>header,.macroDetailsDrawer .automationBuilder>header{flex:0 0 auto;padding:14px 24px;border-bottom:1px solid var(--nexo-border)}
+.macroEditorDrawer .automationBuilder>header p,.macroDetailsDrawer .automationBuilder>header p{margin:0;color:var(--nexo-text-secondary);font-size:12px;line-height:1.5}
+.macroEditorDrawer .builderBody,.macroDetailsDrawer .builderBody{flex:1;min-height:0;overflow:auto;padding:18px 24px}
+.macroEditorDrawer .builderFooter{flex:0 0 auto;flex-wrap:wrap;padding:12px 20px;background:var(--nexo-surface-1);}
+.macroDetailsDrawer .detailActions{flex:0 0 auto;flex-wrap:wrap;padding:12px 20px;background:var(--nexo-surface-1)}
+.macroDragHandle{cursor:grab;touch-action:none}.macroDragHandle:active{cursor:grabbing}
+.macroStepList>li{transition:background 140ms ease,border-color 140ms ease}
+.macroStepList>li:focus-within{border-color:var(--nexo-violet)}
+@media(max-width:600px){.macroEditorDrawer .builderFooter,.macroDetailsDrawer .detailActions{justify-content:stretch}.macroEditorDrawer .builderFooter button,.macroDetailsDrawer .detailActions button{flex:1;justify-content:center}.macroEditorDrawer .builderBody,.macroDetailsDrawer .builderBody{padding:14px}}

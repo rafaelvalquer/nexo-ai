@@ -51,7 +51,7 @@ test("Agent V2 resolves Downloads, creates missing parents, and overrides the mo
   try {
     const page = await app.firstWindow();
     await expect(page.locator("#root .app")).toBeVisible();
-    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
+    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, autonomy: "cautious", agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
     const conversation = await page.evaluate(() => window.nexo.createConversation("Location filesystem E2E"));
     const task = await page.evaluate(id => window.nexo.startChatTask(id, "Crie teste.txt em Downloads\\NexoTeste", []), conversation.id);
 
@@ -105,7 +105,7 @@ test("Agent V2 auto-corrects downlaod before approval", async () => {
   try {
     const page = await app.firstWindow();
     await expect(page.locator("#root .app")).toBeVisible();
-    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
+    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, autonomy: "cautious", agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
     const conversation = await page.evaluate(() => window.nexo.createConversation("Location typo E2E"));
     const task = await page.evaluate(id => window.nexo.startChatTask(id, "Crie typo.txt em downlaod", []), conversation.id);
     await expect.poll(async () => page.evaluate(id => window.nexo.getTask(id).then(item => item?.status), task.id), { timeout: 30_000 }).toBe("waiting_approval");

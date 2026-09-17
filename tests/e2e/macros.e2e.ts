@@ -68,3 +68,36 @@ test("macro details exposes a dry-run test and opens its execution steps",async(
   await expect.poll(()=>page.evaluate(()=>(window as any).__testedMacro)).toBe("macro-demo");
   await expect(page.getByText("Simulação: abriria Chrome.",{exact:true})).toBeVisible();
 });
+
+test("macro editor supports keyboard reordering and deletion uses an accessible confirmation",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(()=>{
+    const api=(window as any).nexo;
+    const macro={id:"macro-delete",name:"Rotina de teste",description:"Teste",prompt:"Teste",enabled:false,status:"paused",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0};
+    api.listAutomations=async()=>[macro];
+    api.listAutomationRuns=async()=>[];
+    api.listAutomationActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"},{id:"system.open_url",title:"Abrir navegador",description:"Abre uma URL",category:"apps",fields:[{key:"url",label:"URL",type:"text",required:true}],risk:"read"}];
+    api.removeAutomation=async(id:string)=>{(window as any).__removedMacro=id;return{ok:true};};
+  });
+  await page.getByRole("button",{name:"Macros",exact:true}).click();
+  await page.getByRole("button",{name:"Nova macro",exact:true}).click();
+  await page.getByLabel("Nome",{exact:true}).fill("Ordem de etapas");
+  await page.getByRole("button",{name:"Adicionar etapa",exact:true}).click();
+  await page.getByLabel("Adicionar etapa manual").selectOption("system.open_url");
+  await page.getByRole("button",{name:"Adicionar etapa",exact:true}).click();
+  const firstHandle=page.getByRole("button",{name:/Arrastar etapa 1/});
+  await firstHandle.focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator(".macroStepHeading b").first()).toContainText("Abrir navegador");
+  await page.getByRole("button",{name:"Fechar painel"}).click();
+  await page.getByRole("button",{name:"Ações de Rotina de teste",exact:true}).click();
+  await page.getByRole("button",{name:"Excluir",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"Excluir macro?"});
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button",{name:"Cancelar"}).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button",{name:"Ações de Rotina de teste",exact:true}).click();
+  await page.getByRole("button",{name:"Excluir",exact:true}).click();
+  await page.getByRole("dialog",{name:"Excluir macro?"}).getByRole("button",{name:"Excluir macro",exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__removedMacro)).toBe("macro-delete");
+});

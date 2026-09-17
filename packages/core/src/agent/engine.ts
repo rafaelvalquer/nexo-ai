@@ -102,7 +102,7 @@ export class AgentEngine{
 
     // Common local commands, macros and ordinary chat avoid constructing an
     // LLM plan. Mutations still go through executePlan and the regular policy.
-    const deterministic=this.planner.routeDeterministic(resolvedUserText);
+    const deterministic=this.planner.routeDeterministic(resolvedUserText,previous,this.toolCatalog.list());
     if(deterministic){
       this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.directStream?"chat":"command"});
       if(deterministic.tool||deterministic.steps?.length)return this.executePlan(resolvedUserText,deterministic,hooks,context);

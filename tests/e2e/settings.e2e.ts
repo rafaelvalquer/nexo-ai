@@ -20,3 +20,42 @@ test("the simplified navigation exposes developer tool logs only when enabled",a
   await expect(page.getByText("open_file",{exact:true})).toBeVisible();
   await expect(page.getByText("42 ms",{exact:true})).toBeVisible();
 });
+
+test("dangerous settings actions use an accessible confirmation drawer",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{const api=(window as any).nexo;api.intentLearningCount=async()=>2;api.clearMemory=async()=>({ok:true});const current=await api.getSettings();api.updateSettings=async(patch:any)=>Object.assign({},current,patch);});
+  await page.getByRole("button",{name:"Configurações",exact:true}).click();
+  await page.getByRole("button",{name:"Limpar memória"}).click();
+  const dialog=page.getByRole("dialog",{name:"Limpar memória?"});
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/todas as memórias salvas serão removidas/i)).toBeVisible();
+  await dialog.getByRole("button",{name:"Cancelar"}).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button",{name:"Limpar memória"}).click();
+  await dialog.getByRole("button",{name:"Limpar memória",exact:true}).click();
+  await expect(page.getByText("As memórias salvas foram removidas.")).toBeVisible();
+});
+
+test("the settings confirmation drawer fits narrow screens without horizontal overflow",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(url);
+  await page.getByRole("button",{name:"Configurações",exact:true}).click();
+  await page.getByRole("button",{name:"Limpar memória"}).click();
+  await expect(page.getByRole("dialog",{name:"Limpar memória?"})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:"test-results/settings-confirmation-mobile.png"});
+});
+
+test("settings use a side navigation on desktop and become scrollable tabs on compact screens",async({page},testInfo)=>{
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto(url);
+  await page.getByRole("button",{name:"Configurações",exact:true}).click();
+  const navigation=page.locator(".settingsNav");
+  await expect(navigation).toBeVisible();
+  expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("column");
+  await page.screenshot({path:testInfo.outputPath("settings-desktop-navigation.png")});
+  await page.setViewportSize({width:390,height:844});
+  expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("row");
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath("settings-compact-navigation.png")});
+});

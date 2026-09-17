@@ -98,7 +98,7 @@ describe("buffered local metrics",()=>{
 
 it("Core shutdown flushes the shared metrics service and does not leave a retry timer",()=>{
   metrics.record("shutdown",1);
-  const core={metrics,automation:{stop:vi.fn()},browserSessions:{closeAll:vi.fn(async()=>{})},logger:{info:vi.fn()}};
+  const core={metrics,macros:{stop:vi.fn()},browserSessions:{closeAll:vi.fn(async()=>{})},logger:{info:vi.fn()}};
   NexoCore.prototype.shutdown.call(core as any);
   expect(rows()).toHaveLength(1);expect(vi.getTimerCount()).toBe(0);
   NexoCore.prototype.shutdown.call(core as any);expect(rows()).toHaveLength(1);

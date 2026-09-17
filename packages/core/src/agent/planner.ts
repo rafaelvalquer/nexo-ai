@@ -69,7 +69,13 @@ export class AgentPlanner{
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
   /** Routes common local commands and ordinary chat without invoking semantic planning. */
-  routeDeterministic(userText:string):Plan|undefined{
+  routeDeterministic(userText:string,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan|undefined{
+    const filesystemIntent=deterministicFilesystemIntent(userText);
+    if(filesystemIntent){
+      const filesystemPlan=this.buildIntentPlan(filesystemIntent,previous,availableTools);
+      if(filesystemPlan.steps?.length||filesystemPlan.direct)return filesystemPlan;
+      return undefined;
+    }
     const routed=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});
     if(routed){
       const names=routed.steps?.map(step=>step.tool)??(routed.tool?[routed.tool]:[]);

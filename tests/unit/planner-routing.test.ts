@@ -49,6 +49,13 @@ describe("AgentPlanner routing", () => {
     expect(planner.routeDeterministic("execute uma ação avançada no meu ambiente")).toBeUndefined();
   });
 
+  it("preserva caminhos explicitamente citados ao despachar listagens determinísticas", () => {
+    const planner = new AgentPlanner(new FakeLLM(), new ToolRegistry());
+    const folder = path.join(os.tmpdir(), "nexo quoted path");
+    const plan=planner.routeDeterministic(`Liste os arquivos da pasta "${folder}"`);
+    expect(plan?.tool).toBe("list_files");expect(plan?.steps?.[0].input.path).toBe(folder);
+  });
+
   it.each([
     ["abrir navegador", "browser_launch"],
     ["listar arquivos da pasta download", "list_files"],

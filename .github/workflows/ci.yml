@@ -9,7 +9,7 @@ jobs:
         with: {node-version: 22.20.0}
       - run: corepack enable
       - run: corepack prepare pnpm@10.15.1 --activate
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm eval:agent
