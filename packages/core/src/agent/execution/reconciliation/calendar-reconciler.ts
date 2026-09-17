@@ -13,12 +13,12 @@ export class CalendarReconciler implements MutationReconciler {
         const event = await this.calendar.get(input.connectionId, input.eventId, signal);
         const expected = Object.entries({ title: input.title, start: input.start, end: input.end }).filter(([, value]) => value !== undefined);
         return expected.every(([key, value]) => String((event as unknown as Record<string, unknown>)[key]) === String(value))
-          ? { status: "confirmed_success", result: { ok: true, summary: "Estado do compromisso confirmado pelo provedor.", data: event } }
+          ? { status: "confirmed_success", result: { success:true, ok: true, summary: "Estado do compromisso confirmado pelo provedor.", data: event } }
           : { status: "confirmed_failure" };
       }
       if (input.start && input.end && input.title) {
         const matches = (await this.calendar.list(input.connectionId, input.start, input.end, signal)).filter(event => event.title === input.title && event.start === input.start&&event.end===input.end);
-        return matches.length === 1 ? { status: "confirmed_success", result: { ok: true, summary: "Criação do compromisso confirmada.", data: matches[0] } } : { status: "still_unknown", reason: "Não há correspondência única para a criação." };
+        return matches.length === 1 ? { status: "confirmed_success", result: { success:true, ok: true, summary: "Criação do compromisso confirmada.", data: matches[0] } } : { status: "still_unknown", reason: "Não há correspondência única para a criação." };
       }
       return { status: "still_unknown", reason: "Exclusão sem confirmação inequívoca do provedor." };
     } catch (error) { return { status: "still_unknown", reason: error instanceof Error ? error.message : String(error) }; }

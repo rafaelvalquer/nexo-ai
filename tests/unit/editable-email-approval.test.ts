@@ -15,7 +15,7 @@ describe("editable email approval", () => {
         subject: "Oi",
         bodyText: "Olá"
       },
-      risk: "SENSITIVE",
+      risk: "CRITICAL",
       reason: "Enviar e-mail para Rafael",
       status: "pending"
     };

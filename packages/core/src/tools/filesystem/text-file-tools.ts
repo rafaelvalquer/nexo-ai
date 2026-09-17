@@ -9,12 +9,12 @@ const inputSchema = z.object({ path: z.string().min(1), content: z.string() });
 export function textFileTools(): ToolDefinition[] {
   return [
     {
-      name: "create_text_file", description: "Cria um arquivo textual novo sem sobrescrever arquivos existentes", domain: "filesystem", operation: "create", risk: "SAFE_WRITE", permissions: ["filesystem.write"], pathFields: ["path"], mutatesState: true,
+      name: "create_text_file", description: "Cria um arquivo textual novo sem sobrescrever arquivos existentes", domain: "filesystem", operation: "create", risk: "WRITE", permissions: ["filesystem.write"], pathFields: ["path"], mutatesState: true,
       mutationSafety: { idempotency: "nexo", reconciliation: "supported" }, inputSchema,
       execute: async ({ path: target, content }, context) => atomicTextWrite(target, content, true, context?.executionId)
     },
     {
-      name: "write_text_file", description: "Substitui atomicamente o conteúdo de um arquivo textual existente", domain: "filesystem", operation: "write", risk: "SENSITIVE", permissions: ["filesystem.write"], pathFields: ["path"], mutatesState: true,
+      name: "write_text_file", description: "Substitui atomicamente o conteúdo de um arquivo textual existente", domain: "filesystem", operation: "write", risk: "CRITICAL", permissions: ["filesystem.write"], pathFields: ["path"], mutatesState: true,
       mutationSafety: { idempotency: "nexo", reconciliation: "supported" }, inputSchema,
       execute: async ({ path: target, content }, context) => atomicTextWrite(target, content, false, context?.executionId)
     }

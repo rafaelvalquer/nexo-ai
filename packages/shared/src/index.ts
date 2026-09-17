@@ -1,10 +1,14 @@
 import type { ChatBlock, ChatPresentation } from "./chat.js";
 export * from "./chat.js";
 export * from "./automation.js";
-export type RiskLevel = "READ" | "SAFE_WRITE" | "SENSITIVE" | "CRITICAL";
+export type RiskLevel = "READ" | "WRITE" | "CRITICAL";
 
 export type ToolRequest = { name: string; input: Record<string, unknown> };
-export type ToolResult = { ok: boolean; summary: string; data?: unknown; error?: string };
+export type ToolError = { code: string; message: string };
+/** Canonical result returned to callers, with `ok`/`summary` retained for existing internal consumers. */
+export type ToolResult = { success: boolean; data?: unknown; error?: ToolError; ok: boolean; summary: string };
+/** Accepted only at tool implementation boundaries while existing tools are migrated. */
+export type ToolResultInput = ToolResult | { ok: boolean; summary: string; data?: unknown; error?: string };
 
 export type VisualExecutionContext = { visualRunId:string; taskId?:string; agentRunId?:string; conversationId?:string; agentId?:string };
 export type Approval = {
@@ -45,7 +49,7 @@ export type Automation = {
 export type NexoSettings = {
   model:string;ollamaUrl:string;autonomy:"cautious"|"balanced"|"autonomous";allowedRoots:string[];privateMode:boolean;runInBackground:boolean;
   memoryEnabled:boolean;memoryAskBeforeSave:boolean;intentLearningEnabled?:boolean;embeddingModel:string;documentMaxSizeMb:number;externalDataRetention:"session"|"local";connectionsEnabled:boolean;
-  browserAutomationEnabled:boolean;fileWritesEnabled:boolean;requireApprovalForEmail:boolean;allowedDomains:string[];dataRetentionDays:number;onboardingCompleted:boolean;ocrEnabled:boolean;
+  browserAutomationEnabled:boolean;filesystemToolsEnabled:boolean;webToolsEnabled:boolean;systemToolsEnabled:boolean;fileWritesEnabled:boolean;requireApprovalForEmail:boolean;allowedDomains:string[];dataRetentionDays:number;onboardingCompleted:boolean;ocrEnabled:boolean;
   executionTimeoutMinutes:number|null;maxConcurrentChatSessions:number;maxConcurrentLLMRequests:number;oauth:OAuthConfiguration;
   agentLoopMode?:"legacy"|"read_only"|"shadow"|"full";forceLegacyAgent?:boolean;
   settingsSchemaVersion?:number;agentLoopModeExplicitlySelected?:boolean;agentLegacyFallbackEnabled?:boolean;developerDiagnosticsEnabled?:boolean;
@@ -108,3 +112,5 @@ export type ConnectionResolution =
 export type DocumentStatus = "importing" | "extracting" | "indexing" | "ready" | "failed";
 export type DocumentRecord = { id:string;name:string;mimeType:string;sizeBytes:number;status:DocumentStatus;metadata?:Record<string,unknown>;createdAt:string;updatedAt:string };
 export type ChatAttachment = { id:string;documentId:string;name:string;mimeType:string;sizeBytes:number;status:"importing"|"ready"|"failed" };
+
+export * from "./conversation-pagination.js";

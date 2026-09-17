@@ -1,4 +1,4 @@
-import type { RiskLevel,ToolResult } from "@nexo/shared";
+import type { RiskLevel,ToolResultInput } from "@nexo/shared";
 import { z } from "zod";
 export type ToolExecutionContext={runId?:string;taskId?:string;conversationId?:string;agentId?:string;executionId?:string;idempotencyKey?:string;approvalId?:string;/** @internal Set only after ApprovalCoordinator consumes an exact approval. */dispatchAuthorized?:boolean;signal?:AbortSignal};
 export type ToolExposure="PUBLIC_AGENT_TOOL"|"CORE_INTERNAL_TOOL"|"UI_ACTION_TOOL";
@@ -12,10 +12,12 @@ export type ToolDefinition={
   domain?:string;
   operation?:string;
   mutatesState?:boolean;
+  /** Maximum time allowed for a single tool dispatch; defaults by tool domain. */
+  timeoutMs?:number;
   exposure?:ToolExposure;
   /** Explicit opt-in for a provider that receives an idempotency key. */
   supportsIdempotency?:boolean;
   mutationSafety?: { idempotency: "provider" | "nexo" | "none"; reconciliation: "supported" | "not_supported" };
   agent?: { category?: string; outputTrust: "trusted_local" | "untrusted_external" | "sensitive_local"; hidden?: boolean; polling?: { allowed: true; minIntervalMs: number; maxDurationMs: number; maxAttempts: number; progressFields?: string[] } };
-  execute(input:any,context?:ToolExecutionContext):Promise<ToolResult>;
+  execute(input:any,context?:ToolExecutionContext):Promise<ToolResultInput>;
 };

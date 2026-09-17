@@ -1,35 +1,17 @@
 import { Component, lazy, Suspense, useEffect, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { useAppStore } from "./stores/app";
-import { Today } from "./pages/Today";
-import { Assistant } from "./pages/Assistant";
-import { Automations } from "./pages/Automations";
-import { Approvals } from "./pages/Approvals";
-import { Connections } from "./pages/Connections";
-import { Activity } from "./pages/Activity";
-import { Memory } from "./pages/Memory";
-import { Settings } from "./pages/Settings";
-import { Documents } from "./pages/Documents";
 import { Topbar } from "./components/shell/Topbar";
 import { CommandPalette } from "./components/shell/CommandPalette";
 import { useAssistantStore } from "./stores/assistant";
 import { Onboarding } from "./components/shell/Onboarding";
 import { OllamaModelInstaller } from "./components/shell/OllamaModelInstaller";
-import { Diagnostics } from "./pages/Diagnostics";
-const Office=lazy(()=>import("./pages/Office").then(module=>({default:module.Office})));
 
 const pages: Record<string, ComponentType> = {
-  Hoje: Today,
-  Assistente: Assistant,
-  "Automações": Automations,
-  Aprovações: Approvals,
-  "Conexões": Connections,
-  Documentos: Documents,
-  Atividade: Activity,
-  "Memória": Memory,
-  "Configurações": Settings,
-  "Diagnóstico": Diagnostics,
-  "Escritório": Office
+  Assistente: lazy(()=>import("./pages/Assistant").then(module=>({default:module.Assistant}))),
+  Macros: lazy(()=>import("./pages/Automations").then(module=>({default:module.Automations}))),
+  Ferramentas: lazy(()=>import("./pages/Tools").then(module=>({default:module.Tools}))),
+  "Configurações": lazy(()=>import("./pages/Settings").then(module=>({default:module.Settings})))
 };
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -43,7 +25,7 @@ export function App() {
   const page = useAppStore(s => s.page);
   const syncAssistant = useAssistantStore(s => s.sync);
   const handleTaskEvent = useAssistantStore(s => s.handleTaskEvent);
-  const Page = pages[page] ?? Today;
+  const Page = pages[page] ?? pages.Assistente;
 
   useEffect(() => {
     void syncAssistant();

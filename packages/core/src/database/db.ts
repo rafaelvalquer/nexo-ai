@@ -183,6 +183,8 @@ ALTER TABLE agent_graph_checkpoints ADD COLUMN parent_id TEXT;
 ALTER TABLE agent_graph_checkpoints ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE agent_graph_checkpoints ADD COLUMN writes_json TEXT NOT NULL DEFAULT '[]';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_checkpoint_identity ON agent_graph_checkpoints(run_id,namespace,id);
+`], [17, `
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_cursor ON messages(conversation_id,created_at,id);
 `]];
 
 export class NexoDatabase {
@@ -191,7 +193,24 @@ export class NexoDatabase {
   private async init(){const SQL=await initSqlJs();const bytes=fs.existsSync(this.filePath)?fs.readFileSync(this.filePath):undefined;this.db=bytes?new SQL.Database(bytes):new SQL.Database();const hasMemories=this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")[0]?.values.length>0;if(hasMemories){const columns=this.db.exec("PRAGMA table_info(memories)")[0]?.values.map(v=>v[1]);if(!columns?.includes("key"))this.db.run("ALTER TABLE memories RENAME TO legacy_memories");}this.db.run(SCHEMA);this.db.run("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)");for(const[version,sql]of MIGRATIONS){if(this.db.exec(`SELECT version FROM schema_migrations WHERE version=${version}`)[0]?.values.length)continue;for(const statement of sql.split(";").map(part=>part.trim()).filter(Boolean)){try{this.db.run(statement);}catch(error){if(!String(error).includes("duplicate column name"))throw error;}}this.db.run("INSERT OR REPLACE INTO schema_migrations(version, applied_at) VALUES(?, ?)",[version,new Date().toISOString()]);}this.persist();}
   async ready(){await this.readyPromise;}
   run(sql:string,params:unknown[]=[]){this.db.run(sql,params as any[]);if(!this.transactionDepth)this.persist();}
-  transaction<T>(work:()=>T):T{const outermost=this.transactionDepth===0;if(outermost)this.db.run("BEGIN");this.transactionDepth++;try{const result=work();this.transactionDepth--;if(outermost){this.db.run("COMMIT");this.persist();}return result;}catch(error){this.transactionDepth--;if(outermost){this.db.run("ROLLBACK");this.persist();}throw error;}}
+  transaction<T>(work: () => T): T {
+    const outermost = this.transactionDepth === 0;
+    if (outermost) this.db.run("BEGIN");
+    this.transactionDepth++;
+    let result: T;
+    try {
+      result = work();
+      if (outermost) this.db.run("COMMIT");
+    } catch (error) {
+      if (outermost) this.db.run("ROLLBACK");
+      throw error;
+    } finally {
+      this.transactionDepth--;
+    }
+    // Export failures are not SQL rollback failures: COMMIT already succeeded.
+    if (outermost) this.persist();
+    return result;
+  }
   all<T=Record<string,unknown>>(sql:string,params:unknown[]=[]):T[]{const stmt=this.db.prepare(sql);stmt.bind(params as any[]);const rows:T[]=[];while(stmt.step())rows.push(stmt.getAsObject() as T);stmt.free();return rows;}
   get<T=Record<string,unknown>>(sql:string,params:unknown[]=[]):T|undefined{return this.all<T>(sql,params)[0];}
   private persist(){if(!this.db)return;const data=this.db.export();fs.writeFileSync(this.filePath,Buffer.from(data));}
