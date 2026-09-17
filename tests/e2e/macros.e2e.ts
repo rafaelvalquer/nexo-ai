@@ -14,6 +14,7 @@ test("natural macro drafts are reviewed and completed before saving",async({page
     api.listAutomations=async()=>[];
     api.listAutomationActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"}];
     api.draftMacroFromNatural=async({description}:any)=>({name:"Começar Trabalho",description,actions:[{id:"step-1",type:"system.open_application",config:{application:""}}]});
+    api.testAutomationDraft=async(value:any)=>{(window as any).__testedDraft=value;return{id:"draft-test",status:"success",summary:"Simulação concluída.",steps:[{id:"step-test",ordinal:1,actionType:"system.open_application",status:"success",summary:"Simulação: abriria chrome."}]};};
     api.createAutomationV2=async(value:any)=>{(window as any).__createdMacro=value;return value;};
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
@@ -23,6 +24,10 @@ test("natural macro drafts are reviewed and completed before saving",async({page
   await expect(page.getByLabel("Nome")).toHaveValue("Começar Trabalho");
   await expect(page.getByText("1. Abrir aplicativo",{exact:true})).toBeVisible();
   await page.getByRole("textbox",{name:"Aplicativo",exact:true}).fill("chrome");
+  await page.getByRole("button",{name:"Testar rascunho (simulação)"}).click();
+  await expect(page.getByText("Simulação concluída.",{exact:true})).toBeVisible();
+  const tested=await page.evaluate(()=>((window as any).__testedDraft));
+  expect(tested).toMatchObject({enabled:false,trigger:{type:"manual"},actions:[{type:"system.open_application",config:{application:"chrome"}}]});
   await page.getByRole("button",{name:"Salvar e ativar",exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>Boolean((window as any).__createdMacro))).toBe(true);
   const saved=await page.evaluate(()=>((window as any).__createdMacro.actions[0].config.application));

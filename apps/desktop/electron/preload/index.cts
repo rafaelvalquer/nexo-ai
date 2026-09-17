@@ -102,6 +102,7 @@ const api={
   cancelAutomation:(id:string):Promise<boolean>=>ipcRenderer.invoke("nexo:automation:cancel",id),
   resumeAutomationRun:(runId:string,mode:"retry"|"continue")=>ipcRenderer.invoke("nexo:automation:resume-run",runId,mode),
   testAutomation:(id:string)=>ipcRenderer.invoke("nexo:automation:test",id),
+  testAutomationDraft:(data:CreateAutomationV2Input)=>ipcRenderer.invoke("nexo:automation:test-draft",data),
   listAutomationRuns:(id:string,limit=50)=>ipcRenderer.invoke("nexo:automation:runs",id,limit),
   getAutomationRun:(id:string)=>ipcRenderer.invoke("nexo:automation:run-get",id),
   listAutomationPresets:()=>ipcRenderer.invoke("nexo:automation:presets"),

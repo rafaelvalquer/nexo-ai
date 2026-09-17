@@ -20,6 +20,7 @@ export function registerAutomationV2Ipc(core: NexoCore): void {
   });
   ipcMain.handle("nexo:automation:duplicate",(_,id)=>core.automation.duplicate(requireId(id)));
   ipcMain.handle("nexo:automation:test",(_,id)=>core.automation.test(requireId(id)));
+  ipcMain.handle("nexo:automation:test-draft",(_,value)=>core.automation.testDraft(validateCreate(core,value)));
   ipcMain.handle("nexo:automation:runs",(_,id,limit)=>core.automation.listRuns(requireId(id),Number.isInteger(limit)?Math.min(Math.max(Number(limit),1),100):50));
   ipcMain.handle("nexo:automation:run-get",(_,id)=>core.automation.getRun(requireId(id)));
   ipcMain.handle("nexo:automation:presets",()=>core.automation.presets());

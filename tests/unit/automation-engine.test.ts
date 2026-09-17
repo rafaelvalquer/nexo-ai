@@ -17,6 +17,11 @@ describe("AutomationEngine triggers", () => {
     expect(config.path).toContain("Downloads");expect(config.path).toMatch(/\d{4}-\d{2}-\d{2}\.txt$/);expect(config.content).toBe("relatório pronto");
     expect(()=>resolveConfig({value:"{{missing}}"},context)).toThrow("Variável de macro desconhecida");
   });
+  it("tests an unsaved draft in dry-run mode and removes its temporary records",async()=>{
+    const calls:string[]=[],engine=new AutomationEngine(db,async command=>{calls.push(command);});
+    const result=await engine.testDraft({name:"Rascunho",description:"Teste temporário",icon:"zap",enabled:false,trigger:{type:"manual"},conditions:[],conditionOperator:"AND",actions:[{id:"command",type:"nexo.command",config:{command:"não iniciar"}}],output:{type:"notification"},policy:{maxConcurrentRuns:1,retries:{enabled:false,count:0},onRepeatedFailure:"continue"}} as any);
+    expect(result).toMatchObject({status:"success",steps:[{status:"success",summary:expect.stringContaining("Simulação")} ]});expect(calls).toEqual([]);expect(engine.list()).toHaveLength(0);
+  });
   it("skips a macro step whose per-step condition is false",async()=>{
     const calls:string[]=[];const engine=new AutomationEngine(db,async command=>{calls.push(command);});
     const automation=engine.create({name:"Condição",enabled:true,trigger:{type:"manual"},conditions:[],conditionOperator:"AND",actions:[{id:"conditional",type:"nexo.command",config:{command:"não executar"},condition:{id:"c",field:"$trigger.data.allowed",operator:"equals",value:true}},{id:"next",type:"nexo.command",config:{command:"executar"}}],output:{type:"notification"},policy:{maxConcurrentRuns:1,retries:{enabled:false,count:0},onRepeatedFailure:"continue"}} as any);
