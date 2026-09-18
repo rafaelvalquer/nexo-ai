@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motionTokens } from "../../design/motion";
-import { trapTabKey } from "./focus-trap";
+import { registerModalLayer } from "./focus-trap";
 
 type NexoDrawerProps = {
   open: boolean;
@@ -28,23 +28,15 @@ export function NexoDrawer({ open, title, eyebrow, onClose, children, className 
   useEffect(() => {
     if (!open) return;
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const panel = panelRef.current;
+    if (!panel) return;
+    const unregister = registerModalLayer(panel, () => closeHandler.current());
     closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        closeHandler.current();
-      }
-      if (panelRef.current) trapTabKey(panelRef.current, event);
-    };
-    document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      const wasTopLayer = unregister();
       const previouslyFocused = previouslyFocusedRef.current;
       previouslyFocusedRef.current = null;
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      if (wasTopLayer && previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [open]);
 
