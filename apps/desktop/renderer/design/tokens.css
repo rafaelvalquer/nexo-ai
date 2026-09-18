@@ -40,6 +40,14 @@
   --nexo-motion-fast: 140ms;
   --nexo-motion-normal: 220ms;
   --nexo-motion-slow: 360ms;
+  --nexo-motion-page: 180ms;
+  --nexo-motion-shimmer: 1400ms;
+  --nexo-motion-spin: 900ms;
+  --nexo-motion-pulse: 1200ms;
+  --nexo-motion-cursor: 850ms;
+  --nexo-ease-out: cubic-bezier(.16, 1, .3, 1);
+  --nexo-ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  --nexo-ease-linear: linear;
 
   --nexo-space-1: 4px;
   --nexo-space-2: 8px;

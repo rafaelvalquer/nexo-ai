@@ -7,5 +7,6 @@ export type EmailSearchResult = { messages: EmailMessage[]; nextPageToken?: stri
 export type EmailMailboxStats = { totalMessages?:number; totalThreads?:number; inboxMessages?:number; unreadMessages?:number };
 export type EmailDraftInput = { connectionId:string; to:EmailAddress[]; subject:string; bodyText:string; cc?:EmailAddress[] };
 export type EmailDraft = { id:string; provider:"google"|"microsoft"; message:EmailDraftInput };
+export type EmailReplyInput = { connectionId:string; messageId:string; threadId?:string; bodyText:string };
 export type EmailModifyAction = "mark_read" | "mark_unread" | "archive" | "flag" | "trash" | "move" | "add_label" | "remove_label";
 export type EmailAttachment = { id:string; name:string; contentType?:string; size?:number };

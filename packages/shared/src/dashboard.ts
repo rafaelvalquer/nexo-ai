@@ -1,7 +1,10 @@
 export type GadgetSize = "S" | "M" | "L" | "XL";
 export type GadgetProvider = "internal" | "http" | "mcp";
 export type GadgetCategory = "nexo" | "productivity" | "system" | "finance" | "weather" | "news" | "information";
-export type DashboardGadgetId = "ai-status" | "tasks" | "approvals" | "automations" | "activity" | "documents" | "system" | "weather" | "currency" | "holidays" | "business-days" | "tech-news" | "earthquakes";
+export type DashboardGadgetId = "ai-status" | "tasks" | "approvals" | "automations" | "activity" | "documents" | "system" | "weather" | "currency" | "holidays" | "business-days" | "earthquakes" | "email" | "agenda";
 export type GadgetDefinition = { id: DashboardGadgetId; title: string; description: string; category: GadgetCategory; sizes: GadgetSize[]; defaultSize: GadgetSize; provider: GadgetProvider; refreshInterval?: number; requiresInternet?: boolean; requiresConfiguration?: boolean; attribution?: string };
 export type DashboardGadgetInstance = { instanceId: string; gadgetId: DashboardGadgetId; size: GadgetSize; configuration: Record<string, unknown>; enabled: boolean };
 export type DashboardSnapshot = { gadgets: DashboardGadgetInstance[]; updatedAt: string };
+export type DashboardEmailMessage = {id:string;threadId?:string;from:{name?:string;email:string};subject:string;snippet?:string;receivedAt:string;isUnread:boolean;hasAttachments:boolean};
+export type DashboardEmailData = {available:false;unreadCount:number;messages:DashboardEmailMessage[]} | {available:true;connectionId:string;provider:"google"|"microsoft";unreadCount:number;messages:DashboardEmailMessage[]};
+export type DashboardAgendaData = {available:false;events:[]} | {available:true;connectionId:string;events:Array<{id:string;title:string;start:string;end:string;allDay:boolean;location?:string;meetingUrl?:string}>};

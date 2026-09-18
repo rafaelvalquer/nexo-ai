@@ -5,7 +5,7 @@
   border-radius: 50%;
   background: #f59e0b;
   box-shadow: 0 0 10px #f59e0b;
-  animation: nexoPulse 1.2s ease-in-out infinite;
+  animation: nexoPulse var(--nexo-motion-pulse) ease-in-out infinite;
 }
 
 .liveBody {
@@ -28,7 +28,7 @@
   border-radius: 50%;
   background: #8b7cff;
   box-shadow: 0 0 9px #8b7cff;
-  animation: nexoPulse 1s ease-in-out infinite;
+  animation: nexoPulse var(--nexo-motion-pulse) ease-in-out infinite;
 }
 
 .liveHint {
@@ -48,7 +48,7 @@
   margin-left: 2px;
   vertical-align: -2px;
   background: #9c8cff;
-  animation: nexoCursor .85s steps(1) infinite;
+  animation: nexoCursor var(--nexo-motion-cursor) steps(1) infinite;
 }
 
 @keyframes nexoPulse {
@@ -291,7 +291,7 @@ section.assistant {
 }
 
 .capabilities input {
-  accent-color: #765cff;
+  accent-color: var(--nexo-violet);
 }
 
 .folderTrigger {
@@ -312,8 +312,8 @@ section.assistant {
   gap: 7px;
   max-width: 310px;
   padding: 14px;
-  border: 1px solid #765cff;
-  background: #111729;
+  border: 1px solid var(--nexo-violet);
+  background: var(--nexo-surface-2);
   box-shadow: 0 14px 42px #0008;
   border-radius: 12px;
   color: #dce4f5;

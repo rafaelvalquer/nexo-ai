@@ -54,8 +54,8 @@ section.assistant {
 .composer {
   display: flex;
   gap: 10px;
-  border: 1px solid #29303a;
-  background: #11151b;
+  border: 1px solid var(--nexo-border);
+  background: var(--nexo-surface-2);
   border-radius: 14px;
   padding: 9px;
 }
@@ -68,7 +68,7 @@ section.assistant {
   border: 0;
   outline: 0;
   background: transparent;
-  color: white;
+  color: var(--nexo-text);
   padding: 10px;
   font: inherit;
 }

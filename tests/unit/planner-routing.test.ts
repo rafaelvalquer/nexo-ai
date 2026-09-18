@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LLMMessage, LLMProvider } from "../../packages/core/src/llm/provider.js";
 import { AgentPlanner } from "../../packages/core/src/agent/planner.js";
+import { CommandService } from "../../packages/core/src/agent/command-service.js";
 import { ToolRegistry } from "../../packages/core/src/tools/registry.js";
 import { ConversationContextBuilder } from "../../packages/core/src/agent/context/conversation-context.js";
 import { AgentEngine } from "../../packages/core/src/agent/engine.js";
@@ -43,19 +44,20 @@ describe("AgentPlanner routing", () => {
   });
 
   it("classifica conversas e comandos locais antes da fase de planejamento", () => {
-    const planner = new AgentPlanner(new FakeLLM(), new ToolRegistry());
-    expect(planner.routeDeterministic("vamos conversar sobre javascript")).toMatchObject({ directStream: true, origin: "fast" });
-    expect(planner.routeDeterministic("verifique uso da memória")).toMatchObject({ tool: "memory_usage", origin: "fast" });
-    expect(planner.routeDeterministic("execute uma ação avançada no meu ambiente")).toBeUndefined();
-    expect(planner.routeDeterministic("Crie teste.txt em Downloads\\NexoTeste")).toBeUndefined();
-    expect(planner.routeDeterministic("Crie stale.txt na pasta permitida")).toBeUndefined();
+    const commands = new CommandService(new ToolRegistry());
+    expect(commands.route("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
+    expect(commands.route("verifique uso da memória")).toMatchObject({ type: "tool", tool: "memory_usage" });
+    expect(commands.route("execute uma ação avançada no meu ambiente")).toMatchObject({ type: "unknown" });
+    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "unknown" });
+    expect(commands.route("Crie stale.txt na pasta permitida")).toMatchObject({ type: "unknown" });
+    expect(commands.route("Encontre contrato.pdf em Downloads, resuma e salve dynamic.md")).toMatchObject({ type: "unknown" });
   });
 
   it("preserva caminhos explicitamente citados ao despachar listagens determinísticas", () => {
-    const planner = new AgentPlanner(new FakeLLM(), new ToolRegistry());
+    const commands = new CommandService(new ToolRegistry());
     const folder = path.join(os.tmpdir(), "nexo quoted path");
-    const plan=planner.routeDeterministic(`Liste os arquivos da pasta "${folder}"`);
-    expect(plan?.tool).toBe("list_files");expect(plan?.steps?.[0].input.path).toBe(folder);
+    const plan=commands.route(`Liste os arquivos da pasta "${folder}"`);
+    expect(plan).toMatchObject({ type: "tool", tool: "list_files", input: { path: folder } });
   });
 
   it.each([

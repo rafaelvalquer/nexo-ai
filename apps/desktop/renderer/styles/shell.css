@@ -8,8 +8,8 @@
   position: sticky;
   top: 0;
   height: 100vh;
-  border-right: 1px solid #20242c;
-  background: #0d1015e8;
+  border-right: 1px solid var(--nexo-border);
+  background: color-mix(in srgb, var(--nexo-surface-1) 92%, transparent);
   backdrop-filter: blur(20px);
   padding: 24px 14px;
   display: flex;
@@ -27,7 +27,7 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: linear-gradient(135deg,#8b5cf6,#3b82f6);
+  background: linear-gradient(135deg, var(--nexo-violet), var(--nexo-cyan));
   display: grid;
   place-items: center;
   font-weight: 900;
@@ -41,7 +41,7 @@
 .brand span {
   display: block;
   font-size: 9px;
-  color: #7f8795;
+  color: var(--nexo-text-muted);
   letter-spacing: .2em;
   margin-top: 2px;
 }
@@ -58,7 +58,7 @@
   gap: 11px;
   border: 0;
   background: transparent;
-  color: #949cab;
+  color: var(--nexo-text-secondary);
   padding: 11px 12px;
   border-radius: 9px;
   text-align: left;
@@ -67,20 +67,20 @@
 }
 
 .sidebar nav button:hover {
-  background: #151a22;
-  color: white;
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
 }
 
 .sidebar nav button.active {
-  background: #1b2130;
-  color: white;
-  box-shadow: inset 3px 0 #7c5cff;
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
+  box-shadow: inset 3px 0 var(--nexo-violet);
 }
 
 .sidebarFoot {
   margin-top: auto;
   padding: 12px;
-  color: #737d8c;
+  color: var(--nexo-text-muted);
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -92,8 +92,8 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 10px #22c55e;
+  background: var(--nexo-success);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--nexo-success) 65%, transparent);
 }
 
 .sidebarFoot .dot {

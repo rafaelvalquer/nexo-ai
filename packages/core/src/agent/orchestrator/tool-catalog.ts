@@ -20,7 +20,8 @@ export type AgentToolDescriptor = {
 };
 
 export class CapabilityAwareToolCatalog {
-  constructor(private readonly registry: ToolRegistry, private readonly connections?: ConnectionService,private readonly isToolEnabled:(name:string)=>boolean=()=>true) {}
+  constructor(private readonly registry: ToolRegistry, private connections?: ConnectionService,private readonly isToolEnabled:(name:string)=>boolean=()=>true) {}
+  setConnections(connections?:ConnectionService){this.connections=connections;}
 
   list(): AgentToolDescriptor[] {
     return this.registry.definitions().filter(tool => {

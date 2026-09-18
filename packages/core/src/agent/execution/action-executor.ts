@@ -27,6 +27,7 @@ export class ActionExecutor {
     private readonly audit: AuditService,
     private readonly options: { security?: SecurityPolicyService; metrics?: LocalMetricsService; resources?: ResourceManager; records?: ExecutionRecordRepository;connections?:ConnectionService;locations?:LocationRegistry } = {}
   ) { this.validator = new ActionValidator(registry, permissions, options.security, options.connections, options.locations); }
+  setConnections(connections?:ConnectionService){this.options.connections=connections;this.validator.setConnections(connections);}
 
   /** The same roots used by PermissionEngine/PathPolicy. Agent intent resolution must never maintain a second authority list. */
   allowedFilesystemRoots() {

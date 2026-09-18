@@ -13,7 +13,9 @@ import { ChatTabs } from "../components/chat/ChatTabs";
 import { useAssistant } from "../hooks/useAssistant";
 import { useChatAutoScroll } from "../hooks/useChatAutoScroll";
 import { NexoDrawer } from "../components/ui/NexoDrawer";
+import { useAgentEvents } from "../pixel-office/hooks/useAgentEvents";
 export function Assistant() {
+  useAgentEvents();
   const assistant = useAssistant();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);

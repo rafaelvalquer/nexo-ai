@@ -34,7 +34,7 @@
   border-radius: 7px;
   background: linear-gradient(90deg, var(--nexo-surface-2), var(--nexo-surface-3), var(--nexo-surface-2));
   background-size: 200% 100%;
-  animation: settingsSkeletonShimmer 1.4s ease-in-out infinite;
+  animation: settingsSkeletonShimmer var(--nexo-motion-shimmer) ease-in-out infinite;
 }
 
 .settingsLoadingSkeleton i:first-child { width: 42%; height: 25px; margin-bottom: 8px; }

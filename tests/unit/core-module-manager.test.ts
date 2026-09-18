@@ -30,4 +30,22 @@ describe("CoreModuleManager", () => {
     manager.register(module("b", [], ["a"]));
     await expect(manager.enable("a")).rejects.toThrow(/circular/i);
   });
+
+  it("serializes disable against a dependent module that is still starting", async () => {
+    const manager = new CoreModuleManager(), calls: string[] = [];
+    let signalStarted!: () => void, releaseStart!: () => void;
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    const release = new Promise<void>(resolve => { releaseStart = resolve; });
+    manager.register({ id: "documents", start: async () => { calls.push("start:documents"); }, stop: async () => { calls.push("stop:documents"); } });
+    manager.register({ id: "rag", dependencies: ["documents"], start: async () => { calls.push("start:rag"); signalStarted(); await release; }, stop: async () => { calls.push("stop:rag"); } });
+
+    const enabling = manager.enable("rag");
+    await started;
+    const disabling = manager.disable("documents");
+    releaseStart();
+    await Promise.all([enabling, disabling]);
+
+    expect(calls).toEqual(["start:documents", "start:rag", "stop:rag", "stop:documents"]);
+    expect(manager.snapshot().map(item => item.status)).toEqual(["disabled", "disabled"]);
+  });
 });

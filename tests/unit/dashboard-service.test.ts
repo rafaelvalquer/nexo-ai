@@ -33,4 +33,30 @@ describe("DashboardService",()=>{
     expect(()=>service.add("currency",{currencies:"USD,USD"})).toThrow(/moedas/i);
     expect(()=>service.add("currency",{currencies:"USD,EUR,GBP,JPY,CAD,AUD,CHF"})).toThrow(/moedas/i);
   });
+  it("removes Tech Pulse from the supported catalog and automatically provisions connected gadgets only once",()=>{
+    expect(service.catalog().some(item=>item.id==="tech-news" as any)).toBe(false);
+    expect(()=>service.add("tech-news" as any)).toThrow(/não registrado/i);
+    const capabilities=new Set(["email.read","calendar.read"]);
+    for(let i=0;i<10;i++)service.syncConnectedGadgets(capabilities);
+    expect(service.layout().filter(item=>item.gadgetId==="email")).toHaveLength(1);
+    expect(service.layout().filter(item=>item.gadgetId==="agenda")).toHaveLength(1);
+  });
+  it("does not auto-provision without capability and honors dismissal across repeated sync",()=>{
+    service.syncConnectedGadgets(new Set());
+    expect(service.layout().some(item=>item.gadgetId==="email")).toBe(false);
+    const item=service.add("email");service.remove(item.instanceId);
+    service.syncConnectedGadgets(new Set(["email.read"]));
+    expect(service.layout().some(value=>value.gadgetId==="email")).toBe(false);
+    const manuallyAdded=service.add("email");
+    expect(service.layout().some(value=>value.instanceId===manuallyAdded.instanceId)).toBe(true);
+  });
+  it("migration 19 deletes saved Tech Pulse layout and cache entries",async()=>{
+    const old=new DashboardService(db,async id=>({id}));const oldItem={instanceId:"legacy-tech",gadgetId:"tech-news",position:40,size:"L",configuration_json:"{}",enabled:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    db.run("INSERT INTO dashboard_gadgets(instance_id,gadget_id,position,size,configuration_json,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",[oldItem.instanceId,oldItem.gadgetId,oldItem.position,oldItem.size,oldItem.configuration_json,oldItem.enabled,oldItem.created_at,oldItem.updated_at]);
+    db.run("INSERT INTO dashboard_cache(provider,cache_key,payload_json,fetched_at,expires_at) VALUES('tech-news','tech-news','[]','now','later')");
+    db.run("DELETE FROM schema_migrations WHERE version=19");
+    const upgraded=new NexoDatabase(root);await upgraded.ready();
+    expect(upgraded.get("SELECT instance_id FROM dashboard_gadgets WHERE gadget_id='tech-news'")).toBeUndefined();
+    expect(upgraded.get("SELECT cache_key FROM dashboard_cache WHERE provider='tech-news'")).toBeUndefined();
+  });
 });

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, AlertCircle, AlertTriangle, Bell, CheckCircle2, ChevronDown, Command, Search, Settings2 } from "lucide-react";
+import { Activity, AlertCircle, AlertTriangle, Bell, CheckCircle2, ChevronDown, Command, Info, Search, Settings2 } from "lucide-react";
 import { useAppStore } from "../../stores/app";
 import { useVisualStore } from "../../stores/visual";
 import { useAssistantStore } from "../../stores/assistant";
 import { useNotificationsStore } from "../../stores/notifications";
+import { NexoDrawer } from "../ui/NexoDrawer";
 
 const labels: Record<string, string> = { Dashboard: "Centro de comando do Nexo", Assistente: "Seu espaço de trabalho", Macros: "Rotinas que trabalham por você", Escritório: "Veja o Nexo em ação", Ferramentas: "Recursos disponíveis", Configurações: "Seu Nexo, do seu jeito" };
 
@@ -19,16 +20,22 @@ export function Topbar() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const statusRef = useRef<HTMLDivElement>(null);
-  const notificationsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!statusRef.current?.contains(event.target as Node)) setStatusOpen(false);
-      if (!notificationsRef.current?.contains(event.target as Node)) setNotificationsOpen(false);
     };
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
   }, []);
   const openPalette = () => window.dispatchEvent(new Event("nexo:open-command-palette"));
+  const openExecution = async (conversationId?:string) => {
+    if(!conversationId)return;
+    const assistant=useAssistantStore.getState();
+    await assistant.sync();
+    useAssistantStore.getState().selectSession(conversationId);
+    useAppStore.getState().setPage("Assistente");
+    setNotificationsOpen(false);
+  };
   const toggleNotifications = () => {
     const next = !notificationsOpen;
     setNotificationsOpen(next);
@@ -46,10 +53,13 @@ export function Topbar() {
         <button className={`localStatus ${status?.llm?.ok ? "online" : status ? "offline" : "checking"}`} onClick={() => { setStatusOpen(value => !value); setNotificationsOpen(false); }} aria-expanded={statusOpen} aria-label="Estado da IA local"><span className="statusLight"/><span>IA local</span><ChevronDown size={13}/></button>
         {statusOpen && <div className="topbarPopover"><div className="popoverStatus"><span className="statusLight"/><div><b>{status ? status.llm?.ok ? "Ollama conectado" : "Ollama desconectado" : "Verificando conexão…"}</b><small>{status?.settings?.ollamaUrl ?? "http://localhost:11434"}</small></div></div><div className="popoverLine"><span>Modelo</span><b>{status?.settings?.model ?? "Verificando…"}</b></div><small>As conversas e os dados permanecem neste dispositivo.</small><button className="configureAiButton" onClick={()=>{setStatusOpen(false);useAppStore.getState().setPage("Configurações");}}><Settings2 size={14}/> Configurar IA</button></div>}
       </div>
-      <div className="topbarPopoverAnchor" ref={notificationsRef}>
-        <button className={`topbarIconButton ${badgeCount ? "hasActivity" : ""}`} onClick={toggleNotifications} aria-label={badgeCount ? `${badgeCount} notificações não lidas` : "Notificações"} title="Execuções e notificações" aria-expanded={notificationsOpen}><Bell size={16}/>{badgeCount > 0 && <i>{badgeCount}</i>}</button>
-        {notificationsOpen && <div className="topbarPopover notificationPopover"><b>Notificações</b>{active.length > 0 && <section className="activeNotifications"><small>EM ANDAMENTO</small>{active.map(item => <div className="notificationItem" key={item.id}><Activity size={14}/><span><b>{typeof item.input.text==="string"?item.input.text.slice(0,80):item.type}</b><small>{item.status === "waiting_approval" ? "Aguardando sua confirmação" : item.status === "waiting_review" ? "Aguardando sua revisão" : item.statusMessage || "Executando agora"}</small></span></div>)}</section>}{notifications.length > 0 ? <section className="recentNotifications"><small>RECENTES</small>{notifications.slice(0, 6).map(item => { const Icon = item.tone === "success" ? CheckCircle2 : item.tone === "error" ? AlertCircle : AlertTriangle; return <div className={`notificationItem ${item.tone}`} key={item.id}><Icon size={14}/><span><b>{item.title}</b><small>{item.detail}</small><small>{new Date(item.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></span></div>; })}</section> : !active.length && <p>Nenhuma notificação por enquanto.</p>}</div>}
-      </div>
+      <button className={`topbarIconButton ${badgeCount ? "hasActivity" : ""}`} onClick={toggleNotifications} aria-label={badgeCount ? `${badgeCount} notificações não lidas` : "Notificações"} title="Execuções e notificações" aria-expanded={notificationsOpen}><Bell size={16}/>{badgeCount > 0 && <i>{badgeCount}</i>}</button>
     </div>
+    <NexoDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} eyebrow="ATIVIDADE LOCAL" title="Notificações" className="notificationCenterDrawer">
+      <div className="notificationCenter" aria-live="polite">
+        {active.length > 0 && <section className="activeNotifications"><small>EM ANDAMENTO</small>{active.map(item => <button type="button" className="notificationItem notificationTask" key={item.id} onClick={() => void openExecution(item.conversationId)} disabled={!item.conversationId} aria-label={`Abrir tarefa: ${typeof item.input.text === "string" ? item.input.text.slice(0, 80) : item.type}`}><Activity size={14}/><span><b>{typeof item.input.text === "string" ? item.input.text.slice(0, 80) : item.type}</b><small>{item.status === "waiting_approval" ? "Aguardando sua confirmação" : item.status === "waiting_review" ? "Aguardando sua revisão" : item.statusMessage || "Executando agora"}</small></span></button>)}</section>}
+        {notifications.length > 0 ? <section className="recentNotifications"><small>RECENTES</small>{notifications.slice(0, 12).map(item => { const Icon = item.tone === "success" ? CheckCircle2 : item.tone === "error" ? AlertCircle : item.tone === "warning" ? AlertTriangle : Info; return <article className={`notificationItem ${item.tone}`} key={item.id}><Icon size={14}/><span><b>{item.title}</b><small>{item.detail}</small><small>{new Date(item.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</small></span></article>; })}</section> : !active.length && <p className="notificationEmpty">Nenhuma notificação por enquanto.</p>}
+      </div>
+    </NexoDrawer>
   </header>;
 }

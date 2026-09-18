@@ -5,6 +5,7 @@ import { useAssistantStore } from "../stores/assistant";
 import { useVisualStore } from "../stores/visual";
 import { NexoOrb } from "../components/ai/NexoOrb";
 import "./today.css";
+import "./today-motion.css";
 
 type LocalStatus = { llm?: { ok?: boolean }; settings?: { model?: string; autonomy?: string; allowedRoots?: string[] }; tools?: unknown[] };
 export function Today() {

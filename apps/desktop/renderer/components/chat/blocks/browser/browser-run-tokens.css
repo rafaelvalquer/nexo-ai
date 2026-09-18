@@ -1,0 +1,124 @@
+.browserRunBlock,
+.browserModalCard,
+.browserResultCard {
+  border-color: var(--nexo-border-strong);
+  background: var(--nexo-surface-1);
+}
+
+.browserRunHeader,
+.browserModalCard > header {
+  border-color: var(--nexo-border);
+  background: var(--nexo-surface-2);
+}
+
+.browserRunHeader > span,
+.browserProgress small,
+.browserCompletion small,
+.browserViewportPlaceholder {
+  color: var(--nexo-text-secondary);
+}
+
+.browserStatus {
+  color: var(--nexo-text);
+}
+
+.browserStatus i,
+.browserTimeline li > span {
+  background: var(--nexo-text-muted);
+}
+
+.browserStatus.running i,
+.browserStatus.starting i,
+.browserStatus.completed i,
+.browserPulse {
+  background: var(--nexo-success);
+}
+
+.browserDialog .nexoDialogPanel {
+  width: min(1200px, 94vw);
+  max-height: 94vh;
+  padding: 0;
+}
+
+.browserDialog .nexoDialogContent { min-height: 0; padding: 0; overflow: auto; }
+
+.browserStatus.paused i,
+.browserStatus.waiting_approval i {
+  background: var(--nexo-warning);
+}
+
+.browserStatus.failed i,
+.browserStatus.cancelled i {
+  background: var(--nexo-danger);
+}
+
+.browserToolbar button,
+.browserApproval button,
+.browserSteer button,
+.browserLink {
+  border-color: var(--nexo-border-strong);
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
+}
+
+.browserToolbar button:hover,
+.browserApproval button:hover,
+.browserSteer button:hover {
+  background: var(--nexo-surface-3);
+}
+
+.browserSteer input,
+.browserApproval pre,
+.browserViewport,
+.browserViewport canvas,
+.browserThumbnail {
+  border-color: var(--nexo-border);
+  background: var(--nexo-bg);
+  color: var(--nexo-text);
+}
+
+.browserApproval {
+  border-color: color-mix(in srgb, var(--nexo-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--nexo-warning) 8%, var(--nexo-surface-1));
+}
+
+.browserApproval pre,
+.browserResultSummary,
+.browserResultCard p {
+  color: var(--nexo-text-secondary);
+}
+
+.browserTimeline {
+  border-color: var(--nexo-border-strong);
+}
+
+.browserTimeline li > span {
+  border-color: var(--nexo-surface-2);
+}
+
+.browserTimeline small {
+  color: var(--nexo-text-muted);
+}
+
+.browserLink {
+  color: var(--nexo-cyan);
+}
+
+.browserError {
+  background: color-mix(in srgb, var(--nexo-danger) 12%, var(--nexo-surface-1));
+}
+
+.browserCancelled {
+  background: var(--nexo-surface-3);
+}
+
+.browserProgress progress { accent-color: var(--nexo-violet); }
+.browserPulse,.browserStatus.running i,.browserStatus.starting i { animation-duration: var(--nexo-motion-pulse); }
+.browserToolbar button,.browserApproval button,.browserSteer button { transition: background var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out),color var(--nexo-motion-fast) var(--nexo-ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .browserRunBlock *, .browserModal *, .browserResultCard *, .browserPulse { animation: none !important; transition: none !important; }
+}
+
+.browserModal {
+  background: color-mix(in srgb, var(--nexo-bg) 78%, transparent);
+}

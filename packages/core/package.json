@@ -15,7 +15,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.2.41",
+    "@langchain/langgraph-checkpoint": "^0.0.18",
     "@nexo/browser-agent": "workspace:*",
     "@nexo/shared": "workspace:*",
     "adm-zip": "^0.5.16",

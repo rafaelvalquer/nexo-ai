@@ -1,14 +1,12 @@
-import { Component, lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight, FileText, MessageSquare, Orbit, Pause, Play, Plus, X, Zap, Settings2 } from "lucide-react";
 import { useVisualStore } from "../../stores/visual";
 import { useAppStore } from "../../stores/app";
-import type { OrbInteraction } from "./orb/OrbScene";
+import { OrbScene, type OrbInteraction } from "./orb/OrbScene";
 import { orbColors } from "./orb/states";
 import "./orb/nucleus.css";
-const OrbScene = lazy(() => import("./orb/OrbScene").then(module => ({ default: module.OrbScene })));
-
 function Fallback() {
-  return <div className="nucleusFallback" aria-hidden="true"><div /><i /><i /><i /></div>;
+  return <div className="neuralFallback" aria-hidden="true"><div className="neuralCore"/><i/><i/><i/><span/><span/><span/><span/></div>;
 }
 class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -18,7 +16,7 @@ class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean
 export function NexoOrb({ compact = false }: { compact?: boolean }) {
   const { state, label } = useVisualStore();
   const navigate = useAppStore(store => store.setPage);
-  const [webgl, setWebgl] = useState(false), [reduced, setReduced] = useState(false);
+  const [webgl, setWebgl] = useState<"checking"|"ready"|"unavailable">("checking"), [reduced, setReduced] = useState(false);
   const [paused, setPaused] = useState(false), [expanded, setExpanded] = useState(false), [visible, setVisible] = useState(true);
   const host = useRef<HTMLDivElement>(null);
   const interaction = useRef<OrbInteraction>({ x: 0, y: 0, expanded: false });
@@ -30,9 +28,9 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
     const canvas = document.createElement("canvas");
     try {
       const context = canvas.getContext("webgl2");
-      setWebgl(Boolean(context));
+      setWebgl(context ? "ready" : "unavailable");
       context?.getExtension("WEBGL_lose_context")?.loseContext();
-    } catch { setWebgl(false); }
+    } catch { setWebgl("unavailable"); }
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .05 });
     if (host.current) observer.observe(host.current);
     return () => { media.removeEventListener("change", update); observer.disconnect(); };
@@ -47,14 +45,14 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
       onPointerMove={event => { const rect = event.currentTarget.getBoundingClientRect(); interaction.current.x = (event.clientX - rect.left) / rect.width * 2 - 1; interaction.current.y = (event.clientY - rect.top) / rect.height * 2 - 1; }}
       onPointerLeave={() => { interaction.current.x = 0; interaction.current.y = 0; }}
       onKeyDown={event => { if (event.key === "Escape") setExpanded(false); }}>
-      {webgl && !reduced ? <SceneBoundary><Suspense fallback={<Fallback />}><OrbScene state={state} interaction={interaction} paused={stopped} /></Suspense></SceneBoundary> : <Fallback />}
+      {webgl === "ready" && !reduced ? <SceneBoundary><OrbScene state={state} interaction={interaction} paused={stopped} /></SceneBoundary> : <Fallback />}
     </button>
     {expanded && <nav className="nucleusSatellites" aria-label="Atalhos do núcleo">
-      <button onClick={() => navigate("Assistente")}><MessageSquare size={14} />Conversar<ArrowUpRight size={12} /></button>
-      <button onClick={() => navigate("Documentos")}><FileText size={14} />Documentos<ArrowUpRight size={12} /></button>
-      <button onClick={() => navigate("Escritório")}><Orbit size={14} />Escritório<ArrowUpRight size={12} /></button>
-      <button onClick={() => navigate("Macros")}><Zap size={14} />Macros<ArrowUpRight size={12} /></button>
-      <button onClick={() => navigate("Configurações")}><Settings2 size={14} />Configurações<ArrowUpRight size={12} /></button>
+      <button className="satelliteAssistant" onClick={() => navigate("Assistente")}><MessageSquare size={14} />Conversar<ArrowUpRight size={12} /></button>
+      <button className="satelliteDocuments" onClick={() => navigate("Documentos")}><FileText size={14} />Documentos<ArrowUpRight size={12} /></button>
+      <button className="satelliteOffice" onClick={() => navigate("Escritório")}><Orbit size={14} />Escritório<ArrowUpRight size={12} /></button>
+      <button className="satelliteMacros" onClick={() => navigate("Macros")}><Zap size={14} />Macros<ArrowUpRight size={12} /></button>
+      <button className="satelliteSettings" onClick={() => navigate("Configurações")}><Settings2 size={14} />Configurações<ArrowUpRight size={12} /></button>
     </nav>}
     <div className="nucleusFooter">
       <div className="nucleusState" role="status"><i /><span>{label}</span></div>

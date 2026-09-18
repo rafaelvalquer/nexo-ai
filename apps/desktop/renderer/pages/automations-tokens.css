@@ -1,0 +1,55 @@
+.automationPage {
+  color: var(--nexo-text);
+  --automation-line: var(--nexo-border);
+}
+.automationHeader p,.sectionTitle p,.automationToolbar label,.automationStats span,.automationCard > p,.automationCard footer,.presetGrid p,.runStep > span,.runStep small { color: var(--nexo-text-secondary); }
+.automationEyebrow,.sectionTitle > span,.automationFlow svg,.automationSchedule svg,.promptPreviewBox b { color: var(--nexo-violet); }
+.automationPrimary { background: var(--nexo-violet); color: var(--nexo-text); }
+.automationError { border-color: color-mix(in srgb,var(--nexo-danger) 35%,transparent); background: color-mix(in srgb,var(--nexo-danger) 12%,var(--nexo-surface-1)); color: var(--nexo-danger); }
+.automationStats,.automationCard,.automationMenu,.presetGrid article,.automationBuilder,.runInspection,.promptPreviewBox,.macroStepList > li { border-color: var(--nexo-border); background: var(--nexo-surface-1); }
+.automationStats > div,.automationFlow,.automationSchedule,.runStep { border-color: var(--nexo-border); }
+.automationStats .ok strong,.automationStatus.active { color: var(--nexo-success); }
+.automationStats .warn strong,.automationStatus.attention,.automationStatus.waiting_approval,.attentionSection h2 { color: var(--nexo-warning); }
+.automationStats .info strong,.automationStatus.running { color: var(--nexo-cyan); }
+.automationToolbar label,.automationToolbar input,.conditionRow input,.conditionRow select,.promptBuilder textarea,.macroStepList input:not([type=checkbox]),.macroStepList select { border-color: var(--nexo-border-strong); background: var(--nexo-bg-raised); color: var(--nexo-text); }
+.automationFilters button,.conditionMode button,.addCondition { background: var(--nexo-surface-2); color: var(--nexo-text-secondary); }
+.automationFilters button.active,.conditionMode .chosen,.cardRun { background: var(--nexo-violet-soft); color: var(--nexo-text); }
+.automationCard { background: linear-gradient(135deg,var(--nexo-surface-2),var(--nexo-surface-1)); }
+.automationCard:hover { border-color: color-mix(in srgb,var(--nexo-violet) 50%,var(--nexo-border)); }
+.automationStatus { background: var(--nexo-surface-3); color: var(--nexo-text-secondary); }
+.automationStatus.active { background: color-mix(in srgb,var(--nexo-success) 12%,var(--nexo-surface-1)); }
+.automationStatus.running { background: var(--nexo-cyan-soft); }
+.automationStatus.attention,.automationStatus.waiting_approval { background: color-mix(in srgb,var(--nexo-warning) 12%,var(--nexo-surface-1)); }
+.automationMenu button,.menuButton { color: var(--nexo-text-secondary); }
+.automationMenu .danger,.removeCondition,.runStep .dangerText { color: var(--nexo-danger); }
+.automationEmpty { border-color: var(--nexo-border-strong); background: var(--nexo-surface-1); color: var(--nexo-text-secondary); }
+.automationEmpty svg,.presetGrid article > span { color: var(--nexo-violet); }
+.automationEmpty h3,.automationCard h3,.presetGrid h3,.runInspection > h3,.promptPreviewBox span { color: var(--nexo-text); }
+.attentionSection { border-color: color-mix(in srgb,var(--nexo-warning) 30%,transparent); background: linear-gradient(100deg,color-mix(in srgb,var(--nexo-warning) 9%,var(--nexo-surface-1)),var(--nexo-surface-1)); }
+.attentionSection article { border-color: color-mix(in srgb,var(--nexo-warning) 18%,transparent); }
+.attentionSection article svg { color: var(--nexo-warning); }
+.automationFlow,.automationSchedule,.macroCondition { border-color: var(--nexo-border); color: var(--nexo-text-secondary); }
+.automationFlow b,.automationCard footer,.automationCard footer span:first-child { color: var(--nexo-text-muted); }
+.automationCard footer svg,.draftTestResult { color: var(--nexo-success); }
+.automationOverlay { background: color-mix(in srgb,var(--nexo-bg) 74%,transparent); }
+.automationBuilder { background: var(--nexo-surface-1); box-shadow: var(--nexo-shadow-lg); }
+.automationSkeleton { background: linear-gradient(100deg,var(--nexo-surface-1),var(--nexo-surface-3),var(--nexo-surface-1)); }
+.macroCondition { background: var(--nexo-surface-2); }
+.macroCondition small,.promptBuilder label small { color: var(--nexo-text-secondary); }
+.draftTestResult { border-color: color-mix(in srgb,var(--nexo-success) 30%,transparent); background: color-mix(in srgb,var(--nexo-success) 8%,var(--nexo-surface-1)); }
+.draftTestResult p,.draftTestResult small { color: var(--nexo-text-secondary); }
+.macroStepList > li { background: var(--nexo-surface-2); }
+.macroStepList label,.automationSchedule,.macroStepList label.check { color: var(--nexo-text-secondary); }
+.settingsConnections summary { color: var(--nexo-text); }
+.macroStepList label.check input { accent-color: var(--nexo-violet); }
+.macroExecutionProgress { display: grid; gap: 10px; margin: 12px 0 18px; padding: 12px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-md); background: var(--nexo-surface-2); }
+.macroExecutionProgress > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.macroExecutionProgress b { color: var(--nexo-text); font-size: 12px; font-weight: 550; }
+.macroExecutionProgress small { color: var(--nexo-text-secondary); white-space: nowrap; }
+.automationPage :is(button,input,select,textarea):focus-visible { outline-color: var(--nexo-violet); }
+.automationCard,.automationStatus i,.automationSkeleton { animation-duration: var(--nexo-motion-pulse); }
+.automationCard { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out); }
+.automationBuilder,.automationMenu { box-shadow: var(--nexo-shadow-lg); }
+@media (prefers-reduced-motion: reduce) {
+  .automationPage *, .automationBuilder * { animation: none !important; transition: none !important; }
+}

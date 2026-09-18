@@ -1,16 +1,16 @@
 import { useEffect,useMemo,useRef,useState } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import type { BrowserRun,BrowserRunBlock as BrowserRunBlockModel } from "@nexo/shared/browser-agent";
 import { BrowserApproval } from "./BrowserApproval";
 import { BrowserProgress } from "./BrowserProgress";
 import { BrowserResultCards } from "./BrowserResultCards";
 import { BrowserStatus } from "./BrowserStatus";
 import { BrowserTimeline } from "./BrowserTimeline";
+import { NexoDialog } from "../../../ui/NexoDialog";
 import { BrowserToolbar } from "./BrowserToolbar";
 import { BrowserViewport } from "./BrowserViewport";
 import { useBrowserRun } from "./useBrowserRun";
 import "./browser-run.css";
+import "./browser-run-tokens.css";
 
 export function BrowserRunBlock({block,conversationId}:{block:BrowserRunBlockModel;conversationId?:string}){
   const{run:loaded,liveEvents,history,approval}=useBrowserRun(block.runId),[expanded,setExpanded]=useState(false),[details,setDetails]=useState(false),rootRef=useRef<HTMLElement|null>(null),scrolledRef=useRef(false);
@@ -27,7 +27,7 @@ export function BrowserRunBlock({block,conversationId}:{block:BrowserRunBlockMod
     {run.status==="completed"&&<div className="browserCompletion"><div><strong>Pesquisa concluída</strong><small>{run.stepCount} etapa(s){elapsed?` · ${elapsed}`:""}</small></div>{run.finalResult&&<BrowserResultCards result={run.finalResult}/>}</div>}
     {run.status==="failed"&&<p className="browserError" role="alert">{run.error??"O Browser Agent não conseguiu concluir a execução."}</p>}
     {run.status==="cancelled"&&<p className="browserCancelled" role="status">Execução cancelada.</p>}
-    {expanded&&createPortal(<div className="browserModal" role="dialog" aria-modal="true" aria-label="Nexo Browser"><div className="browserModalCard"><header><div><BrowserStatus run={run}/><strong>Nexo Browser</strong></div><button aria-label="Fechar" onClick={()=>setExpanded(false)}><X size={18}/></button></header><BrowserViewport run={run} expanded/><BrowserProgress run={run}/><BrowserToolbar run={run} conversationId={conversationId} onExpand={()=>undefined} onToggleDetails={()=>setDetails(value=>!value)}/>{details&&<BrowserTimeline events={liveEvents} history={history}/>}</div></div>,document.body)}
+    {expanded&&<NexoDialog open title="Nexo Browser" onClose={()=>setExpanded(false)} className="browserDialog"><div className="browserModalCard"><header><div><BrowserStatus run={run}/></div></header><BrowserViewport run={run} expanded/><BrowserProgress run={run}/><BrowserToolbar run={run} conversationId={conversationId} onExpand={()=>undefined} onToggleDetails={()=>setDetails(value=>!value)}/>{details&&<BrowserTimeline events={liveEvents} history={history}/>}</div></NexoDialog>}
   </section>;
 }
 function fallbackRun(block:BrowserRunBlockModel,conversationId?:string):BrowserRun{return{id:block.runId,taskId:"",conversationId:conversationId??"",request:block.title,status:block.status,mode:"research",allowedDomains:[],currentUrl:block.url,pageTitle:block.pageTitle,currentStep:block.step,stepCount:0,startedAt:block.startedAt,finishedAt:block.finishedAt,finalThumbnail:block.finalThumbnail};}

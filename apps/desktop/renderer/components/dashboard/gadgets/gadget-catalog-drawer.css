@@ -1,0 +1,31 @@
+.gadgetCatalog.nexoDrawerPanel {
+  width: min(560px, 96vw);
+  max-height: none;
+  border-radius: 18px 0 0 18px;
+  background: var(--nexo-surface-2);
+}
+
+.gadgetCatalog .nexoDrawerContent {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.gadgetCatalog .gadgetSearch {
+  flex: 0 0 auto;
+}
+
+.gadgetCatalog .gadgetCatalogList,
+.gadgetCatalog .gadgetSetup {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 600px) {
+  .gadgetCatalog.nexoDrawerPanel {
+    width: 100vw;
+    border-radius: 0;
+  }
+}

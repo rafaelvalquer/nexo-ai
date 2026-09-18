@@ -1,0 +1,56 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { NexoDatabase } from "../../packages/core/src/database/db.js";
+import { NexoCore } from "../../packages/core/src/index.js";
+
+const roots:string[]=[];
+const cores:NexoCore[]=[];
+afterEach(async()=>{for(const core of cores.splice(0))await core.shutdown();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+
+async function coreWithSettings(overrides:Record<string,unknown>){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-optional-modules-"));roots.push(root);
+  const seed=new NexoDatabase(root);await seed.ready();seed.run("INSERT OR REPLACE INTO settings(key,value) VALUES('app',?)",[JSON.stringify({settingsSchemaVersion:3,...overrides})]);
+  const core=new NexoCore({dataDir:root});cores.push(core);await core.ready();return core;
+}
+
+describe("NexoCore optional modules",()=>{
+  it("starts the basic Core without instantiating disabled connections, documents, or RAG",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"connections",status:"disabled"},{id:"documents",status:"disabled"},{id:"rag",status:"disabled"}
+    ]));
+    expect(core.tools.list().some(tool=>tool.name.startsWith("email_")||tool.name.startsWith("calendar_")||tool.name.startsWith("document_"))).toBe(false);
+    expect(core.tools.list().some(tool=>tool.name==="web_search"||tool.name==="find_file")).toBe(true);
+  });
+
+  it("loads Documents and its RAG dependency only when explicitly ensured",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:true,semanticSearchEnabled:true});
+    expect(core.moduleSnapshot().find(module=>module.id==="documents")?.status).toBe("disabled");
+    await core.ensureDocuments();
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"documents",status:"ready"},{id:"rag",status:"ready"}
+    ]));
+    expect(core.tools.list().some(tool=>tool.name==="document_get")).toBe(true);
+  });
+
+  it("loads Documents without RAG when semantic search is disabled",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:true,semanticSearchEnabled:false});
+    await core.ensureDocuments();
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"documents",status:"ready"},{id:"rag",status:"disabled"}
+    ]));
+  });
+
+  it("does not construct Connections while disabled and attaches its tools on demand",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
+    await expect(core.ensureConnections()).rejects.toThrow("desativado");
+    expect(core.moduleSnapshot().find(module=>module.id==="connections")?.status).toBe("disabled");
+    core.updateSettings({connectionsEnabled:true});
+    const connections=await core.ensureConnections();
+    expect(connections).toBeDefined();
+    expect(core.moduleSnapshot().find(module=>module.id==="connections")?.status).toBe("ready");
+    expect(core.tools.list().some(tool=>tool.name.startsWith("email_")||tool.name.startsWith("calendar_"))).toBe(true);
+  });
+});

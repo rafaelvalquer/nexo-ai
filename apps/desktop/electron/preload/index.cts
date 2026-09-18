@@ -36,7 +36,9 @@ const api={
     configureGadget:(instanceId:string,configuration:Record<string,unknown>,size?:string)=>ipcRenderer.invoke("nexo:dashboard:configure",instanceId,configuration,size),
     saveLayout:(items:Array<{instanceId:string;size:string;position:number}>)=>ipcRenderer.invoke("nexo:dashboard:save-layout",items),
     getGadgetData:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:data",id,configuration),
-    refreshGadget:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:refresh",id,configuration)
+    refreshGadget:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:refresh",id,configuration),
+    getEmailMessage:(connectionId:string,messageId:string)=>ipcRenderer.invoke("nexo:dashboard:email-message",connectionId,messageId),
+    replyEmail:(input:{connectionId:string;messageId:string;threadId?:string;bodyText:string})=>ipcRenderer.invoke("nexo:dashboard:email-reply",input)
   },
   loadMoreChatBlock:(conversationId:string,messageId:string,blockId:string)=>ipcRenderer.invoke("nexo:chat:more",conversationId,messageId,blockId),
   executeChatAction:(request:ChatActionRequest):Promise<ChatActionOutcome>=>ipcRenderer.invoke("nexo:chat:action",request),

@@ -2,9 +2,11 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import type { DashboardGadgetId, DashboardGadgetInstance, GadgetDefinition, GadgetSize } from "@nexo/shared";
 import { useAppStore } from "../../stores/app";
+import { EmailGadget } from "./gadgets/EmailGadget";
+import { AgendaGadget } from "./gadgets/AgendaGadget";
 type Data={data:any;fetchedAt:string;stale:boolean;error?:string};
 export function GadgetCard({item,definition,result,editing,onResize,onRemove,onMove,onRefresh,onConfigure}:{item:DashboardGadgetInstance;definition:GadgetDefinition;result?:Data;editing:boolean;onResize:(size:GadgetSize)=>void;onRemove:()=>void;onMove:(direction:-1|1)=>void;onRefresh:()=>void;onConfigure:()=>void}){
-  const [busy,setBusy]=useState(false),Icon=({"ai-status":"◈",tasks:"◷",approvals:"✓",automations:"⌘",activity:"⌁",documents:"▤",system:"⌬",weather:"☼",currency:"↗",holidays:"✳","business-days":"◫","tech-news":"⌁",earthquakes:"◎"} as Record<DashboardGadgetId,string>)[item.gadgetId];
+  const [busy,setBusy]=useState(false),Icon=({"ai-status":"◈",tasks:"◷",approvals:"✓",automations:"⌘",activity:"⌁",documents:"▤",system:"⌬",weather:"☼",currency:"↗",holidays:"✳","business-days":"◫",earthquakes:"◎",email:"✉",agenda:"◫"} as Record<DashboardGadgetId,string>)[item.gadgetId];
   const reload=async()=>{setBusy(true);try{await onRefresh();}finally{setBusy(false);}};
   return <article className={`gadgetCard gadgetSize${item.size}`} draggable={editing} onDragStart={event=>{event.dataTransfer.setData("text/plain",item.instanceId);event.dataTransfer.effectAllowed="move";}} onDragOver={event=>{if(editing)event.preventDefault();}} onDrop={event=>{if(editing){event.preventDefault();const from=event.dataTransfer.getData("text/plain");if(from&&from!==item.instanceId)(window as any).dispatchEvent(new CustomEvent("nexo:dashboard:move",{detail:{from,to:item.instanceId}}));}}}>
     <header className="gadgetHeader"><span className="gadgetIcon" aria-hidden="true">{Icon}</span><div><h3>{definition.title}</h3><small>{definition.provider==="http"?"INFORMAÇÃO ONLINE":"NEXO · LOCAL"}</small></div><button className="gadgetRefresh" onClick={()=>void reload()} aria-label={`Atualizar ${definition.title}`} disabled={busy}>{busy?<LoaderCircle size={14} className="spin"/>:<RefreshCw size={14}/>}</button>{editing&&<button className="gadgetRefresh" onClick={onConfigure} aria-label={`Configurar ${definition.title}`}><Settings2 size={15}/></button>}{editing&&<button className="gadgetRefresh dangerIcon" onClick={onRemove} aria-label={`Remover ${definition.title}`}><Trash2 size={15}/></button>}</header>
@@ -16,6 +18,8 @@ export function GadgetCard({item,definition,result,editing,onResize,onRemove,onM
 }
 function GadgetBody({id,data}:{id:DashboardGadgetId;data:any}){
   const setPage=useAppStore(state=>state.setPage);
+  if(id==="email")return <EmailGadget data={data}/>;
+  if(id==="agenda")return <AgendaGadget data={data}/>;
   if(id==="ai-status")return <div className="aiGadget"><strong>{data?.model??"Modelo local"}</strong><p><i className={data?.connected?"isOnline":"isOffline"}/>{data?.connected?"Ollama conectado":"IA local indisponível"}</p><div><span>{data?.autonomy??"—"} · {data?.privateMode?"Privado":"Local"}</span><span>{data?.toolCount??0} ferramentas</span></div></div>;
   if(id==="tasks")return <div className="taskGadget">{!data?.length?<Empty>Nenhuma tarefa em execução.</Empty>:data.slice(0,4).map((task:any)=><div className="taskGadgetRow" key={task.id}><i/><b>{task.title}</b><small>{task.progress||task.status}</small></div>)}</div>;
   if(id==="approvals")return <div className="approvalGadget">{!data?.length?<Empty>Nenhuma ação aguardando aprovação.</Empty>:data.slice(0,3).map((approval:any)=><div key={approval.id}><span><b>{approval.toolName.replaceAll("_"," ")}</b><small>{approval.reason}</small></span><button onClick={()=>setPage("Aprovações")}>Revisar <ExternalLink size={12}/></button></div>)}</div>;
@@ -27,7 +31,6 @@ function GadgetBody({id,data}:{id:DashboardGadgetId;data:any}){
   if(id==="currency")return <CurrencyWidget data={data}/>;
   if(id==="holidays")return <HolidayWidget data={data}/>;
   if(id==="business-days")return <div className="businessDays"><strong>{data?.remaining??"—"}</strong><span>dias úteis restantes<br/>em {data?.month??"este mês"}</span></div>;
-  if(id==="tech-news")return <div className="newsGadget">{!Array.isArray(data)||!data.length?<Empty>As notícias em alta aparecerão aqui.</Empty>:data.slice(0,5).map((story:any,index:number)=><button key={story.id} type="button" onClick={()=>void window.nexo.openExternal(story.url??`https://news.ycombinator.com/item?id=${story.id}`)}><span>{String(index+1).padStart(2,"0")}</span><b>{story.title}</b><small>{story.score??0} pontos · {story.by??"Hacker News"}</small></button>)}</div>;
   if(id==="earthquakes")return <div className="earthquakeGadget">{!Array.isArray(data)||!data.length?<Empty>Nenhum evento significativo recente.</Empty>:data.slice(0,5).map((feature:any)=><div key={feature.id}><span className="magnitude">M{Number(feature.properties?.mag??0).toFixed(1)}</span><b>{feature.properties?.place??"Localização indisponível"}</b><small>{timeAgo(new Date(feature.properties?.time??Date.now()).toISOString())}</small></div>)}</div>;
   return <Empty>Gadget sem dados disponíveis.</Empty>;
 }

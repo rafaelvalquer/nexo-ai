@@ -6,11 +6,15 @@ import {createHash} from "node:crypto";
 /** Provider send APIs do not expose a stable request key yet; ambiguity is preserved instead of guessed. */
 export class EmailSendReconciler implements MutationReconciler {
   constructor(private readonly email: EmailService) {}
-  supports(record: ExecutionRecord) { return record.toolName === "email_send" || record.toolName === "email_send_composed"; }
+  supports(record: ExecutionRecord) { return record.toolName === "email_send" || record.toolName === "email_send_composed" || record.toolName === "email_reply"; }
   async reconcile(record: ExecutionRecord, signal?: AbortSignal): Promise<ReconciliationResult> {
     if (signal?.aborted) throw signal.reason;
     const input = record.input as { connectionId?: string; message?: { connectionId?: string; subject?: string;bodyText?:string;to?:Array<{email:string}> }; subject?: string;bodyText?:string;to?:Array<{email:string}> };
     const connectionId = input.connectionId ?? input.message?.connectionId;
+    if(record.toolName==="email_reply"){
+      const reply=input as typeof input & {messageId?:string;threadId?:string};if(!connectionId||!reply.messageId)return{status:"still_unknown",reason:"Resposta sem identificadores suficientes para reconciliação."};
+      try{const original=await this.email.getMessage(connectionId,reply.messageId,signal),threadId=reply.threadId??original.threadId;if(!threadId)return{status:"still_unknown",reason:"A mensagem original não contém ID da conversa."};const messages=await this.email.getThread(connectionId,threadId,signal),matches=messages.filter(message=>message.id!==reply.messageId&&message.threadId===threadId&&hash(message.bodyText??"")===hash(reply.bodyText??""));if(matches.length===1)return{status:"confirmed_success",result:{success:true,ok:true,summary:"Resposta confirmada na conversa original.",data:{messageId:matches[0].id,threadId}}};return{status:"still_unknown",reason:matches.length?"Há mais de uma resposta equivalente na conversa.":"O provedor ainda não confirmou a resposta na conversa original."};}catch(error){return{status:"still_unknown",reason:error instanceof Error?error.message:String(error)};}
+    }
     const subject = input.subject ?? input.message?.subject;
     if (!connectionId || !subject) return { status: "still_unknown", reason: "Envio sem identificadores suficientes para reconciliação." };
     try {

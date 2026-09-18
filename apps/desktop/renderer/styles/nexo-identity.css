@@ -4,8 +4,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
-  border-bottom: 1px solid #263047;
-  color: #8e9ab2;
+  border-bottom: 1px solid var(--nexo-border);
+  color: var(--nexo-text-secondary);
 }
 
 .topbarEyebrow {
@@ -16,22 +16,22 @@
 
 .topbar strong {
   font-size: 13px;
-  color: #f5f7ff;
+  color: var(--nexo-text);
 }
 
 .coreBadge {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #263047;
+  border: 1px solid var(--nexo-border);
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 11px;
 }
 
 .coreBadge.ok {
-  border-color: #245c49;
-  color: #7be2b4;
+  border-color: color-mix(in srgb,var(--nexo-success) 42%,transparent);
+  color: var(--nexo-success);
 }
 
 .nexoOrb {
@@ -51,9 +51,9 @@
   border-radius: 50%;
   font-size: 31px;
   font-weight: 800;
-  color: #f5f7ff;
-  background: radial-gradient(circle at 34% 28%,#c1b7ff,#765cff 40%,#102143 72%);
-  box-shadow: 0 0 42px #765cff8f;
+  color: var(--nexo-text);
+  background: radial-gradient(circle at 34% 28%,#c1b7ff,var(--nexo-violet) 40%,var(--nexo-surface-2) 72%);
+  box-shadow: var(--nexo-glow-accent);
   animation: orbBreathe 4s ease-in-out infinite;
   z-index: 2;
 }
@@ -62,7 +62,7 @@
   position: absolute;
   width: 124px;
   height: 124px;
-  border: 1px solid #49d6ff70;
+  border: 1px solid color-mix(in srgb,var(--nexo-cyan) 44%,transparent);
   border-radius: 50%;
   animation: orbSpin 12s linear infinite;
 }
@@ -70,7 +70,7 @@
 .orbRing.second {
   width: 149px;
   height: 149px;
-  border-color: #765cff66;
+  border-color: color-mix(in srgb,var(--nexo-violet) 40%,transparent);
   animation-direction: reverse;
   animation-duration: 16s;
 }
@@ -79,24 +79,24 @@
   position: absolute;
   top: calc(100% + 5px);
   font-size: 10px;
-  color: #8e9ab2;
+  color: var(--nexo-text-secondary);
   white-space: nowrap;
 }
 
 .nexoOrb.executing-tool .orbCore,.nexoOrb.responding .orbCore {
-  background: radial-gradient(circle at 34% 28%,#bdedff,#49d6ff 40%,#102143 72%);
+  background: radial-gradient(circle at 34% 28%,#bdedff,var(--nexo-cyan) 40%,var(--nexo-surface-2) 72%);
 }
 
 .nexoOrb.awaiting-approval .orbCore {
-  background: radial-gradient(circle at 34% 28%,#ffe8ac,#f5b74f 42%,#3d2a10 72%);
+  background: radial-gradient(circle at 34% 28%,#ffe8ac,var(--nexo-warning) 42%,var(--nexo-surface-2) 72%);
 }
 
 .nexoOrb.success .orbCore {
-  background: radial-gradient(circle at 34% 28%,#b6ffe0,#3bd89f 42%,#103526 72%);
+  background: radial-gradient(circle at 34% 28%,#b6ffe0,var(--nexo-success) 42%,var(--nexo-surface-2) 72%);
 }
 
 .nexoOrb.error .orbCore,.nexoOrb.offline .orbCore {
-  background: radial-gradient(circle at 34% 28%,#ffb8c5,#ff5d78 42%,#40131f 72%);
+  background: radial-gradient(circle at 34% 28%,#ffb8c5,var(--nexo-danger) 42%,var(--nexo-surface-2) 72%);
 }
 
 .nexoOrb.compact {

@@ -12,8 +12,8 @@
 .executionRail {
   width: 270px;
   flex: 0 0 270px;
-  border: 1px solid #263047;
-  background: #0d111b;
+  border: 1px solid var(--nexo-border);
+  background: var(--nexo-surface-1);
   border-radius: 16px;
   padding: 14px;
   align-self: stretch;
@@ -40,19 +40,19 @@
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  color: #8e9ab2;
+  color: var(--nexo-text-secondary);
   font-size: 12px;
   line-height: 1.35;
 }
 
 .executionStep svg {
   flex: 0 0 auto;
-  color: #3bd89f;
+  color: var(--nexo-success);
 }
 
 .executionStep.active svg {
-  color: #49d6ff;
-  animation: nexoPulse 1s infinite;
+  color: var(--nexo-cyan);
+  animation: nexoPulse var(--nexo-motion-pulse) var(--nexo-ease-in-out) infinite;
 }
 
 .executionRail small {
@@ -60,7 +60,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #71809a;
+  color: var(--nexo-text-muted);
   font-size: 11px;
 }
 

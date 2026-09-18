@@ -2,7 +2,7 @@ import path from "node:path";
 import { LocationRegistry } from "../../locations/location-registry.js";
 import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import { containsPathTraversal, parseTextFileIntent } from "../intent/text-file-intent.js";
-import { parseFileIntent } from "../intent/file-intent.js";
+import { isComposedDocumentWorkflow, parseFileIntent } from "../intent/file-intent.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
 
 export type V2FastPathCall = {
@@ -26,6 +26,7 @@ export class V2FastPathRouter {
   constructor(private readonly locations: LocationRegistry = new LocationRegistry()) {}
 
   resolve(text: string, tools: AgentToolDescriptor[], allowedRoots:string[]=[]): V2FastPathResult | null {
+    if (isComposedDocumentWorkflow(text)) return null;
     const available = new Map(tools.map(tool => [tool.name, tool]));
 
     if(/\b(confirmo|pode\s+criar|salve|salvar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:true},"Salvando o rascunho da macro pausada…");
@@ -142,7 +143,7 @@ export class V2FastPathRouter {
         ?? this.call(available, "browser_open", { url }, `Abrindo ${url}…`);
     }
     const fileIntent=parseFileIntent(text);
-    if(fileIntent?.kind==="find_file"&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text))return this.call(available,"document_summarize_named",{fileName:fileIntent.fileName},`Localizando e analisando ${fileIntent.fileName} nas pastas permitidas…`);
+    if(fileIntent?.kind==="find_file"&&/\b(resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text)&&!/\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text))return this.call(available,"document_summarize_named",{fileName:fileIntent.fileName},`Localizando e analisando ${fileIntent.fileName} nas pastas permitidas…`);
     if(fileIntent?.kind==="find_file"){
       let root:string|undefined;
       if(fileIntent.folder){const folder=resolveFolder(fileIntent.folder,new LocationRegistry({},[],allowedRoots));if(folder&&"rejected" in folder)return folder;root=folder?.path??fileIntent.folder;}

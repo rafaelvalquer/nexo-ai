@@ -1,14 +1,26 @@
 /* Color and elevation tokens are defined in design/tokens.css. */
-.nexoDrawerOverlay{position:fixed;z-index:260;inset:0;display:flex;justify-content:flex-end;background:rgba(3,6,12,.58);backdrop-filter:blur(3px)}
+.nexoDrawerOverlay{position:fixed;z-index:260;inset:0;display:flex;justify-content:flex-end;background:color-mix(in srgb,var(--nexo-bg) 62%,transparent);backdrop-filter:blur(3px)}
+.nexoDialogOverlay{position:fixed;z-index:280;inset:0;display:grid;place-items:center;padding:3vh 3vw;background:color-mix(in srgb,var(--nexo-bg) 72%,transparent);backdrop-filter:blur(8px)}
+.nexoDialogPanel{display:flex;flex-direction:column;width:min(560px,94vw);max-height:94vh;overflow:hidden;background:var(--nexo-surface-popover);border:1px solid var(--nexo-border-strong);border-radius:var(--nexo-r-lg);box-shadow:var(--nexo-shadow-lg);outline:none}
+.nexoDialogHeader{display:flex;flex:none;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;border-bottom:1px solid var(--nexo-border)}
+.nexoDialogHeader h2{margin:0;color:var(--nexo-text);font-size:16px;font-weight:550}
+.nexoDialogHeader button{display:grid;place-items:center;flex:none;width:34px;height:34px;padding:0;color:var(--nexo-text-secondary);background:var(--nexo-surface-2);border:1px solid var(--nexo-border);border-radius:9px;cursor:pointer}
+.nexoDialogContent{min-height:0;overflow:auto;padding:18px 20px;overscroll-behavior:contain}
 .nexoDrawerOverlay:has(.nexoDrawerPanel-left){justify-content:flex-start}
-.nexoDrawerPanel{display:flex;flex-direction:column;width:min(440px,92vw);height:100%;overflow:hidden;background:var(--nexo-surface-3,#14192a);border-left:1px solid var(--nexo-border,#2a3247);box-shadow:var(--nexo-shadow-xl,-20px 0 50px rgba(0,0,0,.34));outline:none}
-.nexoDrawerPanel-left{border-right:1px solid var(--nexo-border,#2a3247);border-left:0;box-shadow:20px 0 50px rgba(0,0,0,.34)}
+.nexoDrawerPanel{display:flex;flex-direction:column;width:min(440px,92vw);height:100%;overflow:hidden;background:var(--nexo-surface-3);border-left:1px solid var(--nexo-border);box-shadow:var(--nexo-shadow-lg);outline:none}
+.nexoDrawerPanel-left{border-right:1px solid var(--nexo-border);border-left:0;box-shadow:var(--nexo-shadow-lg)}
 .nexoDrawerHeader{display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;gap:16px;padding:20px 22px;border-bottom:1px solid var(--nexo-border,#2a3247)}
-.nexoDrawerHeader small{color:var(--nexo-accent,#aa96ff);font:700 10px/1.3 ui-monospace,monospace;letter-spacing:.13em}
+.nexoDrawerHeader small{color:var(--nexo-violet);font:700 10px/1.3 ui-monospace,monospace;letter-spacing:.13em}
 .nexoDrawerHeader h2{margin:3px 0 0;font-size:20px;line-height:1.25}
-.nexoDrawerHeader button{display:grid;place-items:center;flex:0 0 auto;width:36px;height:36px;padding:0;border:1px solid var(--nexo-border,#30394d);border-radius:10px;background:var(--nexo-surface-soft,#202841);color:inherit;cursor:pointer}
-.nexoDrawerHeader button:hover{background:var(--nexo-surface-hover,#29334a)}
+.nexoDrawerHeader button{display:grid;place-items:center;flex:0 0 auto;width:36px;height:36px;padding:0;border:1px solid var(--nexo-border);border-radius:10px;background:var(--nexo-surface-2);color:inherit;cursor:pointer}
+.nexoDrawerHeader button:hover{background:var(--nexo-surface-3)}
 .nexoDrawerContent{flex:1;min-height:0;overflow:auto;padding:20px 22px;overscroll-behavior:contain}
+.uiProgress { width:100%; min-width:0; }
+.uiProgressTrack { position:relative; display:block; width:100%; height:6px; overflow:hidden; border-radius:999px; background:var(--nexo-surface-3); }
+.uiProgressFill { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--nexo-violet),var(--nexo-cyan)); transition:width var(--nexo-motion-normal) var(--nexo-ease-out); }
+.uiProgress.indeterminate .uiProgressFill { width:35%; animation:nexoProgressIndeterminate 1.2s var(--nexo-ease-in-out) infinite; }
+@keyframes nexoProgressIndeterminate { from { transform:translateX(-110%); } to { transform:translateX(310%); } }
+@media(prefers-reduced-motion:reduce) { .uiProgressFill { transition:none; } .uiProgress.indeterminate .uiProgressFill { width:100%; animation:none; } }
 .confirmationDrawer .nexoDrawerContent{display:flex;flex-direction:column;justify-content:space-between;gap:24px}
 .confirmationActions{display:flex;justify-content:flex-end;gap:10px}
 .confirmationActions .danger{border:1px solid rgba(255,125,138,.35);border-radius:9px;padding:8px 13px;background:rgba(190,54,70,.22);color:#ffdfe2;cursor:pointer}
@@ -16,7 +28,8 @@
 .executionDrawer .agentFlowView{width:100%;margin-bottom:16px}
 .officeDetails .nexoDrawerContent{padding-top:18px}
 @media(max-width:600px){.nexoDrawerPanel{width:100vw}.nexoDrawerHeader{padding:16px}.nexoDrawerContent{padding:16px}}
-@media(prefers-reduced-motion:reduce){.nexoDrawerOverlay,.nexoDrawerPanel{transition:none!important;animation:none!important}}
+@media(max-width:600px){.nexoDialogOverlay{padding:12px}.nexoDialogPanel{width:100%;max-height:calc(100dvh - 24px)}.nexoDialogHeader{padding:14px 16px}.nexoDialogContent{padding:16px}}
+@media(prefers-reduced-motion:reduce){.nexoDrawerOverlay,.nexoDrawerPanel,.nexoDialogOverlay,.nexoDialogPanel{transition:none!important;animation:none!important}}
 * { scrollbar-color: #283849 transparent; }
 body { min-width: 0 !important; color: var(--nexo-text); font-family: var(--nexo-font); background: radial-gradient(ellipse at 74% -18%, rgba(30, 100, 132, .13), transparent 43%), var(--nexo-bg); }
 button, input, select, textarea { font: inherit; }
@@ -26,14 +39,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .app.sidebarCollapsed { grid-template-columns: var(--nexo-sidebar-collapsed) minmax(0, 1fr); }
 .app > main { min-width: 0; max-width: none; padding: 0 28px 32px; background: transparent; }
 .app > main:not(.assistantMain) { overflow: auto; }
-.sidebar { background: rgba(8, 13, 20, .96); border-right: 1px solid var(--nexo-border); padding: 18px 12px 14px; }
+.sidebar { background: color-mix(in srgb,var(--nexo-surface-1) 96%,transparent); border-right: 1px solid var(--nexo-border); padding: 18px 12px 14px; }
 .sidebar .brand { min-height: 48px; padding: 0 8px 14px; border-bottom: 1px solid var(--nexo-border); }
-.sidebar .brandWordmark { letter-spacing: .16em; color: #e9f6fa; font-weight: 700; }
+.sidebar .brandWordmark { letter-spacing: .16em; color: var(--nexo-text); font-weight: 700; }
 .sidebar nav { gap: 5px; padding-top: 18px; }
-.sidebar nav button { position: relative; min-height: 42px; color: var(--nexo-muted); border: 1px solid transparent; border-radius: 10px; transition: background .16s ease, color .16s ease, border-color .16s ease; }
-.sidebar nav button:hover { background: rgba(255,255,255,.035); color: var(--nexo-text); }
-.sidebar nav button[aria-current="page"], .sidebar nav button.active { color: var(--nexo-cyan-bright); background: linear-gradient(90deg, rgba(72,201,232,.12), rgba(72,201,232,.035)); border-color: rgba(72,201,232,.12); }
-.navActiveIndicator { position:absolute; z-index:0; left:-1px; top:9px; bottom:9px; width:2px; border-radius:2px; background:var(--nexo-cyan); box-shadow:0 0 12px rgba(72,201,232,.45); pointer-events:none; }
+.sidebar nav button { position: relative; min-height: 42px; color: var(--nexo-text-secondary); border: 1px solid transparent; border-radius: 10px; transition: background var(--nexo-motion-fast) ease, color var(--nexo-motion-fast) ease, border-color var(--nexo-motion-fast) ease; }
+.sidebar nav button:hover { background: var(--nexo-surface-2); color: var(--nexo-text); }
+.sidebar nav button[aria-current="page"], .sidebar nav button.active { color: var(--nexo-violet); background: var(--nexo-violet-soft); border-color: color-mix(in srgb,var(--nexo-violet) 20%,transparent); }
+.navActiveIndicator { position:absolute; z-index:0; left:-1px; top:9px; bottom:9px; width:2px; border-radius:2px; background:var(--nexo-violet); box-shadow:var(--nexo-glow-accent); pointer-events:none; }
 .sidebar nav button > svg, .sidebar nav button > .navLabel { position:relative; z-index:1; }
 .sidebarCollapsed .navActiveIndicator { left:0; }
 .sidebar .navLabel { font-size: 13px; }
@@ -41,10 +54,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebarCollapsed .sidebar .brand { justify-content: center; padding-inline: 0; }
 .sidebarCollapsed .sidebar nav button { justify-content: center; padding: 0; }
 .sidebarCollapsed .sidebar nav .navLabel, .sidebarCollapsed .brandWordmark, .sidebarCollapsed .sidebarFoot { display: none; }
-.app > main > .topbar { min-height: 66px; margin: 0 -28px 24px; padding: 0 28px; background: rgba(7,11,17,.82); border-bottom: 1px solid var(--nexo-border); backdrop-filter: blur(18px); }
+.app > main > .topbar { min-height: 66px; margin: 0 -28px 24px; padding: 0 28px; background: color-mix(in srgb,var(--nexo-bg-raised) 82%,transparent); border-bottom: 1px solid var(--nexo-border); backdrop-filter: blur(18px); }
 .topbarTitle, .topbarBreadcrumb { color: var(--nexo-text); }
-.topbarSearch { min-height: 36px; color: var(--nexo-muted); background: rgba(255,255,255,.035); border: 1px solid var(--nexo-border); border-radius: 9px; }
-.topbarSearch:hover, .topbarIconButton:hover { border-color: var(--nexo-border-strong); background: rgba(255,255,255,.06); }
+.topbarSearch { min-height: 36px; color: var(--nexo-muted); background: var(--nexo-surface-1); border: 1px solid var(--nexo-border); border-radius: 9px; }
+.topbarSearch:hover, .topbarIconButton:hover { border-color: var(--nexo-border-strong); background: var(--nexo-surface-2); }
 .topbarIconButton { min-width: 38px; min-height: 38px; color: var(--nexo-muted); background: transparent; border: 1px solid transparent; border-radius: 10px; }
 .localStatus { color: var(--nexo-muted); }
 .statusPopover, .notificationPopover { color: var(--nexo-text); background: #111a25; border: 1px solid var(--nexo-border-strong); border-radius: 12px; box-shadow: var(--nexo-shadow); }
@@ -73,36 +86,36 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .assistantEmptyState p { max-width: 460px; margin-inline: auto; color: var(--nexo-muted); }
 .emptyOrb { color: var(--nexo-cyan-bright); background: radial-gradient(circle at 35% 30%, rgba(104,222,244,.32), rgba(28,85,105,.25) 48%, rgba(16,31,48,.18) 76%); border: 1px solid rgba(72,201,232,.23); box-shadow: 0 0 42px rgba(72,201,232,.12); }
 .quickPromptGrid { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.suggestion { min-height:42px; color:var(--nexo-muted); background:rgba(14,22,32,.8); border:1px solid var(--nexo-border); border-radius:11px; transition:.16s ease; }
+.suggestion { min-height:42px; color:var(--nexo-muted); background:var(--nexo-surface-2); border:1px solid var(--nexo-border); border-radius:11px; transition:transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out),background var(--nexo-motion-fast) var(--nexo-ease-out); }
 .suggestion:hover { color:var(--nexo-text); border-color:rgba(72,201,232,.35); background:var(--nexo-cyan-soft); }
 .composer, .composerShell { background: rgba(12,19,28,.96); border-color: var(--nexo-border-strong); border-radius: 15px; box-shadow: 0 12px 36px rgba(0,0,0,.18); }
 .composer:focus-within, .composerShell:focus-within { border-color: rgba(72,201,232,.46); box-shadow: 0 0 0 3px rgba(72,201,232,.07); }
 .message.user .messageBubble, .userMessage { background: #142535; border: 1px solid rgba(96,155,183,.16); border-radius: 14px 14px 4px 14px; }
 .message.assistant .messageBubble, .assistantMessage { background: transparent; border: 0; }
 .toastViewport { position: fixed; z-index: 100; right: 22px; bottom: 22px; display: grid; gap: 9px; width: min(380px, calc(100vw - 32px)); }
-.nexoToast { display: flex; align-items: flex-start; gap: 10px; padding: 13px 15px; color: var(--nexo-text); background: #111a25; border: 1px solid var(--nexo-border-strong); border-radius: 12px; box-shadow: var(--nexo-shadow); }
+.nexoToast { display: flex; align-items: flex-start; gap: 10px; padding: 13px 15px; color: var(--nexo-text); background: var(--nexo-surface-2); border: 1px solid var(--nexo-border-strong); border-radius: 12px; box-shadow: var(--nexo-shadow-md); }
 .nexoToast.success { border-color: rgba(107,214,164,.32); }.nexoToast.error { border-color: rgba(237,136,146,.4); }
 .uiButton { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; padding:0 14px; color:var(--nexo-text); background:var(--nexo-surface-3); border:1px solid var(--nexo-border); border-radius:10px; box-shadow:none; transition:background var(--nexo-motion-fast) ease,border-color var(--nexo-motion-fast) ease,color var(--nexo-motion-fast) ease,transform var(--nexo-motion-instant) ease; }
-.uiButton:hover:not(:disabled) { filter:none; background:#1b2537; border-color:var(--nexo-border-strong); }
+.uiButton:hover:not(:disabled) { filter:none; background:var(--nexo-surface-2); border-color:var(--nexo-border-strong); }
 .uiButton:active:not(:disabled) { transform:scale(.98); }
 .uiButton:disabled { opacity:.56; cursor:not-allowed; }
 .uiButton.primary { color:#fff; background:var(--nexo-violet); border-color:transparent; }
-.uiButton.primary:hover:not(:disabled) { background:#866fff; }
+.uiButton.primary:hover:not(:disabled) { background:color-mix(in srgb,var(--nexo-violet) 82%,white); }
 .uiButton.secondary { background:var(--nexo-surface-3); }
 .uiButton.ghost { background:transparent; border-color:transparent; }
 .uiButton.ghost:hover:not(:disabled) { background:rgba(255,255,255,.06); }
 .uiButton.outline { background:transparent; border-color:var(--nexo-border-strong); }
-.uiButton.danger { color:#fff; background:#b7334c; border-color:transparent; }
-.uiButton.danger:hover:not(:disabled) { background:#d13c58; }
+.uiButton.danger { color:#fff; background:var(--nexo-danger); border-color:transparent; }
+.uiButton.danger:hover:not(:disabled) { background:color-mix(in srgb,var(--nexo-danger) 84%,white); }
 .uiButton.sm { min-height:32px; padding:0 10px; font-size:12px; }
 .uiButton.md { min-height:38px; }
 .uiButton.lg { min-height:44px; padding:0 18px; }
 .uiButton.icon { width:38px; min-width:38px; min-height:38px; padding:0; }
-.uiButtonStateIcon.spinning { animation:uiButtonSpin .8s linear infinite; }
+.uiButtonStateIcon.spinning { animation:uiButtonSpin var(--nexo-motion-spin) var(--nexo-ease-linear) infinite; }
 @keyframes uiButtonSpin { to { transform:rotate(360deg); } }
 .uiBadge { border-radius: 999px; }.uiPanel { background: var(--nexo-surface); border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-lg); }
 .pixelOfficePage { color: var(--nexo-text); }.pixelOfficeHeader h1 { letter-spacing: -.035em; }.pixelOfficeHeader p { color: var(--nexo-muted); }
-.automationGrid { gap: 14px; }.automationCard { transition: border-color .16s ease, transform .16s ease; }.automationCard:hover { transform: translateY(-2px); border-color: rgba(72,201,232,.28); }
+.automationGrid { gap: 14px; }.automationCard { transition: border-color var(--nexo-motion-fast) var(--nexo-ease-out), transform var(--nexo-motion-fast) var(--nexo-ease-out); }.automationCard:hover { transform: translateY(-2px); border-color: color-mix(in srgb,var(--nexo-violet) 28%,var(--nexo-border)); }
 
 @media (max-width: 1050px) {
   .app { grid-template-columns: 76px minmax(0, 1fr); }
@@ -161,7 +174,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .popoverLine { display:flex; justify-content:space-between; gap:12px; color:var(--nexo-muted); font-size:11px; }
 .popoverLine b { color:var(--nexo-text); font-weight:500; }
 .notificationPopover { top:calc(100% + 10px); right:0; position:absolute; width:300px; padding:14px; }
+.notificationPopoverHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--nexo-text);font-size:12px}.notificationPopoverHeader>button{display:grid;place-items:center;width:28px;height:28px;padding:0;border:1px solid var(--nexo-border);border-radius:7px;background:transparent;color:var(--nexo-muted);cursor:pointer}.notificationPopoverHeader>button:hover{background:rgba(255,255,255,.06);color:var(--nexo-text)}
 .notificationItem { margin-top:10px; padding-top:10px; border-top:1px solid var(--nexo-border); }
+.notificationTask{width:100%;padding-right:0;padding-bottom:2px;border-right:0;border-bottom:0;border-left:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.notificationTask:hover:not(:disabled){background:rgba(255,255,255,.035)}.notificationTask:disabled{cursor:default;opacity:.72}
 .notificationItem svg { color:var(--nexo-cyan); flex:none; margin-top:2px; }
 .notificationPopover>p { margin:10px 0 0; color:var(--nexo-muted); font-size:12px; }
 .topbarIconButton.hasActivity { position:relative; color:var(--nexo-cyan-bright); }
@@ -174,7 +189,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settingsNav button:focus-visible { outline-offset:-2px; }
 .pixelOfficeHeader .eyebrow { color:var(--nexo-cyan); }
 @media(max-width:720px) { .topbarPage { min-width:0; } .topbarPage strong { max-width:140px; } .topbarActions { gap:2px; } .localStatus { padding-inline:5px; } .localStatus>span:nth-child(2) { display:none; } }
-.notificationPopover section>small { color:var(--nexo-dim); font-size:9px; letter-spacing:.12em; }
+.notificationPopover section>small,.notificationCenter section>small { color:var(--nexo-dim); font-size:9px; letter-spacing:.12em; }
+.notificationCenterDrawer .nexoDrawerPanel { width:min(440px,92vw); }
+.notificationCenter { display:grid; gap:18px; }
+.notificationCenter .activeNotifications,.notificationCenter .recentNotifications { display:grid; gap:4px; }
+.notificationCenter .notificationItem { margin-top:0; padding:12px 8px; border-color:var(--nexo-border); border-radius:9px; }
+.notificationCenter .notificationTask { min-height:56px; }
+.notificationCenter .notificationTask:hover:not(:disabled) { background:var(--nexo-surface-2); }
+.notificationEmpty { margin:0; padding:18px 12px; color:var(--nexo-text-muted); text-align:center; border:1px dashed var(--nexo-border); border-radius:12px; }
+.officeHeaderActions{display:flex;align-items:center;gap:7px}
 .notificationItem { min-width:0; }
 .notificationItem>span { min-width:0; display:grid; gap:3px; }
 .notificationItem>span b { color:var(--nexo-text); font-size:11px; font-weight:550; }
@@ -199,7 +222,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settingsToolsCatalog .toolsPage.embedded { width:auto; margin:0; padding:4px 18px 18px; }
 .settingsToolsCatalog .toolCard { background:var(--nexo-surface-soft); border-color:var(--nexo-border); }
 .settingsToolsCatalog .toolCardTitle { color:var(--nexo-cyan); }
-.automationCard{transition:transform var(--nexo-motion-fast) ease,border-color var(--nexo-motion-fast) ease,box-shadow var(--nexo-motion-fast) ease}
+.automationCard{transition:transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out),box-shadow var(--nexo-motion-fast) var(--nexo-ease-out)}
 .automationCard:hover{transform:translateY(-2px);box-shadow:var(--nexo-shadow-md)}
 .paletteGroupHeading{padding:8px 10px 5px;color:var(--nexo-text-muted);font:700 9px/1.2 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}
 .paletteGroup+.paletteGroup .paletteGroupHeading{margin-top:5px;border-top:1px solid var(--nexo-border-subtle);padding-top:11px}
@@ -212,13 +235,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .pageMotion:has(.settingsNav) .settings{grid-column:2;grid-row:2;margin-top:0}
 .pageMotion:has(.settingsNav) .settingsToolsCatalog,.pageMotion:has(.settingsNav) .settingsConnections{grid-column:2}
 .pageMotion:has(.settingsNav) .settings{max-width:none}
-@media(max-width:900px){.pageMotion:has(.settingsNav)>div{display:block}.pageMotion:has(.settingsNav) .settingsNav{position:sticky;top:66px;max-height:none;flex-direction:row;align-items:center}.pageMotion:has(.settingsNav) .settings{max-width:980px}}
+@media(max-width:959px){.pageMotion:has(.settingsNav)>div{display:block}.pageMotion:has(.settingsNav) .settingsNav{position:sticky;top:66px;max-height:none;flex-direction:row;align-items:center}.pageMotion:has(.settingsNav) .settings{max-width:980px}}
 .settingsNavLinks{display:flex;flex-direction:column;gap:5px}.settingsNavSelectLabel{display:none}
-@media(max-width:900px){.settingsNavLinks{display:none}.settingsNavSelectLabel{display:grid;flex:1;gap:5px;min-width:0;color:var(--nexo-muted);font-size:11px}.settingsNavSelectLabel select{width:100%;min-width:0;min-height:38px;padding:0 10px;color:var(--nexo-text);background:var(--nexo-surface-2);border:1px solid var(--nexo-border-strong);border-radius:8px}}
+@media(max-width:959px){.settingsNavLinks{display:none}.settingsNavSelectLabel{display:grid;flex:1;gap:5px;min-width:0;color:var(--nexo-muted);font-size:11px}.settingsNavSelectLabel select{width:100%;min-width:0;min-height:38px;padding:0 10px;color:var(--nexo-text);background:var(--nexo-surface-2);border:1px solid var(--nexo-border-strong);border-radius:8px}}
 @media(max-width:600px){.settings label:not(.check){grid-template-columns:minmax(0,1fr);gap:6px}.settings input,.settings select{min-width:0;width:100%}.settings .folder{align-items:flex-start;flex-direction:column;gap:6px}.settings .folder code{max-width:100%;overflow-wrap:anywhere;white-space:normal}}
 .mobileChatsTrigger{display:none}
 @media(max-width:900px){.assistantMultiLayout{grid-template-columns:minmax(0,1fr)}.assistantMultiLayout>.chatTabs{display:none}.assistantSessionPanel{grid-column:1}.mobileChatsTrigger{position:absolute;z-index:8;top:9px;left:8px;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:1px solid var(--nexo-border);border-radius:9px;background:var(--nexo-surface-2);color:var(--nexo-text-secondary)}.assistantSessionPanel>.assistantHeader{padding-left:50px}.mobileChatDrawer .nexoDrawerContent{padding:0}.mobileChatDrawer .chatTabs{display:flex;width:100%;height:100%;min-height:0;padding:12px;border:0;background:transparent}.mobileChatDrawer .chatTab{grid-template-columns:10px minmax(0,1fr) 24px;min-height:52px;padding:8px}.mobileChatDrawer .chatTabClose{display:grid}.mobileChatDrawer .chatTabText small,.mobileChatDrawer .chatTabsLimit{display:block}}
 .settingsNav{position:sticky;top:66px;z-index:6;display:flex;gap:6px;max-width:980px;margin:0 0 14px;padding:8px;overflow-x:auto;background:rgba(10,16,24,.94);border:1px solid var(--nexo-border);border-radius:12px;backdrop-filter:blur(16px);scrollbar-width:thin;overscroll-behavior-x:contain}
 .settingsNav button{flex:0 0 auto;min-height:34px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--nexo-muted);font-size:12px;white-space:nowrap;cursor:pointer}
 .settingsNav button:hover{border-color:var(--nexo-border);background:rgba(255,255,255,.05);color:var(--nexo-text)}
+.settingsNavLinks button[aria-current="location"]{border-color:rgba(118,92,255,.28);background:rgba(118,92,255,.12);color:var(--nexo-text)}
 .settings,.settings h3,.settingsConnections,.settingsToolsCatalog{scroll-margin-top:76px}

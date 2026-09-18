@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { motionTokens } from "../../design/motion";
 
 type NexoDrawerProps = {
@@ -18,13 +19,14 @@ export function NexoDrawer({ open, title, eyebrow, onClose, children, className 
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const closeHandler = useRef(onClose);
   const reducedMotion = useReducedMotion();
   closeHandler.current = onClose;
 
   useEffect(() => {
     if (!open) return;
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     closeRef.current?.focus();
@@ -50,14 +52,16 @@ export function NexoDrawer({ open, title, eyebrow, onClose, children, className 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus();
+      const previouslyFocused = previouslyFocusedRef.current;
+      previouslyFocusedRef.current = null;
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
   }, [open]);
 
   const transition = reducedMotion ? { duration: 0 } : motionTokens.spring.normal;
-  return <AnimatePresence>
+  return createPortal(<AnimatePresence>
     {open && <motion.div className="nexoDrawerOverlay" role="presentation" key="overlay"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.16 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : motionTokens.duration.fast / 1000, ease: motionTokens.ease.out }}
       onMouseDown={event => { if (event.target === event.currentTarget) closeHandler.current(); }}>
       <motion.aside ref={panelRef} className={`nexoDrawerPanel nexoDrawerPanel-${side} ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
         initial={reducedMotion ? false : { opacity: 0, x: side === "right" ? motionTokens.distance.panel : -motionTokens.distance.panel }}
@@ -69,5 +73,5 @@ export function NexoDrawer({ open, title, eyebrow, onClose, children, className 
         <div className="nexoDrawerContent">{children}</div>
       </motion.aside>
     </motion.div>}
-  </AnimatePresence>;
+  </AnimatePresence>, document.body);
 }

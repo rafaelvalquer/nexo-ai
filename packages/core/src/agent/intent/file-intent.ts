@@ -2,14 +2,20 @@ export type FileIntent =
   | { kind: "find_file"; fileName: string; folder?: string; confidence: number }
   | { kind: "search_files"; query: string; folder?: string; confidence: number };
 
+export function isComposedDocumentWorkflow(text: string): boolean {
+  return /\b(?:procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache)\b/i.test(text)
+    && /\b(?:resuma|resumir|analise|analisar|leia|ler|explique|explorar)\b/i.test(text)
+    && /\b(?:crie|criar|gere|gerar|salve|salvar|escreva|escrever|exporte|exportar|produza|produzir)\b/i.test(text);
+}
+
 const EXTENSION = String.raw`[\p{L}\p{N}][\p{L}\p{N}_+-]{0,15}`;
 const FILE_TOKEN = new RegExp(String.raw`([^\\/:*?"<>|\r\n]+?\.${EXTENSION})`, "iu");
 const QUOTED_FILE = new RegExp(String.raw`["“”']([^"“”']+?\.${EXTENSION})["“”']`, "iu");
 
 export function parseFileIntent(text: string): FileIntent | undefined {
   const quoted = text.match(QUOTED_FILE)?.[1];
-  const rawFilename = quoted ?? text.match(FILE_TOKEN)?.[1];
-  const filename = rawFilename?.replace(/^.*\b(?:procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache|arquivo|documento|resuma|resumir|analise|analisar|leia|ler|explique)\s+/i, "").trim();
+  const rawFilename = sourceFilename(text) ?? quoted;
+  const filename = rawFilename?.replace(/^.*\b(?:procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache|arquivo|documento|resuma|resumir|analise|analisar|leia|ler|explique)\s+/i, "").replace(/^["“”']|["“”']$/g, "").trim();
   if (filename && /\b(procure|procurar|pesquise|pesquisar|busque|buscar|encontre|localize|ache|arquivo|documento|resuma|resumir|analise|analisar|leia|ler|explique)\b/i.test(text)) {
     const folder = explicitFolder(text);
     return { kind: "find_file", fileName: filename, ...(folder ? { folder } : {}), confidence: 1 };
@@ -20,6 +26,14 @@ export function parseFileIntent(text: string): FileIntent | undefined {
     if (type || term && !FILE_TOKEN.test(term)) return { kind: "search_files", query: term || `.${type}`, ...(explicitFolder(text) ? { folder: explicitFolder(text) } : {}), confidence: 0.92 };
   }
   return undefined;
+}
+
+/** Prefer a file named as the source; ignore filenames introduced as outputs. */
+function sourceFilename(text: string): string | undefined {
+  const outputVerb = /\b(?:crie|criar|gere|gerar|salve|salvar|escreva|escrever|exporte|exportar|produza|produzir)\b/gi;
+  const outputStart = [...text.matchAll(outputVerb)].map(match => match.index ?? -1).filter(index => index >= 0).sort((a,b) => a-b)[0] ?? Number.POSITIVE_INFINITY;
+  const sourceText = text.slice(0, outputStart);
+  return sourceText.match(FILE_TOKEN)?.[1] ?? (outputStart === Number.POSITIVE_INFINITY ? text.match(FILE_TOKEN)?.[1] : undefined);
 }
 
 function explicitFolder(text: string): string | undefined {

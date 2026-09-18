@@ -1,0 +1,143 @@
+.paletteOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(24px, 12vh, 112px) 20px 24px;
+  overflow: auto;
+  background: rgba(3, 5, 11, .72);
+  backdrop-filter: blur(5px);
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(680px, 76vh);
+  overflow: hidden;
+  color: var(--nexo-text);
+  background: var(--nexo-surface-popover);
+  border: 1px solid var(--nexo-border-strong);
+  border-radius: var(--nexo-r-lg);
+  box-shadow: var(--nexo-shadow-lg);
+}
+
+.paletteSearch {
+  flex: none;
+  min-height: 54px;
+  padding: 0 16px;
+  color: var(--nexo-text-muted);
+  border-bottom: 1px solid var(--nexo-border);
+}
+
+.paletteSearch input {
+  min-width: 0;
+  color: var(--nexo-text);
+  outline: none;
+}
+
+.paletteSearch kbd,
+.palette footer kbd {
+  padding: 3px 5px;
+  color: var(--nexo-text-muted);
+  background: var(--nexo-surface-2);
+  border: 1px solid var(--nexo-border);
+  border-radius: 5px;
+  font: 10px/1.2 var(--nexo-font);
+}
+
+.paletteList {
+  min-height: 0;
+  max-height: min(560px, calc(76vh - 112px));
+  overflow: auto;
+  padding: 8px;
+  overscroll-behavior: contain;
+}
+
+.paletteList .paletteCommand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-height: 44px;
+  padding: 7px 10px;
+  color: var(--nexo-text-secondary);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--nexo-r-sm);
+  cursor: pointer;
+  transition: background-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    color var(--nexo-motion-fast) var(--nexo-ease-out),
+    border-color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.paletteList .paletteCommand:hover,
+.paletteList .paletteCommand.selected {
+  color: var(--nexo-text);
+  background: var(--nexo-violet-soft);
+}
+
+.paletteCommandIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  color: var(--nexo-violet);
+  background: color-mix(in srgb, var(--nexo-violet) 12%, var(--nexo-surface-2));
+  border: 1px solid var(--nexo-border-subtle);
+  border-radius: 8px;
+}
+
+.paletteCommand > span:nth-child(2) {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.palette .paletteCommand small {
+  display: block;
+  padding: 0;
+  color: var(--nexo-text-muted);
+  border: 0;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.paletteCommand kbd { flex: none; margin-left: auto; }
+.paletteCommand:focus-visible { outline-offset: -2px; }
+.paletteNoResults { padding: 24px 12px; color: var(--nexo-text-muted); text-align: center; font-size: 12px; }
+
+.palette footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 40px;
+  padding: 7px 12px;
+  color: var(--nexo-text-muted);
+  background: var(--nexo-surface-1);
+  border-top: 1px solid var(--nexo-border);
+  font-size: 10px;
+}
+
+.palette footer > span { display: inline-flex; align-items: center; gap: 4px; }
+.palette footer .paletteFooterBrand { margin-left: auto; color: var(--nexo-text-secondary); }
+
+@media (max-width: 600px) {
+  .paletteOverlay { padding: 12px; }
+  .palette { width: 100%; max-height: calc(100dvh - 24px); }
+  .paletteList { max-height: calc(100dvh - 116px); }
+  .palette footer { gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paletteList .paletteCommand { transition: none; }
+}

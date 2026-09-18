@@ -49,7 +49,7 @@ export type Automation = {
 
 export type NexoSettings = {
   model:string;ollamaUrl:string;autonomy:"cautious"|"balanced"|"autonomous";allowedRoots:string[];privateMode:boolean;runInBackground:boolean;
-  memoryEnabled:boolean;memoryAskBeforeSave:boolean;intentLearningEnabled?:boolean;embeddingModel:string;documentMaxSizeMb:number;externalDataRetention:"session"|"local";connectionsEnabled:boolean;
+  memoryEnabled:boolean;memoryAskBeforeSave:boolean;intentLearningEnabled?:boolean;embeddingModel:string;documentMaxSizeMb:number;externalDataRetention:"session"|"local";connectionsEnabled:boolean;documentsEnabled?:boolean;semanticSearchEnabled?:boolean;
   browserAutomationEnabled:boolean;filesystemToolsEnabled:boolean;webToolsEnabled:boolean;systemToolsEnabled:boolean;fileWritesEnabled:boolean;requireApprovalForEmail:boolean;allowedDomains:string[];dataRetentionDays:number;onboardingCompleted:boolean;ocrEnabled:boolean;
   executionTimeoutMinutes:number|null;maxConcurrentChatSessions:number;maxConcurrentLLMRequests:number;oauth:OAuthConfiguration;
   agentLoopMode?:"legacy"|"read_only"|"shadow"|"full";forceLegacyAgent?:boolean;

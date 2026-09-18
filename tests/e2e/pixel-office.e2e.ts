@@ -78,7 +78,7 @@ test("Electron abre o Pixel Office e recebe evento real", async () => {
   }
 });
 
-test("aprovação retoma a mesma tarefa e o Pixel Office volta ao idle", async () => {
+test("aprovação retoma a mesma tarefa e o Pixel Office volta ao idle", async ({},testInfo) => {
   let chatCalls = 0;
   const ollama = http.createServer((request, response) => {
     response.setHeader("content-type", "application/json");
@@ -124,6 +124,14 @@ test("aprovação retoma a mesma tarefa e o Pixel Office volta ao idle", async (
     const task = await page.evaluate(() => window.nexo.startChatTask("Execute uma operação persistente de preferência no computador"));
     await expect(page.getByRole("region", { name: "Aprovação necessária" })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => page.evaluate(id => window.nexo.getTask(id).then(item => item?.status), task.id)).toBe("waiting_approval");
+    await page.screenshot({path:testInfo.outputPath("office-execution-approval.png")});
+    await page.getByRole("button",{name:"Detalhes do Polvo"}).click();
+    const officeDrawer=page.getByRole("dialog",{name:"Polvo Nexo"});
+    await expect(officeDrawer).toBeVisible();
+    await expect(officeDrawer).toContainText("Esperando aprovação");
+    await page.screenshot({path:testInfo.outputPath("office-execution-drawer.png")});
+    await officeDrawer.getByRole("button",{name:"Fechar painel"}).click();
+    await expect(officeDrawer).not.toBeVisible();
     await page.getByRole("button", { name: "Aprovar" }).click();
     await expect.poll(() => page.evaluate(id => window.nexo.getTask(id).then(item => item?.status), task.id), { timeout: 15_000 }).toBe("completed");
     await expect(page.locator(".officeStatus")).toContainText("Disponível", { timeout: 5_000 });

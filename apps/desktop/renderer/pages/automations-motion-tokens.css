@@ -1,0 +1,14 @@
+.automationStatus i { animation-duration: var(--nexo-motion-pulse); }
+.automationSkeleton { animation-duration: var(--nexo-motion-shimmer); }
+.automationCard,.automationPrimary,.automationFilters button,.automationBuilder button,.automationMenu button {
+  transition-duration: var(--nexo-motion-fast);
+  transition-timing-function: var(--nexo-ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .automationPage *, .automationPage *::before, .automationPage *::after,
+  .automationBuilder *, .automationBuilder *::before, .automationBuilder *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

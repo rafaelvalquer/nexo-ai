@@ -205,6 +205,13 @@ CREATE TABLE IF NOT EXISTS dashboard_cache (
   expires_at TEXT NOT NULL,
   PRIMARY KEY(provider,cache_key)
 );
+`], [19, `
+DELETE FROM dashboard_gadgets WHERE gadget_id='tech-news';
+DELETE FROM dashboard_cache WHERE provider='tech-news';
+CREATE TABLE IF NOT EXISTS dashboard_gadget_preferences (
+  gadget_id TEXT PRIMARY KEY, auto_provisioned INTEGER NOT NULL DEFAULT 0,
+  dismissed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
+);
 `]];
 
 export class NexoDatabase {

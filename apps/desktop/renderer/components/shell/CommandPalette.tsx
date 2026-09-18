@@ -6,6 +6,7 @@ import { useAssistantStore } from "../../stores/assistant";
 import { useToastStore } from "../../stores/toast";
 import type { AutomationViewModel, ConversationSummary, DocumentRecord } from "@nexo/shared";
 import { motionTokens } from "../../design/motion";
+import "./command-palette.css";
 
 type Command = { label:string; keywords:string; group:string; page?:string; run?:()=>Promise<void> };
 const pages=["Dashboard","Assistente","Macros","Escritório","Documentos","Aprovações","Atividade","Ferramentas","Memória","Diagnóstico","Configurações"];

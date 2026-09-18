@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, ArrowUpRight, CalendarClock, CheckCircle2, Command, Gauge, LayoutGrid, Pencil, Plus, RefreshCw, Sparkles, X } from "lucide-react";
-import { NexoOrb } from "../components/ai/NexoOrb";
-import { GadgetCatalog } from "../components/dashboard/GadgetCatalog";
 import { GadgetCard } from "../components/dashboard/GadgetCard";
 import { useDashboardStore } from "../stores/dashboard";
 import { useAppStore } from "../stores/app";
@@ -9,6 +7,11 @@ import { useAssistantStore } from "../stores/assistant";
 import { useVisualStore } from "../stores/visual";
 import type { DashboardGadgetInstance, GadgetSize } from "@nexo/shared";
 import "./dashboard.css";
+import "./dashboard-tokens.css";
+import "./dashboard-motion.css";
+
+const NexoOrb = lazy(() => import("../components/ai/NexoOrb").then(module => ({ default: module.NexoOrb })));
+const GadgetCatalog = lazy(() => import("../components/dashboard/GadgetCatalog").then(module => ({ default: module.GadgetCatalog })));
 
 export function Dashboard(){
   const {layout,catalog,data,loading,error,editing,load,refresh,add,remove,configure,resize,reorder,setEditing}=useDashboardStore(),setPage=useAppStore(state=>state.setPage),status=useAppStore(state=>state.status) as any,tasks=useAssistantStore(state=>state.tasks),setVisual=useVisualStore(state=>state.set);
@@ -26,7 +29,7 @@ export function Dashboard(){
   const refreshAll=useCallback(()=>{void load();},[load]);
   return <div className="dashboardPage">
     <header className="dashboardPageHeader"><div><span className="dashboardEyebrow">NEXO / COMMAND CENTER <i>·</i> {clock.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"}).toUpperCase()}</span><h1>{greeting}. <em>O Nexo está com você.</em></h1><p>Seu trabalho, seus agentes e as informações que você escolheu em um só lugar.</p></div><div className={`dashboardConnection ${status?.llm?.ok?"online":""}`}><span/><b>{status?.llm?.ok?"IA local pronta":"IA local"}</b><small>{status?.settings?.model??"verificando conexão"}</small></div></header>
-    <section className="dashboardHero" aria-label="Núcleo neural Nexo"><div className="heroAmbient"/><div className="dashboardHeroCopy"><span className="heroKicker"><i/> NEXO CORE <b>01 / INTELIGÊNCIA</b></span><h2>Ideias em movimento.<br/><em>Resultados no seu ritmo.</em></h2><p>Acompanhe a inteligência local, veja o que está acontecendo e escolha seu próximo passo.</p><div className="dashboardHeroActions"><button className="dashboardPrimary" onClick={()=>setPage("Assistente")}>Conversar com Nexo <ArrowRight size={16}/></button><button className="dashboardSecondary" onClick={()=>setPage("Escritório")}>Abrir escritório <ArrowUpRight size={15}/></button></div><span className="heroPrivacy"><i/> Seus dados permanecem neste computador</span></div><div className="dashboardOrb"><NexoOrb compact/><div className="orbAnnotation annotationTop"><i/> NÚCLEO ATIVO</div><div className="orbAnnotation annotationBottom">LOCAL <b>·</b> PRIVADO <b>·</b> SEU</div></div><div className="heroCoordinates" aria-hidden="true"><span>LATÊNCIA LOCAL <b>◆</b></span><span>01 ───────── 04</span></div></section>
+    <section className="dashboardHero" aria-label="Núcleo neural Nexo"><div className="heroAmbient"/><div className="dashboardHeroCopy"><span className="heroKicker"><i/> NEXO CORE <b>01 / INTELIGÊNCIA</b></span><h2>Ideias em movimento.<br/><em>Resultados no seu ritmo.</em></h2><p>Acompanhe a inteligência local, veja o que está acontecendo e escolha seu próximo passo.</p><div className="dashboardHeroActions"><button className="dashboardPrimary" onClick={()=>setPage("Assistente")}>Conversar com Nexo <ArrowRight size={16}/></button><button className="dashboardSecondary" onClick={()=>setPage("Escritório")}>Abrir escritório <ArrowUpRight size={15}/></button></div><span className="heroPrivacy"><i/> Seus dados permanecem neste computador</span></div><div className="dashboardOrb"><Suspense fallback={<div className="dashboardOrbLoading" role="status" aria-label="Carregando núcleo neural" style={{width:"min(100%,385px)",height:295,borderRadius:"50%",background:"radial-gradient(circle at 50% 48%, #a294ff20 0, #a294ff08 25%, transparent 64%)",boxShadow:"inset 0 0 50px #a294ff08"}}/>}><NexoOrb compact/></Suspense><div className="orbAnnotation annotationTop"><i/> NÚCLEO ATIVO</div><div className="orbAnnotation annotationBottom">LOCAL <b>·</b> PRIVADO <b>·</b> SEU</div></div><div className="heroCoordinates" aria-hidden="true"><span>LATÊNCIA LOCAL <b>◆</b></span><span>01 ───────── 04</span></div></section>
     <section className="dashboardSignals" aria-label="Sinais do Nexo">{signals.map(signal=><article key={signal.label}><span className="signalIcon">{signal.icon}</span><div><small>{signal.label}</small><strong>{signal.value}</strong><span>{signal.note}</span></div><i className="signalTrace"/></article>)}</section>
     <section className="dashboardWorkspace"><header className="dashboardWorkspaceHeader"><div><span className="dashboardEyebrow">SEU ESPAÇO</span><h2>Meu dashboard <small>{layout.length} gadgets</small></h2></div><div className="dashboardToolbar"><button className="dashboardIconButton" onClick={refreshAll} aria-label="Atualizar dashboard"><RefreshCw size={15}/></button>{editing&&<button className="dashboardSecondary" onClick={()=>setEditing(false)}><CheckCircle2 size={15}/> Concluir edição</button>}<button className={editing?"dashboardSecondary":"dashboardPrimary"} onClick={()=>editing?setEditing(false):setEditing(true)}>{editing?<><X size={15}/> Cancelar edição</>:<><Pencil size={15}/> Editar layout</>}</button><button className="dashboardAddButton" onClick={()=>setCatalogOpen(true)}><Plus size={16}/> Adicionar gadget</button></div></header>
       {error&&<p className="dashboardError" role="alert">{error}</p>}
@@ -35,6 +38,6 @@ export function Dashboard(){
       </div>}
     </section>
     <footer className="dashboardPageFooter"><span><Command size={12}/> NEXO DESKTOP</span><span>LOCAL-FIRST INTELLIGENCE <i>·</i> SOB SEU CONTROLE</span><button onClick={()=>setPage("Configurações")}>Configurações <ArrowUpRight size={12}/></button></footer>
-    {catalogOpen&&<GadgetCatalog catalog={catalog} close={()=>setCatalogOpen(false)} add={add}/>}{configuring&&<GadgetCatalog catalog={catalog} initial={configuring} close={()=>setConfiguring(undefined)} add={add} save={configure}/>}
+    {(catalogOpen||configuring)&&<Suspense fallback={null}><GadgetCatalog catalog={catalog} initial={configuring} close={()=>{setCatalogOpen(false);setConfiguring(undefined);}} add={add} save={configure}/></Suspense>}
   </div>;
 }

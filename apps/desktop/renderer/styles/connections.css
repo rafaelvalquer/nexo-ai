@@ -293,7 +293,7 @@
 }
 
 .nexoAccordionTrigger svg {
-  transition: transform .16s;
+  transition: transform var(--nexo-motion-fast) var(--nexo-ease-out);
 }
 
 .nexoAccordionTrigger svg.expanded {
@@ -460,7 +460,7 @@
   border-radius: 5px;
   background: linear-gradient(90deg,#1b2330,#2a3546,#1b2330);
   background-size: 200% 100%;
-  animation: skeletonPulse 1.2s infinite;
+  animation: skeletonPulse var(--nexo-motion-pulse) infinite;
 }
 
 .skeleton span:nth-child(2) {

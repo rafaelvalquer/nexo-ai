@@ -1,0 +1,13 @@
+.dashboardEmailDrawer{width:min(720px,94vw)}
+.dashboardEmailDrawer .nexoDrawerContent{display:flex;flex-direction:column;gap:14px}
+.emailDrawerMeta{color:var(--nexo-text-muted,#93a1b6);font-size:11px}
+.emailDrawerBody{flex:1;min-height:120px;overflow:auto;margin:0;padding:14px;border:1px solid var(--nexo-border-subtle,rgba(255,255,255,.055));border-radius:9px;background:var(--nexo-surface-1,#0d111b);color:var(--nexo-text-secondary,#c4cfdf);font:12px/1.6 inherit;font-family:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
+.emailDrawerReply{display:grid;gap:10px}
+.emailDrawerReply label{display:grid;gap:6px;color:var(--nexo-text-secondary,#aebbd0);font-size:11px}
+.emailDrawerReply textarea{min-height:110px;resize:vertical;border:1px solid var(--nexo-border-strong,#65728b55);border-radius:8px;padding:10px;background:var(--nexo-surface-1,#0a111c);color:var(--nexo-text,#e3e9f3);font:12px/1.5 inherit;font-family:inherit}
+.emailDrawerReply small{color:var(--nexo-text-muted,#93a1b6);font-size:10px}
+.emailDrawerReply footer,.emailDrawerActions{display:flex;justify-content:flex-end;gap:8px;margin:0;padding-top:4px}
+.dashboardEmailDrawer .nexoDrawerContent button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;border:1px solid var(--nexo-border-strong,#8e9ab333);border-radius:8px;padding:8px 11px;background:var(--nexo-surface-2,#ffffff09);color:var(--nexo-text,#dce4f1);cursor:pointer}
+.dashboardEmailDrawer .nexoDrawerContent button:last-child:not([type=button]){border-color:var(--nexo-violet,#9483e8);background:var(--nexo-violet,#9483e8);color:#171322}
+.dashboardEmailDrawer .nexoDrawerContent button:disabled{opacity:.55;cursor:wait}
+@media(max-width:600px){.dashboardEmailDrawer{width:100vw}.emailDrawerBody{min-height:90px}}

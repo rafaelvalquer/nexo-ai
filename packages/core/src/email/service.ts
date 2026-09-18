@@ -1,5 +1,5 @@
 import type { ConnectionService } from "../connections/service.js";
-import type { EmailDraft, EmailDraftInput, EmailMessage, EmailSearchQuery, EmailSearchResult, EmailModifyAction, EmailAttachment, EmailMailboxStats } from "./types.js";
+import type { EmailDraft, EmailDraftInput, EmailMessage, EmailSearchQuery, EmailSearchResult, EmailModifyAction, EmailAttachment, EmailMailboxStats, EmailReplyInput } from "./types.js";
 import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "./preferences/types.js";
 import { buildGmailSearchQuery } from "./google/query-builder.js";
 import { GoogleApiClient } from "../google/api-client.js";
@@ -63,6 +63,22 @@ export class EmailService {
     const response=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(messageId)}?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,bodyPreview,isRead,hasAttachments,conversationId`,{headers:{Authorization:`Bearer ${token}`},signal});
     if(!response.ok)throw new Error(`Não foi possível obter o e-mail no Microsoft Graph (HTTP ${response.status}).`);
     return normalizeMicrosoftMessage(await response.json());
+  }
+
+  async reply(input:EmailReplyInput,signal?:AbortSignal){
+    const body=input.bodyText.trim();if(!body||body.length>100000)throw new Error("A resposta precisa conter texto e respeitar o limite de tamanho.");
+    const account=this.requireAccount(input.connectionId);
+    if(account.provider==="google"){
+      const original=await this.google.json<any>(input.connectionId,"email.read",`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(input.messageId)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=References`,{},signal);
+      const headers=Object.fromEntries((original.payload?.headers??[]).map((header:any)=>[String(header.name).toLowerCase(),String(header.value??"")]));const recipient=extractEmail(headers.from??"");if(!recipient)throw new Error("A mensagem original não contém remetente válido.");
+      const originalSubject=safeHeader(headers.subject??"(sem assunto)"),subject=/^re:/i.test(originalSubject)?originalSubject:`Re: ${originalSubject}`;const messageId=safeHeader(headers["message-id"]??""),references=[safeHeader(headers.references??""),messageId].filter(Boolean).join(" ");
+      const mime=[`To: ${recipient}`,`Subject: ${encodeMimeHeader(subject)}`,"MIME-Version: 1.0","Content-Type: text/plain; charset=UTF-8","Content-Transfer-Encoding: 8bit",...(messageId?[`In-Reply-To: ${messageId}`]:[]),...(references?[`References: ${references}`]:[]),"",body].join("\r\n");
+      const raw=Buffer.from(mime,"utf8").toString("base64url");await this.google.request(input.connectionId,"email.send","https://gmail.googleapis.com/gmail/v1/users/me/messages/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({threadId:input.threadId??original.threadId,raw})},signal);return{sent:true,threadId:input.threadId??original.threadId};
+    }
+    const token=await this.connections.accessToken(input.connectionId,"email.send"),base=`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(input.messageId)}`;const headers={Authorization:`Bearer ${token}`,"Content-Type":"application/json"};
+    const created=await fetch(`${base}/createReply`,{method:"POST",headers,body:"{}",signal});if(!created.ok)throw new Error(`Microsoft Graph não conseguiu criar a resposta (HTTP ${created.status}).`);const draft=await created.json() as any;
+    const updated=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(draft.id)}`,{method:"PATCH",headers,body:JSON.stringify({body:{contentType:"Text",content:body}}),signal});if(!updated.ok)throw new Error(`Não foi possível atualizar o rascunho de resposta (HTTP ${updated.status}).`);
+    const sent=await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(draft.id)}/send`,{method:"POST",headers:{Authorization:`Bearer ${token}`},signal});if(!sent.ok)throw new Error(`Microsoft Graph não conseguiu enviar a resposta (HTTP ${sent.status}).`);return{sent:true,threadId:input.threadId};
   }
 
   async getThread(connectionId:string,threadId:string,signal?:AbortSignal):Promise<EmailMessage[]>{
@@ -202,3 +218,6 @@ function decodeGmailBody(payload:any):string|undefined{const parts=flattenParts(
 function gmailAttachments(payload:any):EmailAttachment[]{return flattenParts(payload).filter((part:any)=>part.filename&&part.body?.attachmentId).map((part:any)=>({id:part.body.attachmentId,name:part.filename,contentType:part.mimeType,size:part.body.size}));}
 function flattenParts(payload:any):any[]{if(!payload)return[];const result=[payload];for(const part of payload.parts??[])result.push(...flattenParts(part));return result;}
 function numberOrUndefined(value:unknown){const number=Number(value);return Number.isFinite(number)?number:undefined;}
+function encodeMimeHeader(value:string){return /^[\x00-\x7f]*$/.test(value)?value:`=?UTF-8?B?${Buffer.from(value,"utf8").toString("base64")}?=`;}
+function safeHeader(value:string){return value.replace(/[\u0000-\u001f\u007f]/g," ").replace(/\s+/g," ").trim();}
+function extractEmail(value:string){const match=safeHeader(value).match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);return match?.[0];}

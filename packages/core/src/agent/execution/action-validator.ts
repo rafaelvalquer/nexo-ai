@@ -25,9 +25,10 @@ export class ActionValidator {
     private readonly registry: ToolRegistry,
     private readonly permissions: PermissionEngine,
     private readonly security?: SecurityPolicyService,
-    private readonly connections?: ConnectionService,
+    private connections?: ConnectionService,
     private readonly locations: LocationRegistry = new LocationRegistry(),
   ) {}
+  setConnections(connections?:ConnectionService){this.connections=connections;}
 
   async validateCurrent(toolName: string, rawInput: Record<string, unknown>, context: CurrentActionValidationContext = {}): Promise<ActionValidationResult> {
     const tool = this.registry.get(toolName);

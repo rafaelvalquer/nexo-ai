@@ -14,11 +14,14 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await server?.close(); });
 
-const primaryNavigation = ["Assistente", "Macros", "Escritório", "Configurações"];
-test("menu principal apresenta as quatro áreas do produto", async ({ page }) => {
+const primaryNavigation = ["Dashboard", "Assistente", "Macros", "Escritório", "Configurações"];
+test("menu principal apresenta as áreas principais do produto", async ({ page }, testInfo) => {
   await page.goto(url);
+  await page.getByRole("button", { name: "Assistente", exact: true }).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({path:testInfo.outputPath("assistant-empty.png")});
   for (const label of primaryNavigation) await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
-  await expect(page.locator(".sidebar nav button")).toHaveCount(4);
+  await expect(page.locator(".sidebar nav button")).toHaveCount(primaryNavigation.length);
   await expect(page.locator('.sidebar nav button[aria-current="page"] .navActiveIndicator')).toHaveCount(1);
   await page.getByRole("button", { name: "Macros", exact: true }).click();
   await expect(page.getByRole("button", { name: "Macros", exact: true })).toHaveAttribute("aria-current", "page");
@@ -28,16 +31,16 @@ test("menu principal apresenta as quatro áreas do produto", async ({ page }) =>
 test("status da IA oferece um caminho direto para Configurações",async({page})=>{
   await page.goto(url);
   await page.getByRole("button",{name:"Estado da IA local"}).click();
-  await expect(page.getByText("Ollama conectado")).toBeVisible();
-  await expect(page.getByText("qwen3:1.7b",{exact:true})).toBeVisible();
+  await expect(page.locator(".topbarPopover").getByText("Ollama conectado", { exact: true })).toBeVisible();
+  await expect(page.locator(".topbarPopover .popoverLine b")).toHaveText("qwen3:1.7b");
   await page.getByRole("button",{name:"Configurar IA"}).click();
   await expect(page.getByRole("heading",{name:"Configurações"})).toBeVisible();
 });
 
-test("a execução ativa mostra timeline operacional no chat e no drawer",async({page})=>{
+test("a execução ativa mostra timeline operacional e tool chips no chat e no drawer",async({page},testInfo)=>{
   await page.goto(url);
   await page.getByRole("button",{name:"Assistente",exact:true}).click();
-  await page.evaluate(()=>{const api=(window as any).nexo;const task={id:"ui-running-task",type:"assistant-chat",status:"running",input:{text:"resuma um arquivo"},conversationId:"preview-1",createdAt:new Date().toISOString(),startedAt:new Date().toISOString(),statusMessage:"Analisando a solicitação…",statusHistory:["Entendendo a solicitação","Localizando arquivos"]};api.listActiveTasks=async()=>[];api.startChatTask=async()=>{api.listActiveTasks=async()=>[task];return task;};});
+  await page.evaluate(()=>{const api=(window as any).nexo;const task={id:"ui-running-task",runId:"ui-running-run",type:"assistant-chat",status:"running",input:{text:"resuma um arquivo"},conversationId:"preview-1",createdAt:new Date().toISOString(),startedAt:new Date().toISOString(),statusMessage:"Analisando a solicitação…",statusHistory:["Entendendo a solicitação","Localizando arquivos"]};api.onVisualEvent=(listener:(event:any)=>void)=>{api.__visualListener=listener;return()=>{delete api.__visualListener;};};api.listActiveTasks=async()=>[];api.startChatTask=async()=>{api.listActiveTasks=async()=>[task];return task;};});
   await page.getByRole("textbox",{name:"Mensagem para o Nexo"}).fill("resuma um arquivo");
   await page.getByRole("button",{name:"Enviar mensagem"}).click();
   const executions=page.getByRole("button",{name:"1 execução ativa"});
@@ -45,17 +48,38 @@ test("a execução ativa mostra timeline operacional no chat e no drawer",async(
   const liveSummary=page.locator(".streaming .executionSummary");
   await expect(liveSummary).toHaveClass(/isActive/);
   await expect(liveSummary.locator('li[aria-current="step"]')).toBeVisible();
+  const chips=page.getByRole("list",{name:"Ferramentas usadas nesta execução"});
+  await page.evaluate(()=>{(window as any).nexo.__visualListener({eventId:"tool-started-1",runId:"ui-running-run",agentId:"agent-1",conversationId:"preview-1",timestamp:new Date().toISOString(),type:"tool.started",state:"walking",label:"Localizando arquivos",toolName:"filesystem.search",stationId:"document-station",severity:"info"});});
+  await expect(chips.getByText("Arquivos",{exact:true})).toBeVisible();
+  await expect(chips.getByText("Localizando arquivos")).toBeVisible();
+  await page.evaluate(()=>{(window as any).nexo.__visualListener({eventId:"tool-completed-1",runId:"ui-running-run",agentId:"agent-1",conversationId:"preview-1",timestamp:new Date(Date.now()+1).toISOString(),type:"tool.completed",state:"success",label:"Etapa concluída",toolName:"filesystem.search",stationId:"document-station",severity:"success"});});
+  await expect(chips.getByText("Etapa concluída")).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("assistant-running.png")});
   await page.locator(".assistantHeader").getByRole("button",{name:"Execução"}).click();
   const executionDrawer=page.getByRole("dialog",{name:"Etapas"});
   await expect(executionDrawer.locator(".executionSummary")).toHaveClass(/isActive/);
   await expect(executionDrawer.locator('li[aria-current="step"]')).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("assistant-running-drawer.png")});
+  await page.evaluate(async()=>{const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setPage("Dashboard");});
+  await page.evaluate(async()=>{const {useAssistantStore}=await import("/stores/assistant.ts");await useAssistantStore.getState().syncSession("preview-1");});
+  await page.getByRole("button",{name:"1 execução ativa"}).click();
+  const notifications=page.getByRole("dialog",{name:"Notificações"});
+  const activeNotification=notifications.getByRole("button",{name:/Abrir tarefa: resuma um arquivo/});
+  await expect(activeNotification).toBeVisible();
+  await expect(activeNotification).toContainText("resuma um arquivo");
+  await page.waitForTimeout(420);
+  await page.screenshot({path:testInfo.outputPath("notification-center-drawer.png")});
+  await notifications.getByRole("button",{name:/Abrir tarefa: resuma um arquivo/}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("textbox",{name:"Mensagem para o Nexo"})).toBeVisible();
 });
 
 test("navegação mantém controles visíveis e sem overflow nos breakpoints do produto", async ({ page }, testInfo) => {
   await page.emulateMedia({reducedMotion:"reduce"});
   await page.setViewportSize({ width: 800, height: 700 });
   await page.goto(url);
-  await expect(page.locator(".assistantPage")).toBeVisible();
+  await page.getByRole("button", { name: "Assistente", exact: true }).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({ timeout: 15_000 });
   for (const viewport of [{width:760,height:700},{width:800,height:700},{width:900,height:760},{width:1024,height:768},{width:1280,height:800},{width:1440,height:900},{width:1920,height:1080}]) {
     await page.setViewportSize(viewport);
     for (const label of primaryNavigation) await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
@@ -65,14 +89,16 @@ test("navegação mantém controles visíveis e sem overflow nos breakpoints do 
   }
 });
 
-test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page }) => {
+test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page },testInfo) => {
   await page.goto(url);
   await page.getByRole("button", { name: "Recolher menu" }).click();
   await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
   await page.reload();
   await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
   await page.keyboard.press("Control+K");
-  await expect(page.getByRole("dialog", { name: "Paleta de comandos" })).toBeVisible();
+  const palette=page.getByRole("dialog", { name: "Paleta de comandos" });
+  await expect(palette).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("command-palette.png")});
   await page.getByPlaceholder("O que deseja fazer?").fill("escritório");
   await expect(page.getByRole("option", { name: /Abrir Escritório/ })).toBeVisible();
   await page.getByRole("option", { name: /Abrir Escritório/ }).click();
@@ -98,6 +124,24 @@ test("navigation icon rail exposes the hovered and keyboard-focused label",async
   await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
 });
 
+test("reduced motion neutralizes animations and shared controls use design tokens",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.setViewportSize({width:800,height:700});
+  await page.goto(url);
+  await page.getByRole("button",{name:"Assistente",exact:true}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({timeout:15000});
+  const duration=await page.locator(".composer").evaluate(element=>getComputedStyle(element).transitionDuration);
+  expect(duration.split(",").every(value=>parseFloat(value)<=0.001)).toBe(true);
+  await page.getByRole("button",{name:"Abrir conversas"}).click();
+  const drawer=page.getByRole("dialog",{name:"Conversas"});
+  await expect(drawer).toBeVisible();
+  const drawerMotion=await drawer.evaluate(element=>getComputedStyle(element).transitionDuration);
+  expect(drawerMotion.split(",").every(value=>parseFloat(value)<=0.001)).toBe(true);
+  await page.keyboard.press("Escape");
+  const tokens=await page.locator(".assistantPage").evaluate(element=>({fast:getComputedStyle(element).getPropertyValue("--nexo-motion-fast").trim(),spin:getComputedStyle(element).getPropertyValue("--nexo-motion-spin").trim()}));
+  expect(tokens).toEqual({fast:"140ms",spin:"900ms"});
+});
+
 test("a command palette indexes macros and saved conversations by title", async ({ page }) => {
   await page.goto(url);
   await page.evaluate(()=>{
@@ -116,10 +160,10 @@ test("a command palette indexes macros and saved conversations by title", async 
   await expect(page.getByRole("option",{name:/Abrir documento: Orçamento 2026.xlsx/})).toBeVisible();
   await page.getByPlaceholder("O que deseja fazer?").fill("projeto nexo");
   await page.getByRole("option",{name:/Abrir conversa: Projeto Nexo/}).click();
-  await expect(page.locator(".assistantPage")).toBeVisible();
+  await expect(page.locator(".assistantPage")).toBeVisible({ timeout: 15_000 });
 });
 
-test("a palette expõe todas as rotas e mostra erro de comando como toast",async({page})=>{
+test("a palette expõe todas as rotas e mostra erro de comando como toast",async({page},testInfo)=>{
   await page.goto(url);
   await page.evaluate(()=>{(window as any).nexo.runAutomation=async()=>{throw new Error("Macro indisponível");};(window as any).nexo.listAutomations=async()=>[{id:"macro-fail",name:"Macro indisponível",description:"",prompt:""}];});
   await page.keyboard.press("Control+K");
@@ -131,6 +175,7 @@ test("a palette expõe todas as rotas e mostra erro de comando como toast",async
   await page.getByRole("option",{name:/Executar macro: Macro indisponível/}).click();
   await expect(page.getByRole("alert").getByText("Macro indisponível")).toBeVisible();
   await expect(page.getByRole("dialog",{name:"Paleta de comandos"})).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath("command-palette-error-toast.png")});
 });
 
 test("composer resolves folder, imported-document and macro mentions as actionable context",async({page})=>{

@@ -1,0 +1,125 @@
+.chatBlocks,
+.resourceCollection {
+  color: var(--nexo-text);
+}
+
+.resourceCollectionHeading h3,
+.resourceCardTitle h3,
+.resourceExpand {
+  color: var(--nexo-text);
+}
+
+.resourceCollectionHeading > span,
+.resourceCollectionHeading p,
+.resourceCardTitle > span,
+.resourceCardBody,
+.resourceCardMeta,
+.resourceStatus,
+.resourceDetails > p,
+.resourceDetails pre,
+.resourceEmpty {
+  color: var(--nexo-text-secondary);
+}
+
+.resourceCard {
+  border-color: var(--nexo-border);
+  background: linear-gradient(130deg, var(--nexo-surface-2), var(--nexo-surface-1));
+  transition: border-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    background-color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.resourceCard:hover,
+.resourceCard.selected {
+  border-color: var(--nexo-violet);
+}
+
+.resourceCardHeader > input { accent-color: var(--nexo-violet); }
+.resourceCardIcon { background: var(--nexo-violet-soft); color: var(--nexo-violet); }
+.resourceBadge { color: var(--nexo-violet) !important; }
+
+.resourceCardActions {
+  transition: opacity var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.resourceActionButton {
+  color: var(--nexo-text-secondary);
+  transition: background-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    border-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.resourceActionButton:hover {
+  color: var(--nexo-text);
+  background: var(--nexo-violet-soft);
+  border-color: var(--nexo-border-strong);
+}
+
+.resourceActionButton.danger:hover,
+.resourceStatus.failed,
+.chatError { color: var(--nexo-danger); }
+.resourceStatus.success { color: var(--nexo-success); }
+
+.resourceBulkBar {
+  color: var(--nexo-text);
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border-strong);
+}
+
+.resourceBulkBar button,
+.resourceLoadMore,
+.resourceDetails > button,
+.inlineFormActions button {
+  color: var(--nexo-text-secondary);
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border);
+  transition: background-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    border-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.resourceBulkBar button:hover,
+.resourceLoadMore:hover,
+.resourceDetails > button:hover,
+.inlineFormActions button:hover { color: var(--nexo-text); border-color: var(--nexo-border-strong); }
+
+.resourceDetails,
+.replyComposer,
+.resourceActionForm { border-color: var(--nexo-border); }
+
+.replyComposer label,
+.resourceActionForm label { color: var(--nexo-text-secondary); }
+
+.replyComposer textarea,
+.resourceActionForm input,
+.resourceActionForm select,
+.approvalPreview {
+  color: var(--nexo-text);
+  background: var(--nexo-bg-raised);
+  border-color: var(--nexo-border-strong);
+}
+
+.inlineApproval {
+  border-color: color-mix(in srgb, var(--nexo-warning) 32%, transparent);
+  border-left-color: var(--nexo-warning);
+  background: color-mix(in srgb, var(--nexo-warning) 5%, var(--nexo-surface-1));
+}
+
+.inlineApproval h3 { color: var(--nexo-warning); }
+.inlineApproval p { color: var(--nexo-text-secondary); }
+.inlineFormActions button:last-child { color: var(--nexo-bg); background: var(--nexo-violet); border-color: var(--nexo-violet); }
+
+.resourceCollection button:focus-visible,
+.inlineApproval button:focus-visible,
+.resourceCollection input:focus-visible,
+.resourceCollection textarea:focus-visible,
+.resourceCollection select:focus-visible,
+.resourceExpand:focus-visible {
+  outline-color: var(--nexo-violet);
+}
+
+.resourceActionButton.loading svg { animation-duration: var(--nexo-motion-spin); }
+
+@media (prefers-reduced-motion: reduce) {
+  .resourceCollection *,
+  .inlineApproval * { animation: none !important; transition: none !important; }
+}

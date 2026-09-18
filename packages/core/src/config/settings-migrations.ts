@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 2;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 3;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -23,6 +23,9 @@ const migrations: SettingsMigration[] = [{
       agentLoopMode: settings.agentLoopModeExplicitlySelected === true ? settings.agentLoopMode : "legacy",
       settingsSchemaVersion: 2 };
   }
+}, {
+  version: 3,
+  migrate(settings) { return { ...settings, documentsEnabled: settings.documentsEnabled ?? true, semanticSearchEnabled: settings.semanticSearchEnabled ?? true, settingsSchemaVersion: 3 }; }
 }];
 
 export function migrateSettings(saved: Partial<NexoSettings>, defaults: NexoSettings): NexoSettings {

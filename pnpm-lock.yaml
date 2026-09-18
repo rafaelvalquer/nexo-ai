@@ -133,9 +133,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@langchain/core':
+        specifier: ^0.3.80
+        version: 0.3.80(openai@6.40.0(ws@8.21.3)(zod@3.25.76))
       '@langchain/langgraph':
         specifier: ^0.2.41
         version: 0.2.74(@langchain/core@0.3.80(openai@6.40.0(ws@8.21.3)(zod@3.25.76)))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod-to-json-schema@3.25.2(zod@3.25.76))
+      '@langchain/langgraph-checkpoint':
+        specifier: ^0.0.18
+        version: 0.0.18(@langchain/core@0.3.80(openai@6.40.0(ws@8.21.3)(zod@3.25.76)))
       '@nexo/browser-agent':
         specifier: workspace:*
         version: link:../browser-agent

@@ -13,6 +13,8 @@ import { DesktopOAuthHost } from "../oauth/desktop-oauth-host.js";
 import { createDesktopStoragePaths,migrateLegacySecrets } from "../storage/storage-paths.js";
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
+function smokeProgress(stage:string){const file=process.env.NEXO_SMOKE_STAGE_FILE;if(!file)return;try{fs.appendFileSync(path.resolve(file),`${new Date().toISOString()} ${stage}\n`);}catch{}}
+smokeProgress("main-module-loaded");
 const envCandidates=[path.resolve(process.cwd(),".env"),path.resolve(process.cwd(),"../../.env")];
 if(!app.isPackaged){for(const candidate of envCandidates){if(fs.existsSync(candidate)){process.loadEnvFile(candidate);break;}}}
 configureSystemLocations();
@@ -21,6 +23,7 @@ let win:BrowserWindow|null=null;
 let tray:Tray|null=null;
 let quitting=false;
 const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost(),notify:(title,body)=>{if(Notification.isSupported())new Notification({title,body}).show();}});
+smokeProgress("core-constructed");
 let httpServer:any=null;
 let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
 
@@ -60,18 +63,25 @@ function createTray(){
 }
 
 app.whenReady().then(async()=>{
+  smokeProgress("electron-ready");
   migrateLegacySecrets(storage.secrets,[path.join(app.getPath("userData"),"secrets.enc.json")]);
+  smokeProgress("before-core-ready");
   await core.ready();
-  await core.connections.restoreConnections();
+  smokeProgress("core-ready");
+  if(core.getSettings().connectionsEnabled)await (await core.ensureConnections()).restoreConnections();
+  smokeProgress("connections-restored");
   registerIpc(core,{chooseFolder:async()=>{const r=await dialog.showOpenDialog({properties:["openDirectory"]});return r.canceled?null:r.filePaths[0]},chooseDocument:async()=>{const r=await dialog.showOpenDialog({properties:["openFile"],filters:[{name:"Documentos",extensions:["pdf","docx","txt","md"]}]});return r.canceled?null:r.filePaths[0]},saveDocument:async(name:string)=>{const r=await dialog.showSaveDialog({defaultPath:name});return r.canceled?null:r.filePath??null},openPath:(p:string)=>shell.openPath(p),openExternal:(u:string)=>shell.openExternal(u),trashItem:(p:string)=>shell.trashItem(p)});
   registerClarificationIpc(core);
   registerEmailDraftIpc(core);
   registerAutomationV2Ipc(core);
   browserAgentRuntime=registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")});
+  smokeProgress("ipc-registered");
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
+  smokeProgress("core-server-started");
   await createWindow();createTray();
+  smokeProgress("window-created");
   if(process.env.NEXO_SMOKE_READY_FILE){const readyFile=path.resolve(process.env.NEXO_SMOKE_READY_FILE);fs.mkdirSync(path.dirname(readyFile),{recursive:true});fs.writeFileSync(readyFile,JSON.stringify({readyAt:new Date().toISOString(),dataDir:storage.root,database:storage.database,windowLoaded:Boolean(win&&!win.isDestroyed())}));}
-  setTimeout(()=>{for(const account of core.connections.list().filter(item=>item.status==="connected"))void core.connections.test(account.id).catch(()=>undefined);},1500).unref?.();
+  if(core.getSettings().connectionsEnabled)setTimeout(()=>{void core.ensureConnections().then(connections=>Promise.all(connections.list().filter(item=>item.status==="connected").map(account=>connections.test(account.id).catch(()=>undefined))));},1500).unref?.();
   if(app.isPackaged)void import("../updater/index.js").then(({configureUpdater})=>configureUpdater(true));
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});
 }).catch(reportStartupFailure);

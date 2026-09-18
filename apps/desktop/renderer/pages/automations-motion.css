@@ -1,0 +1,7 @@
+.macroStepList>li.dropTarget{border-color:var(--nexo-violet);background:var(--nexo-violet-soft);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--nexo-violet) 24%,transparent)}
+.macroDragHandle:focus-visible,.macroStepHeading button:focus-visible{outline:2px solid color-mix(in srgb,var(--nexo-violet) 82%,transparent);outline-offset:2px}
+.macroDragHandle{cursor:grab;touch-action:none}
+.macroDragHandle:active{cursor:grabbing}
+.macroStepList>li{transition:background var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out)}
+.reorderAnnouncement{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(prefers-reduced-motion:reduce){.macroStepList>li{transition:none!important}}

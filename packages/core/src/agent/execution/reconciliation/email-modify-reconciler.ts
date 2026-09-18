@@ -4,7 +4,7 @@ import type { MutationReconciler, ReconciliationResult } from "./reconciler.js";
 
 export class EmailModifyReconciler implements MutationReconciler {
   constructor(private readonly email: EmailService) {}
-  supports(record: ExecutionRecord) { return record.toolName.startsWith("email_") && !["email_send", "email_send_composed", "email_download_attachment"].includes(record.toolName); }
+  supports(record: ExecutionRecord) { return record.toolName.startsWith("email_") && !["email_send", "email_send_composed", "email_reply", "email_download_attachment"].includes(record.toolName); }
   async reconcile(record: ExecutionRecord, signal?: AbortSignal): Promise<ReconciliationResult> {
     const input = record.input as { connectionId?: string; messageId?: string; messageIds?: string[] };
     const ids = input.messageIds ?? (input.messageId ? [input.messageId] : []);

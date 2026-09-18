@@ -28,7 +28,7 @@
 .executionSummary li > svg { margin-top: 1px; color: var(--nexo-success); }
 .executionSummary li.active { color: var(--nexo-text-secondary); }
 .executionSummary li.active > svg { color: var(--nexo-cyan); }
-.executionSummary li.active:has(svg.lucide-loader-circle) > svg { animation: nexoExecutionSpin 1s linear infinite; }
+.executionSummary li.active:has(svg.lucide-loader-circle) > svg { animation: nexoExecutionSpin var(--nexo-motion-spin) var(--nexo-ease-linear) infinite; }
 .executionSummary.isWaiting li.active > svg { color: var(--nexo-warning); }
 .executionSummary li.failed { color: var(--nexo-danger); }
 .executionSummary li.failed > svg,

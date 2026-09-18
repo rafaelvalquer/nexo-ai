@@ -1,0 +1,107 @@
+.settings {
+  color: var(--nexo-text);
+  border-color: var(--nexo-border);
+  background: var(--nexo-surface-1);
+}
+
+.settings h3 {
+  color: var(--nexo-text);
+  border-color: var(--nexo-border);
+}
+
+.settings label,
+.settings .settingBlock > span { color: var(--nexo-text-secondary); }
+
+.settings input:not([type="checkbox"]),
+.settings select,
+.settings textarea {
+  color: var(--nexo-text);
+  background: var(--nexo-bg-raised);
+  border-color: var(--nexo-border-strong);
+  transition: border-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    box-shadow var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.settings input:not([type="checkbox"]):hover,
+.settings select:hover,
+.settings textarea:hover { border-color: var(--nexo-border-strong); }
+
+.settings input:not([type="checkbox"]):focus-visible,
+.settings select:focus-visible,
+.settings textarea:focus-visible {
+  border-color: var(--nexo-violet);
+  outline-color: var(--nexo-violet);
+  box-shadow: 0 0 0 3px var(--nexo-violet-soft);
+}
+
+.settings input[type="checkbox"] { accent-color: var(--nexo-violet); }
+
+.settingsAiStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--nexo-text-secondary);
+  font-size: 12px;
+}
+
+.settingsAiStatus i { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--nexo-text-muted); }
+.settingsAiStatus.online i { background: var(--nexo-success); box-shadow: 0 0 10px color-mix(in srgb, var(--nexo-success) 55%, transparent); }
+.settingsAiStatus.offline i { background: var(--nexo-danger); }
+.settingsAiStatus small { margin: 0 0 0 auto; color: var(--nexo-text-muted); text-align: right; overflow-wrap: anywhere; }
+
+.settings .settingsTestConnection {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  color: var(--nexo-text);
+  background: var(--nexo-surface-2);
+  border: 1px solid var(--nexo-border-strong);
+  border-radius: var(--nexo-r-sm);
+  cursor: pointer;
+  transition: border-color var(--nexo-motion-fast) var(--nexo-ease-out), background-color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.settings .settingsTestConnection:hover:not(:disabled) { border-color: var(--nexo-violet); background: var(--nexo-violet-soft); }
+.settings .settingsTestConnection:disabled { opacity: .65; cursor: wait; }
+.settingsTestConnection .spinning { animation: settingsConnectionSpin var(--nexo-motion-spin) var(--nexo-ease-linear) infinite; }
+@keyframes settingsConnectionSpin { to { transform: rotate(360deg); } }
+
+.settings .folder {
+  color: var(--nexo-text-secondary);
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border);
+}
+
+.settings .folder code { color: var(--nexo-text); overflow-wrap: anywhere; }
+.settings .tag { color: var(--nexo-text-secondary) !important; background: var(--nexo-surface-3); }
+.settings .tag.success { color: var(--nexo-success) !important; background: color-mix(in srgb, var(--nexo-success) 12%, var(--nexo-surface-2)); }
+.settings .tag.error,.settings .tag.failed { color: var(--nexo-danger) !important; background: color-mix(in srgb, var(--nexo-danger) 12%, var(--nexo-surface-2)); }
+.settings .tag.pending,.settings .tag.awaiting_approval { color: var(--nexo-warning) !important; background: color-mix(in srgb, var(--nexo-warning) 12%, var(--nexo-surface-2)); }
+
+.settingsNavLinks button {
+  color: var(--nexo-text-secondary);
+  transition: color var(--nexo-motion-fast) var(--nexo-ease-out),
+    background-color var(--nexo-motion-fast) var(--nexo-ease-out),
+    border-color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.settingsNavLinks button[aria-current="location"] {
+  color: var(--nexo-text);
+  background: var(--nexo-violet-soft);
+  border-color: color-mix(in srgb, var(--nexo-violet) 36%, transparent);
+}
+
+.settingsNavSelectLabel select {
+  color: var(--nexo-text);
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings *, .settingsNav * { transition: none !important; }
+  .settingsTestConnection .spinning { animation: none !important; }
+}

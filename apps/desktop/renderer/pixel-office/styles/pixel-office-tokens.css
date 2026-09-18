@@ -1,0 +1,126 @@
+.pixelOfficePage,
+.officeFallback {
+  background: var(--nexo-bg);
+}
+
+.officeViewport {
+  background: radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--nexo-violet) 15%, transparent), transparent 46%), var(--nexo-surface-1);
+}
+
+.pixelOfficeHeader,
+.officeToolbar,
+.officeFlowDrawer,
+.officeStatus,
+.officeCameraHint {
+  border-color: var(--nexo-border-strong);
+}
+
+.pixelOfficeHeader,
+.officeToolbar,
+.officeStatus,
+.officeCameraHint {
+  background: color-mix(in srgb, var(--nexo-bg) 82%, transparent);
+}
+
+.pixelOfficeHeader p,
+.officeStatus p,
+.officeFlowDrawer .agentFlowView li,
+.officeDetails p {
+  color: var(--nexo-text-secondary);
+}
+
+.pixelOfficeHeader .eyebrow,
+.officeToolbar button.active,
+.officeFlowDrawer .agentFlowView li span {
+  color: var(--nexo-violet);
+}
+
+.flowToggle,
+.officeToolbar button,
+.officeToolbar select,
+.officeFlowDrawerHeader button {
+  border-color: var(--nexo-border-strong);
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
+}
+
+.officeToolbar button.active {
+  border-color: var(--nexo-violet);
+  background: var(--nexo-violet-soft);
+}
+
+.officeToolbar label,
+.officeCameraHint,
+.statusMeta,
+.officeDetails dt {
+  color: var(--nexo-text-muted);
+}
+
+.taskBubble.success,
+.officeStatus b span {
+  border-color: var(--nexo-success);
+  color: var(--nexo-success);
+}
+
+.taskBubble.error {
+  border-color: var(--nexo-danger);
+}
+
+.approvalOverlay {
+  border-color: var(--nexo-warning);
+  background: color-mix(in srgb, var(--nexo-surface-2) 94%, transparent);
+}
+
+.approvalOverlay p {
+  color: var(--nexo-text-secondary);
+}
+
+.approvalOverlay button,
+.officeDetails button:not(.dangerGhost) {
+  background: var(--nexo-violet);
+  color: var(--nexo-text);
+}
+
+.officeDetails {
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border-strong);
+}
+
+.officeDetails .stationActivity {
+  background: var(--nexo-surface-3);
+  color: var(--nexo-text-secondary);
+}
+
+.officeDetails dd {
+  color: var(--nexo-text);
+}
+
+.officeDrawerBackdrop {
+  background: color-mix(in srgb, var(--nexo-bg) 72%, transparent);
+}
+
+/* Legacy Office selectors are kept for layout; semantic colors resolve here. */
+.pixelOfficePage { background: var(--nexo-bg); }
+.officeViewport { background: radial-gradient(circle at 50% 20%,var(--nexo-violet-soft),transparent 46%),var(--nexo-surface-1); }
+.pixelOfficeHeader,.officeToolbar,.officeFlowDrawer,.officeStatus,.officeCameraHint { border-color: var(--nexo-border-strong); }
+.pixelOfficeHeader,.officeToolbar,.officeStatus,.officeCameraHint { background: color-mix(in srgb,var(--nexo-bg) 82%,transparent); }
+.pixelOfficeHeader p,.officeStatus p,.officeFlowDrawer .agentFlowView li,.officeDetails p,.approvalOverlay p { color: var(--nexo-text-secondary); }
+.pixelOfficeHeader .eyebrow,.officeToolbar button.active,.officeFlowDrawer .agentFlowView li span { color: var(--nexo-violet); }
+.flowToggle,.officeToolbar button,.officeToolbar select,.officeFlowDrawerHeader button { border-color: var(--nexo-border-strong); background: var(--nexo-surface-2); color: var(--nexo-text); }
+.officeToolbar button.active { border-color: var(--nexo-violet); background: var(--nexo-violet-soft); }
+.officeToolbar label,.officeCameraHint,.statusMeta,.officeDetails dt { color: var(--nexo-text-muted); }
+.taskBubble.success,.officeStatus b span { border-color: var(--nexo-success); color: var(--nexo-success); }
+.taskBubble.error { border-color: var(--nexo-danger); }
+.approvalOverlay { border-color: var(--nexo-warning); background: color-mix(in srgb,var(--nexo-surface-2) 94%,transparent); }
+.approvalOverlay button,.officeDetails button:not(.dangerGhost) { background: var(--nexo-violet); color: var(--nexo-text); }
+.officeDetails { background: var(--nexo-surface-2); border-color: var(--nexo-border-strong); }
+.officeDetails .stationActivity { background: var(--nexo-surface-3); color: var(--nexo-text-secondary); }
+.officeDetails dd { color: var(--nexo-text); }
+.officeFlowDrawer { background: color-mix(in srgb,var(--nexo-surface-1) 94%,transparent); }
+.officeFlowDrawerHeader { border-bottom-color: var(--nexo-border); }
+.agentFlowView { border-color: var(--nexo-border); background: color-mix(in srgb,var(--nexo-surface-2) 84%,transparent); }
+.officeFallback { background: var(--nexo-surface-1); }
+.officeFlowDrawer,.taskBubble,.officeDrawerBackdrop,.approvalOverlay,.officeDetails { transition-duration: var(--nexo-motion-normal); transition-timing-function: var(--nexo-ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .pixelOfficePage *, .officeDrawerBackdrop *, .officeDrawerBackdrop { animation: none !important; transition: none !important; }
+}

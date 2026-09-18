@@ -1,0 +1,12 @@
+.todayPrimary,.todayPaths > button {
+  transition-duration: var(--nexo-motion-normal);
+  transition-timing-function: var(--nexo-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .todayPage *, .todayPage *::before, .todayPage *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

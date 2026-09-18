@@ -1,0 +1,252 @@
+.assistantHeader,
+.chatTabs,
+.assistantSessionPanel,
+.activeChatIdentity {
+  border-color: var(--nexo-border);
+}
+
+.assistantToolChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.assistantToolChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: min(100%, 320px);
+  padding: 7px 10px 7px 8px;
+  border: 1px solid var(--nexo-border);
+  border-radius: var(--nexo-radius-pill, 999px);
+  color: var(--nexo-text-secondary);
+  background: var(--nexo-surface-2);
+}
+
+.assistantToolIcon { display: inline-flex; color: var(--nexo-cyan); }
+.assistantToolChip.isComplete .assistantToolIcon { color: var(--nexo-success); }
+.assistantToolChip.hasError .assistantToolIcon { color: var(--nexo-danger); }
+.assistantToolCopy { display: grid; min-width: 0; line-height: 1.25; }
+.assistantToolCopy b { color: var(--nexo-text); font-size: 11px; font-weight: 600; }
+.assistantToolCopy small { overflow: hidden; color: var(--nexo-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.assistantToolChip.isActive .assistantToolIcon svg { animation: assistantToolPulse 1.4s ease-in-out infinite; }
+
+@keyframes assistantToolPulse { 50% { opacity: .45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .assistantToolChip.isActive .assistantToolIcon svg { animation: none; }
+}
+
+.chatTabs {
+  background: var(--nexo-surface-1);
+}
+
+.chatTab {
+  color: var(--nexo-text-secondary);
+}
+
+.chatTab:hover,
+.chatTab.active {
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border-strong);
+}
+
+.chatTab.active {
+  box-shadow: inset 2px 0 var(--nexo-violet);
+}
+
+.chatStatusDot {
+  background: var(--nexo-text-muted);
+}
+
+.chatStatusDot.busy {
+  background: var(--nexo-violet);
+  box-shadow: 0 0 9px var(--nexo-violet-soft);
+}
+
+.chatStatusDot.waiting_approval {
+  background: var(--nexo-warning);
+}
+
+.chatStatusDot.failed {
+  background: var(--nexo-danger);
+}
+
+.chatTabText small,
+.chatTabClose,
+.chatTabsLimit {
+  color: var(--nexo-text-muted);
+}
+
+.chatTabClose:hover {
+  background: var(--nexo-surface-3);
+  color: var(--nexo-text);
+}
+
+.activeChatIdentity {
+  background: var(--nexo-surface-1);
+  color: var(--nexo-text-secondary);
+}
+
+.activeChatIdentity span {
+  background: var(--nexo-violet-soft);
+  color: var(--nexo-text);
+}
+
+.activeChatIdentity b {
+  color: var(--nexo-text);
+}
+
+.activeChatIdentity em {
+  color: var(--nexo-warning);
+}
+
+/* Semantic color migration for the legacy chat surface. */
+.assistantHeader {
+  border-bottom-color: var(--nexo-border-strong);
+}
+
+.assistantHeader p,
+.assistantMeta kbd,
+.composerHint,
+.reasoningLive small,
+.executionDrawer small,
+.executionDrawer > header small,
+.agentFlow > header small,
+.toolResultCard > header small,
+.toolResultCard > small,
+.toolRows > div small {
+  color: var(--nexo-text-muted);
+}
+
+.assistantMeta,
+.messageIdentity,
+.executionTrigger,
+.executionSummary > button,
+.executionSummary p,
+.typing,
+.iconButton,
+.contextIndicator,
+.executionDrawer header button,
+.agentFlowList li,
+.toolRows > div {
+  color: var(--nexo-text-secondary);
+}
+
+.messageContent { color: var(--nexo-text); }
+.messageIdentity { font-weight: 600; }
+.chatMessage.assistant .messageIdentity { color: var(--nexo-violet); }
+.chatMessage.user .messageContent {
+  background: color-mix(in srgb, var(--nexo-violet) 22%, var(--nexo-surface-1));
+  border-color: color-mix(in srgb, var(--nexo-violet) 38%, var(--nexo-border));
+}
+
+.markdown blockquote { border-left-color: var(--nexo-violet); color: var(--nexo-text-secondary); }
+.markdown a,
+.executionSummary p.active svg,
+.agentFlowList li.active > span { color: var(--nexo-cyan); }
+.markdown th,
+.codeBlock header { background: var(--nexo-surface-2); }
+.markdown th,
+.markdown td,
+.codeBlock,
+.codeBlock header,
+.executionSummary,
+.executionDrawer,
+.agentFlow,
+.agentFlow > header,
+.toolResultCard,
+.toolRows > div { border-color: var(--nexo-border); }
+.markdown th,
+.markdown td,
+.codeBlock,
+.executionDrawer,
+.toolResultCard { background-color: var(--nexo-surface-1); }
+.markdown :not(pre) > code,
+.codeBlock { background: var(--nexo-bg-raised); }
+.markdown :not(pre) > code { color: var(--nexo-text); }
+.codeBlock header span,
+.toolResultCard > header { color: var(--nexo-cyan); }
+.codeBlock header b,
+.toolResultCard header b,
+.reasoningLive strong { color: var(--nexo-text); }
+.reasoningLive {
+  border-color: var(--nexo-border-strong);
+  background: linear-gradient(135deg, var(--nexo-surface-2), var(--nexo-surface-1));
+  color: var(--nexo-text-secondary);
+}
+.reasoningPulse {
+  background: var(--nexo-violet-soft);
+  color: var(--nexo-violet);
+  box-shadow: var(--nexo-glow-accent);
+}
+.typing > span,
+.streamCursor { background: var(--nexo-violet); }
+.executionSummary { border-left-color: var(--nexo-violet); }
+.executionSummary p.active { color: var(--nexo-text); }
+.executionSummary p.done svg,
+.attachmentItem small { color: var(--nexo-success); }
+.chatError,
+.attachmentItem.failed small,
+.stopButton { color: var(--nexo-danger); }
+.assistantEmptyState { color: var(--nexo-text-secondary); }
+.assistantEmptyState > span,
+.assistantEmptyState h2 { color: var(--nexo-text); }
+.emptyOrb {
+  background: radial-gradient(circle at 35% 30%, #c1b7ff, var(--nexo-violet) 45%, var(--nexo-surface-2) 75%);
+  box-shadow: var(--nexo-glow-accent);
+}
+.suggestion,
+.scrollToBottom,
+.executionTrigger {
+  color: var(--nexo-text-secondary);
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border);
+}
+.suggestion:hover,
+.composer:focus-within { border-color: var(--nexo-violet); }
+.composerDock { background: linear-gradient(to bottom, transparent, var(--nexo-bg-raised) 30%); }
+.composer {
+  border-color: var(--nexo-border-strong) !important;
+  background: color-mix(in srgb, var(--nexo-surface-2) 94%, transparent) !important;
+  box-shadow: var(--nexo-shadow-sm);
+  transition: border-color var(--nexo-motion-fast), box-shadow var(--nexo-motion-fast);
+}
+.composer:focus-within {
+  box-shadow: 0 0 0 3px var(--nexo-violet-soft), var(--nexo-shadow-sm);
+}
+.composer textarea { color: var(--nexo-text); }
+.attachmentItem {
+  background: var(--nexo-surface-2);
+  border-color: var(--nexo-border-strong);
+  color: var(--nexo-text-secondary);
+}
+.attachmentItem button { background: var(--nexo-surface-3); }
+.drawerBackdrop { background: color-mix(in srgb, var(--nexo-bg) 62%, transparent); }
+.executionDrawer { border-left-color: var(--nexo-border-strong); box-shadow: var(--nexo-shadow-lg); }
+.agentFlow { background: var(--nexo-bg); }
+.agentFlow > header { border-bottom-color: var(--nexo-border); }
+.agentFlow > header span,
+.agentFlowList li.active { color: var(--nexo-text); }
+.agentFlowList li.active { background: var(--nexo-surface-2); }
+.wideExecutionRail {
+  background: color-mix(in srgb, var(--nexo-surface-1) 92%, transparent);
+  border-color: var(--nexo-border);
+}
+.wideExecutionRail > small { color: var(--nexo-text-muted); }
+.toolResultCard > header,
+.toolRows > div { border-color: var(--nexo-border); }
+
+.executionSummary svg { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out); }
+.executionSummary p.active svg,.attachmentItem.indexing small svg { animation-duration: var(--nexo-motion-spin); animation-timing-function: var(--nexo-ease-linear); }
+.typing > span { animation-duration: var(--nexo-motion-pulse); }
+.typing > span:nth-child(2) { animation-delay: 150ms; }
+.typing > span:nth-child(3) { animation-delay: 300ms; }
+.streamCursor { animation-duration: var(--nexo-motion-cursor); }
+.reasoningPulse { animation-duration: var(--nexo-motion-pulse); }
+.suggestion { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out),background var(--nexo-motion-fast) var(--nexo-ease-out); }
+.composer { transition-duration: var(--nexo-motion-fast); transition-timing-function: var(--nexo-ease-out); }

@@ -54,6 +54,7 @@ test("keyboard reply opens a composer and requires a separate confirmation",asyn
   await page.keyboard.press("Control+Enter");
   await expect(page.getByRole("region",{name:"Confirmação da ação"})).toContainText("Obrigado, recebi a mensagem.");
   expect(await page.evaluate(()=>(window as any).__resourceApprovals.length)).toBe(0);
+  await page.screenshot({path:info.outputPath("assistant-approval.png")});
   await page.getByRole("button",{name:"Cancelar",exact:true}).focus();await page.keyboard.press("Enter");
   await expect(page.getByText("Ação cancelada",{exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath("chat-reply-keyboard.png")});
@@ -92,4 +93,31 @@ test("file, folder, calendar and generic cards preserve keyboard controls and le
   }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.locator(".resourceCard").filter({hasText:"Daily URA"}).scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath("mixed-cards-910.png")});
+});
+
+test("browser preview uses the shared accessible dialog and restores focus",async({page},info)=>{
+  const startedAt=new Date().toISOString();
+  const run={id:"browser-run-dialog",taskId:"task-browser",conversationId:"preview-1",request:"Pesquisar preços de notebooks",status:"running",mode:"research",allowedDomains:["example.com"],currentUrl:"https://example.com/ofertas",pageTitle:"Ofertas",currentStep:"Comparando resultados",stepCount:2,startedAt};
+  const blocks=[{id:"browser-block",version:1,type:"browser_run",runId:run.id,title:run.request,status:run.status,url:run.currentUrl,pageTitle:run.pageTitle,step:run.currentStep,startedAt}];
+  const messages=[{id:"browser-message",conversationId:"preview-1",role:"assistant",content:"Pesquisa em andamento",createdAt:startedAt,blocks}];
+  await page.evaluate(async({messages,run,modulePath})=>{
+    const api=(window as any).nexo;
+    api.conversationMessages=async()=>structuredClone(messages);
+    api.getBrowserRun=async()=>structuredClone(run);
+    api.getBrowserRunEvents=async()=>[];
+    api.onBrowserRunEvent=()=>()=>{};
+    api.subscribeBrowserFrames=()=>()=>{};
+    const{useAssistantStore}=await import(modulePath);await useAssistantStore.getState().sync();
+  },{messages,run,modulePath:"/stores/assistant.ts"});
+  await expect(page.locator(".browserRunBlock")).toBeVisible();
+  const expand=page.locator(".browserRunBlock").getByRole("button",{name:"Expandir",exact:true});
+  await expand.click();
+  const dialog=page.getByRole("dialog",{name:"Nexo Browser"});
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Comparando resultados",{exact:true})).toBeVisible();
+  await expect(dialog.getByRole("button",{name:"Fechar diálogo"})).toBeFocused();
+  await page.screenshot({path:info.outputPath("browser-preview-dialog.png")});
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(expand).toBeFocused();
 });

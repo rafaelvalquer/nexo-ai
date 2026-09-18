@@ -1,0 +1,9 @@
+.gadgetLoadingState>header{display:flex;align-items:center;gap:7px;color:var(--nexo-text-secondary);font-size:10px}
+.gadgetLoadingState>header span{margin-left:auto;color:var(--nexo-text-muted);font-size:9px}
+.gadgetLoadingRow{display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid var(--nexo-border-subtle)}
+.gadgetLoadingRow>i{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--nexo-surface-3)}
+.gadgetLoadingRow>span{display:grid;flex:1;gap:6px}
+.gadgetLoadingRow b,.gadgetLoadingRow strong,.gadgetLoadingRow small{display:block;height:7px;border-radius:999px;background:linear-gradient(90deg,var(--nexo-surface-2),var(--nexo-surface-3),var(--nexo-surface-2));background-size:200% 100%;animation:gadgetLoadingShimmer var(--nexo-motion-shimmer) ease-in-out infinite}
+.gadgetLoadingRow strong{width:68%}.gadgetLoadingRow small{width:84%;height:5px}
+@keyframes gadgetLoadingShimmer{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.gadgetLoadingRow b,.gadgetLoadingRow strong,.gadgetLoadingRow small{animation:none;background:var(--nexo-surface-2)}}

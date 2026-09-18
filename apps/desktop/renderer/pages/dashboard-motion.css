@@ -1,0 +1,12 @@
+.dashboardPrimary,.dashboardSecondary,.dashboardAddButton,.dashboardIconButton,.gadgetCard,.catalogGadget {
+  transition-duration: var(--nexo-motion-fast);
+  transition-timing-function: var(--nexo-ease-out);
+}
+.dashboardPage .spin { animation-duration: var(--nexo-motion-spin); animation-timing-function: var(--nexo-ease-linear); }
+@media (prefers-reduced-motion: reduce) {
+  .dashboardPage *, .dashboardPage *::before, .dashboardPage *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

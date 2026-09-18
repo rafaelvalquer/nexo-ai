@@ -38,6 +38,8 @@ export class ToolRegistry {
   }
   register(...tools:ToolDefinition[]) { for (const tool of tools) {const mutates=tool.mutatesState??tool.risk!=="READ";tool.mutatesState=mutates;tool.agent??={category:tool.domain??domain(tool.name),outputTrust:outputTrust(tool)};this.tools.set(tool.name,tool);} return this; }
   unregister(name:string) { return this.tools.delete(name); }
+  registerDomain(name:string,...tools:ToolDefinition[]) { for(const tool of tools)tool.domain??=name;return this.register(...tools); }
+  unregisterDomain(name:string) { let removed=0;for(const [toolName,tool] of this.tools)if(tool.domain===name||domain(toolName)===name){this.tools.delete(toolName);removed++;}return removed; }
   registerMacros(macros:import("../macros/macro-engine.js").MacroEngine,db:import("../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../automation/natural-draft.js").MacroDraft>){return this.register(...macroTools(macros,db,draft));}
   get(name:string){return this.tools.get(name);}
   definitions(){return[...this.tools.values()];}
