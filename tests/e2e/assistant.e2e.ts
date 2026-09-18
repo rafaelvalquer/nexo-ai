@@ -81,6 +81,27 @@ test("o indicador de foco visível usa o token de acessibilidade global",async({
   expect(focusColors.actual).toBe(focusColors.token);
 });
 
+test("a Command Palette fecha antes do drawer subjacente e mantém o foco confinado",async({page})=>{
+  await page.setViewportSize({width:800,height:700});
+  await page.goto(url);
+  await page.getByRole("button",{name:"Assistente",exact:true}).click();
+  const chatsTrigger=page.getByRole("button",{name:"Abrir conversas"});
+  await chatsTrigger.click();
+  const chatsDrawer=page.getByRole("dialog",{name:"Conversas"});
+  await expect(chatsDrawer).toBeVisible();
+  await page.keyboard.press("Control+K");
+  const palette=page.getByRole("dialog",{name:"Paleta de comandos"});
+  await expect(palette).toBeVisible();
+  await expect(page.getByRole("combobox",{name:"O que deseja fazer?"})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(chatsDrawer).toBeVisible();
+  await expect(chatsDrawer.getByRole("button",{name:"Fechar painel"})).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(chatsDrawer).toHaveCount(0);
+  await expect(chatsTrigger).toBeFocused({timeout:10_000});
+});
+
 test("toast de aviso anuncia o estado e pode ser dispensado por teclado",async({page})=>{
   await page.goto(url);
   await page.evaluate(async()=>{
