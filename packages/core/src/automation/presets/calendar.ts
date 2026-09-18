@@ -1,5 +1,3 @@
-import type { AutomationPreset } from "@nexo/shared";
-export const calendarPresets: AutomationPreset[] = [
-  { id:"tomorrow-agenda",version:1,category:"calendar",title:"Agenda de amanhã",description:"Resumo diário às 18:00 dos compromissos de amanhã.",icon:"calendar-days",requiredCapabilities:["calendar.read"],automation:{name:"Agenda de amanhã",icon:"calendar-days",trigger:{type:"schedule",mode:"daily",time:"18:00"},conditions:[],actions:[{id:"summary",type:"calendar.summary",config:{period:"tomorrow"}},{id:"notify",type:"notification.show",config:{title:"Agenda de amanhã",content:"$actions.summary"}}]} },
-  { id:"meeting-15-minutes",version:1,category:"calendar",title:"Avisar reunião em 15 minutos",description:"Alerta antes de cada compromisso.",icon:"alarm-clock",requiredCapabilities:["calendar.read"],automation:{name:"Reunião em 15 minutos",icon:"alarm-clock",trigger:{type:"calendar.before_event",connectionId:"",minutesBefore:15,pollIntervalMinutes:5},conditions:[],actions:[{id:"notify",type:"notification.show",config:{title:"Reunião em 15 minutos",content:"$trigger.data.event.title"}}]} }
-];
+/** @deprecated Use calendarMacroPresets from macros/presets/calendar. */
+export { calendarMacroPresets as calendarPresets } from "../../macros/presets/calendar.js";
+export type { MacroPreset as AutomationPreset } from "@nexo/shared";

@@ -1,7 +1,3 @@
-import type { AutomationPreset } from "@nexo/shared";
-
-export const productivityPresets: AutomationPreset[] = [
-  { id:"morning-summary",version:1,category:"productivity",title:"Resumo da manhã",description:"Agenda do dia e e-mails importantes.",icon:"sun",requiredCapabilities:["email.read","calendar.read"],automation:{name:"Resumo da manhã",description:"Agenda do dia e e-mails importantes.",icon:"sun",trigger:{type:"schedule",mode:"weekdays",time:"08:00"},conditions:[],actions:[{id:"summary",type:"nexo.command",config:{command:"Resuma minha agenda de hoje e meus e-mails importantes ainda não lidos."}},{id:"notify",type:"notification.show",config:{title:"Resumo da manhã",content:"$actions.summary"}}]} },
-  { id:"end-of-day-summary",version:1,category:"productivity",title:"Resumo do fim do dia",description:"Pendências, agenda e mensagens para encerrar o dia.",icon:"moon",requiredCapabilities:["email.read","calendar.read"],automation:{name:"Resumo do fim do dia",icon:"moon",prompt:"Faça um resumo objetivo das pendências, agenda e e-mails importantes do dia.",trigger:{type:"schedule",mode:"weekdays",time:"18:00"},conditions:[],actions:[{id:"summary",type:"nexo.command",config:{command:"Faça um resumo objetivo das pendências, agenda e e-mails importantes do dia."}}],output:{type:"chat",conversationMode:"automation"}} },
-  { id:"weekly-summary",version:1,category:"productivity",title:"Resumo semanal",description:"Uma visão da semana toda sexta-feira.",icon:"calendar-range",requiredCapabilities:["email.read","calendar.read"],automation:{name:"Resumo semanal",icon:"calendar-range",trigger:{type:"schedule",mode:"weekly",time:"17:00",daysOfWeek:[5]},conditions:[],actions:[{id:"summary",type:"nexo.command",config:{command:"Resuma os principais compromissos e e-mails da semana e destaque pendências."}}]} }
-];
+/** @deprecated Use productivityMacroPresets from macros/presets/productivity. */
+export { productivityMacroPresets as productivityPresets } from "../../macros/presets/productivity.js";
+export type { MacroPreset as AutomationPreset } from "@nexo/shared";

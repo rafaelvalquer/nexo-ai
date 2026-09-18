@@ -11,7 +11,7 @@ test("macro library distinguishes empty, unavailable, and stale data states",asy
   await page.goto(url);
   await page.evaluate(()=>{
     const api=(window as any).nexo;let fail=true;
-    api.listAutomations=async()=>{if(fail)throw new Error("SQLITE_BUSY: private database details");return[{id:"macro-local",name:"Resumo local",description:"Resumo de arquivos",prompt:"Resumir arquivos",enabled:true,status:"active",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0}];};
+    api.listMacros=async()=>{if(fail)throw new Error("SQLITE_BUSY: private database details");return[{id:"macro-local",name:"Resumo local",description:"Resumo de arquivos",prompt:"Resumir arquivos",enabled:true,status:"active",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0}];};
     (window as any).__setMacroLoadFailure=(value:boolean)=>{fail=value;};
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
@@ -32,11 +32,11 @@ test("natural macro drafts are reviewed and completed before saving",async({page
   await page.goto(url);
   await page.evaluate(()=>{
     const api=(window as any).nexo;
-    api.listAutomations=async()=>[];
-    api.listAutomationActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"}];
-    api.draftMacroFromNatural=async({description}:any)=>({name:"Começar Trabalho",description,actions:[{id:"step-1",type:"system.open_application",config:{application:""}}]});
-    api.testAutomationDraft=async(value:any)=>{(window as any).__testedDraft=value;return{id:"draft-test",status:"success",summary:"Simulação concluída.",steps:[{id:"step-test",ordinal:1,actionType:"system.open_application",status:"success",summary:"Simulação: abriria chrome."}]};};
-    api.createAutomationV2=async(value:any)=>{(window as any).__createdMacro=value;return value;};
+    api.listMacros=async()=>[];
+    api.listMacroActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"}];
+    api.draftMacro=async({description}:any)=>({name:"Começar Trabalho",description,actions:[{id:"step-1",type:"system.open_application",config:{application:""}}]});
+    api.testMacroDraft=async(value:any)=>{(window as any).__testedDraft=value;return{id:"draft-test",status:"success",summary:"Simulação concluída.",steps:[{id:"step-test",ordinal:1,actionType:"system.open_application",status:"success",summary:"Simulação: abriria chrome."}]};};
+    api.createMacro=async(value:any)=>{(window as any).__createdMacro=value;return value;};
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
   await page.getByRole("button",{name:"Nova macro",exact:true}).click();
@@ -60,9 +60,9 @@ test("a browser download step requires its selector and explicit destination",as
   await page.goto(url);
   await page.evaluate(()=>{
     const api=(window as any).nexo;
-    api.listAutomations=async()=>[];
-    api.listAutomationActions=async()=>[{id:"browser.download",title:"Baixar arquivo pelo navegador",description:"Download protegido",category:"browser",risk:"sensitive",fields:[{key:"selector",label:"Seletor do botão ou link",type:"text",required:true},{key:"path",label:"Caminho completo do arquivo",type:"path",required:true}]}];
-    api.createAutomationV2=async(value:any)=>{(window as any).__createdMacro=value;return value;};
+    api.listMacros=async()=>[];
+    api.listMacroActions=async()=>[{id:"browser.download",title:"Baixar arquivo pelo navegador",description:"Download protegido",category:"browser",risk:"sensitive",fields:[{key:"selector",label:"Seletor do botão ou link",type:"text",required:true},{key:"path",label:"Caminho completo do arquivo",type:"path",required:true}]}];
+    api.createMacro=async(value:any)=>{(window as any).__createdMacro=value;return value;};
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
   await page.getByRole("button",{name:"Nova macro",exact:true}).click();
@@ -80,10 +80,10 @@ test("macro details exposes a dry-run test and opens its execution steps",async(
   await page.goto(url);
   await page.evaluate(()=>{
     const api=(window as any).nexo,macro={id:"macro-demo",name:"Demonstração",description:"Teste",prompt:"Teste",enabled:false,status:"paused",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0};
-    api.listAutomations=async()=>[macro];api.listAutomationRuns=async()=>[];
-    api.testAutomation=async(id:string)=>{(window as any).__testedMacro=id;return{id:"run-dry",automationId:id,status:"success",startedAt:new Date().toISOString()};};
-    api.getAutomationRun=async()=>({id:"run-dry",status:"success",startedAt:new Date().toISOString(),steps:[{id:"step-dry",ordinal:1,actionType:"system.open_application",status:"success",summary:"Simulação: abriria Chrome."}]});
-    api.runAutomation=async(id:string)=>new Promise(resolve=>{(window as any).__finishMacroRun=()=>resolve({id:"run-live",automationId:id,status:"running",startedAt:new Date().toISOString()});});
+    api.listMacros=async()=>[macro];api.listMacroRuns=async()=>[];
+    api.testMacro=async(id:string)=>{(window as any).__testedMacro=id;return{id:"run-dry",automationId:id,status:"success",startedAt:new Date().toISOString()};};
+    api.getMacroRun=async()=>({id:"run-dry",status:"success",startedAt:new Date().toISOString(),steps:[{id:"step-dry",ordinal:1,actionType:"system.open_application",status:"success",summary:"Simulação: abriria Chrome."}]});
+    api.runMacro=async(id:string)=>new Promise(resolve=>{(window as any).__finishMacroRun=()=>resolve({id:"run-live",automationId:id,status:"running",startedAt:new Date().toISOString()});});
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
   await page.getByText("Demonstração",{exact:true}).click();
@@ -104,7 +104,7 @@ test("macro loading skeleton previews card structure and reveals loaded data",as
   await page.evaluate(()=>{
     const api=(window as any).nexo;
     let resolve!: (value:unknown[])=>void;
-    api.listAutomations=()=>new Promise((done)=>{resolve=done;});
+    api.listMacros=()=>new Promise((done)=>{resolve=done;});
     (window as any).__resolveMacroList=()=>resolve([{id:"macro-loaded",name:"Rotina carregada",description:"Conferir arquivos",prompt:"Conferir arquivos",enabled:true,status:"active",trigger:{type:"manual"},actions:[{}],output:{type:"notification"},policy:{},consecutiveFailures:0}]);
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
@@ -125,9 +125,9 @@ test("macro execution exposes accessible step progress in the detail drawer",asy
   await page.waitForFunction(()=>Boolean((window as any).nexo));
   await page.evaluate(()=>{
     const api=(window as any).nexo,now=new Date().toISOString();
-    api.listAutomations=async()=>[{id:"macro-progress",name:"Resumo semanal",description:"Compilar dados",prompt:"Compilar dados",enabled:true,status:"running",trigger:{type:"manual"},actions:[{id:"one"},{id:"two"},{id:"three"}],output:{type:"notification"},policy:{},consecutiveFailures:0}];
-    api.listAutomationRuns=async()=>[{id:"run-progress",automationId:"macro-progress",status:"running",startedAt:now}];
-    api.getAutomationRun=async()=>({id:"run-progress",automationId:"macro-progress",status:"running",startedAt:now,steps:[{id:"one",ordinal:1,actionType:"file.search",status:"success",summary:"Arquivos localizados"},{id:"two",ordinal:2,actionType:"document.analyze",status:"running",summary:"Analisando relatórios"}]});
+    api.listMacros=async()=>[{id:"macro-progress",name:"Resumo semanal",description:"Compilar dados",prompt:"Compilar dados",enabled:true,status:"running",trigger:{type:"manual"},actions:[{id:"one"},{id:"two"},{id:"three"}],output:{type:"notification"},policy:{},consecutiveFailures:0}];
+    api.listMacroRuns=async()=>[{id:"run-progress",automationId:"macro-progress",status:"running",startedAt:now}];
+    api.getMacroRun=async()=>({id:"run-progress",automationId:"macro-progress",status:"running",startedAt:now,steps:[{id:"one",ordinal:1,actionType:"file.search",status:"success",summary:"Arquivos localizados"},{id:"two",ordinal:2,actionType:"document.analyze",status:"running",summary:"Analisando relatórios"}]});
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
   await page.getByText("Resumo semanal",{exact:true}).click();
@@ -148,10 +148,10 @@ test("macro editor supports keyboard reordering and deletion uses an accessible 
   await page.evaluate(()=>{
     const api=(window as any).nexo;
     const macro={id:"macro-delete",name:"Rotina de teste",description:"Teste",prompt:"Teste",enabled:false,status:"paused",trigger:{type:"manual"},actions:[],output:{type:"notification"},policy:{},consecutiveFailures:0};
-    api.listAutomations=async()=>[macro];
-    api.listAutomationRuns=async()=>[];
-    api.listAutomationActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"},{id:"system.open_url",title:"Abrir navegador",description:"Abre uma URL",category:"apps",fields:[{key:"url",label:"URL",type:"text",required:true}],risk:"read"}];
-    api.removeAutomation=async(id:string)=>{(window as any).__removedMacro=id;return{ok:true};};
+    api.listMacros=async()=>[macro];
+    api.listMacroRuns=async()=>[];
+    api.listMacroActions=async()=>[{id:"system.open_application",title:"Abrir aplicativo",description:"Abre um aplicativo",category:"apps",fields:[{key:"application",label:"Aplicativo",type:"text",required:true}],risk:"write"},{id:"system.open_url",title:"Abrir navegador",description:"Abre uma URL",category:"apps",fields:[{key:"url",label:"URL",type:"text",required:true}],risk:"read"}];
+    api.removeMacro=async(id:string)=>{(window as any).__removedMacro=id;return{ok:true};};
   });
   await page.getByRole("button",{name:"Macros",exact:true}).click();
   await page.getByRole("button",{name:"Nova macro",exact:true}).click();
@@ -160,13 +160,28 @@ test("macro editor supports keyboard reordering and deletion uses an accessible 
   await page.getByLabel("Adicionar etapa manual").selectOption("system.open_url");
   await page.getByRole("button",{name:"Adicionar etapa",exact:true}).click();
   const firstHandle=page.getByRole("button",{name:/Arrastar etapa 1/});
+  await expect(page.getByRole("button",{name:"Mover etapa para cima"})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Mover etapa para baixo"})).toHaveCount(0);
   await firstHandle.focus();
   await expect(page.getByRole("tooltip")).toHaveText("Reordenar etapa 1 (Alt + ↑ / ↓)");
   await page.keyboard.press("Alt+ArrowDown");
   await expect(page.locator(".macroStepHeading b").first()).toContainText("Abrir navegador");
-  await expect(page.locator(".reorderAnnouncement")).toContainText("posição 2 de 2");
-  await page.locator(".macroStepList li").first().locator(".macroDragHandle").dragTo(page.locator(".macroStepList li").nth(1));
+  await expect(page.locator(".reorderAnnouncement")).toHaveText('Etapa “Abrir aplicativo” movida para a posição 2 de 2.');
+  await expect(page.locator(".macroStepList li").filter({hasText:"Abrir aplicativo"}).locator(".macroDragHandle")).toBeFocused();
+  const browserHandle=page.locator(".macroStepList li").filter({hasText:"Abrir navegador"}).locator(".macroDragHandle");
+  await expect(browserHandle).toHaveAttribute("aria-keyshortcuts","Alt+ArrowUp Alt+ArrowDown");
+  const targetStep=page.locator(".macroStepList li").filter({hasText:"Abrir aplicativo"});
+  await targetStep.scrollIntoViewIfNeeded();
+  const sourceBox=await browserHandle.boundingBox();
+  const targetBox=await targetStep.boundingBox();
+  if(!sourceBox||!targetBox)throw new Error("Não foi possível localizar as etapas para o arraste.");
+  await page.mouse.move(sourceBox.x+sourceBox.width/2,sourceBox.y+sourceBox.height/2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x+targetBox.width/2,targetBox.y+targetBox.height/2,{steps:8});
+  await page.mouse.up();
   await expect(page.locator(".macroStepHeading b").first()).toContainText("Abrir aplicativo");
+  await expect(page.locator(".reorderAnnouncement")).toHaveText('Etapa “Abrir navegador” movida para a posição 2 de 2.');
+  await expect(page.locator(".macroStepList li").filter({hasText:"Abrir navegador"}).locator(".macroDragHandle")).toBeFocused();
   await page.getByRole("button",{name:"Fechar painel"}).click();
   await page.getByRole("button",{name:"Ações de Rotina de teste",exact:true}).click();
   await page.getByRole("button",{name:"Excluir",exact:true}).click();
@@ -182,7 +197,7 @@ test("macro editor supports keyboard reordering and deletion uses an accessible 
 
 test("Macros mantêm criar e filtrar utilizáveis sem overflow nos breakpoints do produto",async({page},info)=>{
   await page.goto(url);
-  await page.evaluate(()=>{const api=(window as any).nexo;api.listAutomations=async()=>[];api.listAutomationRuns=async()=>[];});
+  await page.evaluate(()=>{const api=(window as any).nexo;api.listMacros=async()=>[];api.listMacroRuns=async()=>[];});
   await page.locator(".sidebar").getByRole("button",{name:"Macros",exact:true}).click();
   for(const viewport of [{width:800,height:700},{width:1024,height:768},{width:1280,height:800},{width:1440,height:900},{width:1920,height:1080}]){
     await page.setViewportSize(viewport);

@@ -148,7 +148,7 @@ export type MacroPreset = {
   description: string;
   icon: string;
   requiredCapabilities: MacroCapability[];
-  automation: {
+  macro: {
     name: string;
     description?: string;
     icon?: string;

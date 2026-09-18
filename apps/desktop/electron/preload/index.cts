@@ -1,10 +1,11 @@
 import type {
   ConversationPageOptions, ConversationMessagePage, ChatActionRequest, ChatActionOutcome, ChatResourceUpdatedEvent, ClarificationResolutionRequest,
   CreateAutomationV2Input, UpdateAutomationV2Input, AutomationExecutionResult, AutomationViewModel,
+  CreateMacroInput, UpdateMacroInput, MacroExecutionResult, MacroView, MacroRun, MacroPreset,
   EmailComposeDraftUpdateRequest, EmailComposeDraftCancelRequest, EmailComposeDraftSubmitRequest
 } from "@nexo/shared";
 import type { BrowserAgentControl, BrowserFrame, BrowserRunEvent } from "@nexo/shared/browser-agent";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("nexoOllama", {
   pull:(model:string)=>ipcRenderer.invoke("nexo:ollama:pull",model),
@@ -73,6 +74,7 @@ const api={
   setConnectionCapabilities:(id:string,capabilities:string[])=>ipcRenderer.invoke("nexo:connections:set-capabilities",id,capabilities),
   connectionDiagnostics:(id:string)=>ipcRenderer.invoke("nexo:connections:diagnostics",id),
   chooseDocument:()=>ipcRenderer.invoke("nexo:documents:choose"),
+  importDroppedDocument:(file:File)=>ipcRenderer.invoke("nexo:documents:import-dropped",webUtils.getPathForFile(file)),
   listRecentDocuments:()=>ipcRenderer.invoke("nexo:documents:list-recent"),
   getDocument:(id:string)=>ipcRenderer.invoke("nexo:documents:get",id),
   listDocumentVersions:(id:string)=>ipcRenderer.invoke("nexo:documents:list-versions",id),
@@ -119,6 +121,25 @@ const api={
   listAutomationPresets:()=>ipcRenderer.invoke("nexo:automation:presets"),
   listAutomationActions:()=>ipcRenderer.invoke("nexo:automation:action-catalog"),
   listAutomationTriggers:()=>ipcRenderer.invoke("nexo:automation:trigger-catalog"),
+  listMacros:():Promise<MacroView[]>=>ipcRenderer.invoke("nexo:macro:list"),
+  getMacro:(id:string):Promise<MacroView|undefined>=>ipcRenderer.invoke("nexo:macro:get",id),
+  createMacro:(data:CreateMacroInput):Promise<MacroView>=>ipcRenderer.invoke("nexo:macro:create",data),
+  createNaturalMacro:(data:{name:string;when:string;command:string;enabled?:boolean}):Promise<MacroView>=>ipcRenderer.invoke("nexo:macro:create-natural",data),
+  draftMacro:(data:{name?:string;description:string})=>ipcRenderer.invoke("nexo:macro:draft-natural",data),
+  updateMacro:(id:string,data:UpdateMacroInput):Promise<MacroView>=>ipcRenderer.invoke("nexo:macro:update",id,data),
+  duplicateMacro:(id:string):Promise<MacroView>=>ipcRenderer.invoke("nexo:macro:duplicate",id),
+  setMacroEnabled:(id:string,enabled:boolean):Promise<MacroView>=>ipcRenderer.invoke("nexo:macro:set-enabled",id,enabled),
+  removeMacro:(id:string):Promise<void>=>ipcRenderer.invoke("nexo:macro:remove",id),
+  runMacro:(id:string):Promise<MacroExecutionResult|MacroView>=>ipcRenderer.invoke("nexo:macro:run",id),
+  cancelMacro:(id:string):Promise<boolean>=>ipcRenderer.invoke("nexo:macro:cancel",id),
+  resumeMacroRun:(runId:string,mode:"retry"|"continue"):Promise<MacroRun>=>ipcRenderer.invoke("nexo:macro:resume-run",runId,mode),
+  testMacro:(id:string):Promise<MacroRun|undefined>=>ipcRenderer.invoke("nexo:macro:test",id),
+  testMacroDraft:(data:CreateMacroInput):Promise<MacroRun|undefined>=>ipcRenderer.invoke("nexo:macro:test-draft",data),
+  listMacroRuns:(id:string,limit=50):Promise<MacroRun[]>=>ipcRenderer.invoke("nexo:macro:runs",id,limit),
+  getMacroRun:(id:string):Promise<MacroRun|undefined>=>ipcRenderer.invoke("nexo:macro:run-get",id),
+  listMacroPresets:():Promise<MacroPreset[]>=>ipcRenderer.invoke("nexo:macro:presets"),
+  listMacroActions:()=>ipcRenderer.invoke("nexo:macro:action-catalog"),
+  listMacroTriggers:()=>ipcRenderer.invoke("nexo:macro:trigger-catalog"),
   chooseFolder:()=>ipcRenderer.invoke("nexo:choose-folder"),
   openPath:(path:string)=>ipcRenderer.invoke("nexo:open-path",path),
   openExternal:(url:string)=>ipcRenderer.invoke("nexo:open-external",url),

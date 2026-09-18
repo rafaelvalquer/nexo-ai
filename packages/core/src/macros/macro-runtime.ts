@@ -2,15 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { Automation, MacroCondition, MacroExecutionContext, MacroExecutionResult, MacroRun, Macro, MacroView, CreateMacroInput, UpdateMacroInput } from "@nexo/shared";
 import { DEFAULT_MACRO_OUTPUT, DEFAULT_MACRO_POLICY } from "@nexo/shared";
 import { NexoDatabase } from "../database/db.js";
-import { AUTOMATION_ACTION_CATALOG } from "../automation/actions/catalog.js";
-import { AutomationActionExecutor, resolveConfig } from "../automation/actions/executor.js";
-import { AutomationConditionEvaluator } from "../automation/conditions/evaluator.js";
-import { parseNaturalSchedule } from "../automation/natural-schedule.js";
-import { AUTOMATION_PRESETS } from "../automation/presets/index.js";
+import { MACRO_ACTION_CATALOG } from "./macro-action-catalog.js";
+import { MacroStepExecutor, resolveMacroConfig } from "./macro-step-executor.js";
+import { MacroConditionEvaluator } from "./macro-condition.js";
+import { parseMacroSchedule } from "./macro-schedule.js";
+import { MACRO_PRESETS } from "./macro-presets.js";
 import { MacroRepository } from "./macro-repository.js";
 import { MacroRunRepository } from "./macro-run-repository.js";
 import { MacroScheduler } from "./macro-scheduler.js";
-import { AUTOMATION_TRIGGER_CATALOG } from "../automation/triggers/catalog.js";
+import { MACRO_TRIGGER_CATALOG } from "./macro-trigger-catalog.js";
 import { MacroTriggerRegistry } from "./macro-trigger-registry.js";
 
 const RETRY_SAFE_ACTION_TYPES=new Set(["web.search","web.fetch","filesystem.list","system.snapshot","email.summary","calendar.summary","ai.summarize","ai.classify"]);
@@ -19,8 +19,8 @@ const RETRY_SAFE_ACTION_TYPES=new Set(["web.search","web.fetch","filesystem.list
 export class MacroRuntime {
   private repository: MacroRepository;
   private runs: MacroRunRepository;
-  private conditions = new AutomationConditionEvaluator();
-  private actions: AutomationActionExecutor;
+  private conditions = new MacroConditionEvaluator();
+  private actions: MacroStepExecutor;
   private scheduler: MacroScheduler;
   private smartTriggers: MacroTriggerRegistry;
   private runningAutomationIds = new Set<string>();
@@ -31,7 +31,7 @@ export class MacroRuntime {
   constructor(private db: NexoDatabase, executeCommand: (command:string,signal?:AbortSignal)=>Promise<unknown>, private startAutomationChat?: (input: { title: string; prompt: string; automationRunId: string }) => Promise<{ conversationId: string; taskId: string }>,executeRead: (name:string,input:Record<string,unknown>)=>Promise<import("@nexo/shared").ToolResult>=async()=>{throw new Error("Executor de leitura não configurado.");},private notify:(title:string,body:string)=>void=()=>undefined) {
     this.repository = new MacroRepository(db);
     this.runs = new MacroRunRepository(db);
-    this.actions = new AutomationActionExecutor(executeCommand);
+    this.actions = new MacroStepExecutor(executeCommand);
     const emit=(automation:Macro,payload:Record<string,unknown>)=>this.run(automation,payload);
     this.scheduler = new MacroScheduler(emit);
     this.smartTriggers = new MacroTriggerRegistry(this.repository,emit,executeRead);
@@ -39,11 +39,11 @@ export class MacroRuntime {
 
   list(): MacroView[] { return this.repository.list().map(automation => this.toViewModel(automation)); }
   get(id: string): MacroView | undefined { const automation = this.repository.get(id); return automation ? this.toViewModel(automation) : undefined; }
-  presets() { return structuredClone(AUTOMATION_PRESETS); }
-  actionCatalog() { return structuredClone(AUTOMATION_ACTION_CATALOG); }
-  triggerCatalog() { return structuredClone(AUTOMATION_TRIGGER_CATALOG); }
+  presets() { return structuredClone(MACRO_PRESETS); }
+  actionCatalog() { return structuredClone(MACRO_ACTION_CATALOG); }
+  triggerCatalog() { return structuredClone(MACRO_TRIGGER_CATALOG); }
   create(input: Omit<Automation,"id"|"lastRunAt"> | CreateMacroInput): MacroView { const automation=this.repository.create(isV2Input(input)?input:legacyInputToV2(input));if(automation.enabled)this.install(automation);return this.get(automation.id)??this.toViewModel(automation); }
-  createFromNatural(input:{name:string;when:string;command:string;enabled?:boolean}):MacroView{return this.create({name:input.name,prompt:input.command,enabled:input.enabled??true,trigger:{type:"schedule",mode:"cron",cron:parseNaturalSchedule(input.when)},conditions:[],conditionOperator:"AND",actions:[{id:"command",type:"nexo.command",config:{command:input.command}}],output:{type:"chat",conversationMode:"automation"},policy:DEFAULT_MACRO_POLICY});}
+  createFromNatural(input:{name:string;when:string;command:string;enabled?:boolean}):MacroView{return this.create({name:input.name,prompt:input.command,enabled:input.enabled??true,trigger:{type:"schedule",mode:"cron",cron:parseMacroSchedule(input.when)},conditions:[],conditionOperator:"AND",actions:[{id:"command",type:"nexo.command",config:{command:input.command}}],output:{type:"chat",conversationMode:"automation"},policy:DEFAULT_MACRO_POLICY});}
   update(id:string,patch:UpdateMacroInput):MacroView{this.uninstall(id);const automation=this.repository.update(id,patch);if(automation.enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
   duplicate(id:string):MacroView{return this.toViewModel(this.repository.duplicate(id));}
   setEnabled(id:string,enabled:boolean):MacroView{this.uninstall(id);const automation=this.repository.setEnabled(id,enabled);if(enabled)this.install(automation);return this.get(id)??this.toViewModel(automation);}
@@ -120,7 +120,7 @@ export class MacroRuntime {
         const action=automation.actions[index];const stepId=this.runs.startStep(context.runId,index+1,action.id,action.type);const controller=this.runControllers.get(automation.id);
         try{
           if(controller?.signal.aborted)throw controller.signal.reason??new Error("Execução cancelada.");
-          if(action.condition){const condition={...action.condition,...resolveConfig({value:action.condition.value},context)} as MacroCondition;if(!this.conditions.evaluate([condition],"AND",context)){context.actionResults[action.id]={ok:true,skipped:true,reason:"condition_not_met"};this.runs.finishStep(stepId,"skipped",{summary:"Condição não atendida; etapa ignorada."});this.runs.updateContext(context.runId,context,index+1);continue;}}
+          if(action.condition){const condition={...action.condition,...resolveMacroConfig({value:action.condition.value},context)} as MacroCondition;if(!this.conditions.evaluate([condition],"AND",context)){context.actionResults[action.id]={ok:true,skipped:true,reason:"condition_not_met"};this.runs.finishStep(stepId,"skipped",{summary:"Condição não atendida; etapa ignorada."});this.runs.updateContext(context.runId,context,index+1);continue;}}
           const execution=await this.executeWithRetry(automation,action.type,()=>this.executeStep(action,context,controller));
           if(execution.approvalId){this.runs.waitStep(stepId,execution.approvalId);this.runs.waitForApproval(context.runId,execution.approvalId,context,index+1);this.repository.updateRunState(automation.id,{lastRunAt:new Date().toISOString(),lastRunStatus:"waiting_approval",nextRunAt:this.scheduler.nextRun(automation)});this.watchApproval(execution.approvalId);return this.runs.get(context.runId);}
           context.actionResults[action.id]=execution.value;if(action.type==="notification.show"&&execution.value&&typeof execution.value==="object"){const notification=(execution.value as {notification?:{title?:unknown;content?:unknown}}).notification;if(notification)this.notify(typeof notification.title==="string"?notification.title:"Nexo AI",typeof notification.content==="string"?notification.content:"");}this.runs.finishStep(stepId,"success",{summary:summaryFor(execution.value)});this.runs.updateContext(context.runId,context,index+1);

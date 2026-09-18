@@ -5,37 +5,42 @@ import type { MacroStep, MacroCondition, MacroOutput, MacroPolicy, MacroTrigger,
 const TRIGGERS = new Set(["schedule","interval","manual","app-start","file.created","file.changed","file.deleted","email.received","calendar.before_event","calendar.event_started","system.threshold"]);
 const CONDITION_OPERATORS = new Set(["equals","notEquals","contains","notContains","startsWith","endsWith","greaterThan","lessThan","exists"]);
 
-/** @deprecated Use registerMacroIpc and the nexo:macro:* IPC channels. */
-export function registerAutomationV2Ipc(core: NexoCore): void {
-  ipcMain.handle("nexo:automation:create-v2",(_,value)=>core.macros.create(validateCreate(core,value)));
-  ipcMain.handle("nexo:automation:cancel",(_,id)=>core.macros.cancel(requireId(id)));
-  ipcMain.handle("nexo:automation:resume-run",(_,id,mode)=>{const runId=requireId(id);if(mode!=="retry"&&mode!=="continue")throw new Error("Ação de retomada inválida.");return core.macros.resumeFailedRun(runId,mode);});
-  ipcMain.handle("nexo:automation:draft-natural",(_,value)=>{const data=requireRecord(value,"Rascunho da macro");return core.draftMacroFromNatural(requireText(data.description,"Descrição",3000),data.name===undefined?undefined:requireText(data.name,"Nome",160));});
-  ipcMain.handle("nexo:automation:get",(_,id)=>core.macros.get(requireId(id)));
-  ipcMain.handle("nexo:automation:update",(_,id,value)=>{
+/** Canonical IPC surface for MacroEngine. Legacy automation channels remain as temporary aliases. */
+export function registerMacroIpc(core: NexoCore): void {
+  ipcMain.handle("nexo:macro:list",()=>core.macros.list());
+  ipcMain.handle("nexo:macro:create",(_,value)=>core.macros.create(validateCreate(core,value)));
+  ipcMain.handle("nexo:macro:create-natural",(_,value)=>{const data=requireRecord(value,"Rascunho da macro");return core.macros.createFromNatural({name:requireText(data.name,"Nome",160),when:requireText(data.when,"Horário",200),command:requireText(data.command,"Comando",4000),enabled:data.enabled===undefined?true:requireBoolean(data.enabled,"Status")});});
+  ipcMain.handle("nexo:macro:set-enabled",(_,id,enabled)=>core.macros.setEnabled(requireId(id),requireBoolean(enabled,"Status")));
+  ipcMain.handle("nexo:macro:remove",(_,id)=>core.macros.remove(requireId(id)));
+  ipcMain.handle("nexo:macro:run",(_,id)=>core.macros.runManual(requireId(id)));
+  ipcMain.handle("nexo:macro:cancel",(_,id)=>core.macros.cancel(requireId(id)));
+  ipcMain.handle("nexo:macro:resume-run",(_,id,mode)=>{const runId=requireId(id);if(mode!=="retry"&&mode!=="continue")throw new Error("Ação de retomada inválida.");return core.macros.resumeFailedRun(runId,mode);});
+  ipcMain.handle("nexo:macro:draft-natural",(_,value)=>{const data=requireRecord(value,"Rascunho da macro");return core.draftMacro(requireText(data.description,"Descrição",3000),data.name===undefined?undefined:requireText(data.name,"Nome",160));});
+  ipcMain.handle("nexo:macro:get",(_,id)=>core.macros.get(requireId(id)));
+  ipcMain.handle("nexo:macro:update",(_,id,value)=>{
     const automationId=requireId(id);
     const current=core.macros.get(automationId);
-    if(!current)throw new Error("Automação não encontrada.");
+    if(!current)throw new Error("Macro não encontrada.");
     const merged=validateCreate(core,{...pickEditable(current),...requireRecord(value,"Atualização")});
     return core.macros.update(automationId,merged as UpdateMacroInput);
   });
-  ipcMain.handle("nexo:automation:duplicate",(_,id)=>core.macros.duplicate(requireId(id)));
-  ipcMain.handle("nexo:automation:test",(_,id)=>core.macros.test(requireId(id)));
-  ipcMain.handle("nexo:automation:test-draft",(_,value)=>core.macros.testDraft(validateCreate(core,value)));
-  ipcMain.handle("nexo:automation:runs",(_,id,limit)=>core.macros.listRuns(requireId(id),Number.isInteger(limit)?Math.min(Math.max(Number(limit),1),100):50));
-  ipcMain.handle("nexo:automation:run-get",(_,id)=>core.macros.getRun(requireId(id)));
-  ipcMain.handle("nexo:automation:presets",()=>core.macros.presets());
-  ipcMain.handle("nexo:automation:action-catalog",()=>core.macros.actionCatalog());
-  ipcMain.handle("nexo:automation:trigger-catalog",()=>core.macros.triggerCatalog());
+  ipcMain.handle("nexo:macro:duplicate",(_,id)=>core.macros.duplicate(requireId(id)));
+  ipcMain.handle("nexo:macro:test",(_,id)=>core.macros.test(requireId(id)));
+  ipcMain.handle("nexo:macro:test-draft",(_,value)=>core.macros.testDraft(validateCreate(core,value)));
+  ipcMain.handle("nexo:macro:runs",(_,id,limit)=>core.macros.listRuns(requireId(id),Number.isInteger(limit)?Math.min(Math.max(Number(limit),1),100):50));
+  ipcMain.handle("nexo:macro:run-get",(_,id)=>core.macros.getRun(requireId(id)));
+  ipcMain.handle("nexo:macro:presets",()=>core.macros.presets());
+  ipcMain.handle("nexo:macro:action-catalog",()=>core.macros.actionCatalog());
+  ipcMain.handle("nexo:macro:trigger-catalog",()=>core.macros.triggerCatalog());
 }
 
 function validateCreate(core:NexoCore,value:unknown):CreateMacroInput {
-  const data=requireRecord(value,"Automação");
+  const data=requireRecord(value,"Macro");
   const name=requireText(data.name,"Nome",160);
   const description=optionalText(data.description,"Descrição",1200);
   const icon=optionalText(data.icon,"Ícone",80);
   const prompt=optionalText(data.prompt,"Solicitação",4000);
-  if(typeof data.enabled!=="boolean")throw new Error("Status da automação inválido.");
+  if(typeof data.enabled!=="boolean")throw new Error("Status da macro inválido.");
   const trigger=validateTrigger(data.trigger);
   const conditions=validateConditions(data.conditions);
   const conditionOperator=data.conditionOperator==="OR"?"OR":"AND";
@@ -57,8 +62,8 @@ function validateTrigger(value:unknown):MacroTrigger {
     if(!["cron","once","daily","weekdays","weekends","weekly","monthly","specific-days"].includes(mode))throw new Error("Modo de agendamento inválido.");
     const cron=optionalText(data.cron,"Cron",120)||undefined,at=optionalText(data.at,"Data",80)||undefined,time=optionalText(data.time,"Horário",5)||undefined;
     if(time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))throw new Error("Horário inválido.");
-    if(mode==="once"&&!at)throw new Error("Informe quando a automação deve executar.");
-    if(mode!=="cron"&&mode!=="once"&&!time)throw new Error("Informe o horário da automação.");
+    if(mode==="once"&&!at)throw new Error("Informe quando a macro deve executar.");
+    if(mode!=="cron"&&mode!=="once"&&!time)throw new Error("Informe o horário da macro.");
     if(mode==="cron"&&!cron)throw new Error("Agendamento inválido.");
     const daysOfWeek=Array.isArray(data.daysOfWeek)?data.daysOfWeek.map(item=>requireInteger(item,"Dia da semana",0,6)):undefined;
     const dayOfMonth=data.dayOfMonth===undefined?undefined:requireInteger(data.dayOfMonth,"Dia do mês",1,31);
@@ -89,16 +94,17 @@ function validateActions(value:unknown,allowed:Set<string>):MacroStep[]{
 }
 
 function validateOutput(value:unknown):MacroOutput {
-  if(value===undefined)return{type:"notification"};const data=requireRecord(value,"Saída");if(data.type==="notification"||data.type==="silent")return{type:data.type};if(data.type==="chat"){const mode=data.conversationMode;if(mode!=="automation"&&mode!=="existing")throw new Error("Destino de chat inválido.");return{type:"chat",conversationMode:mode};}throw new Error("Saída da automação inválida.");
+  if(value===undefined)return{type:"notification"};const data=requireRecord(value,"Saída");if(data.type==="notification"||data.type==="silent")return{type:data.type};if(data.type==="chat"){const mode=data.conversationMode;if(mode!=="automation"&&mode!=="existing")throw new Error("Destino de chat inválido.");return{type:"chat",conversationMode:mode};}throw new Error("Saída da macro inválida.");
 }
 function validatePolicy(value:unknown):MacroPolicy {
   if(value===undefined)return{maxConcurrentRuns:1,retries:{enabled:true,count:2},onRepeatedFailure:"pause"};const data=requireRecord(value,"Política"),retries=requireRecord(data.retries,"Retry");return{maxConcurrentRuns:1,retries:{enabled:retries.enabled!==false,count:requireInteger(retries.count??2,"Quantidade de retries",0,5)},onRepeatedFailure:data.onRepeatedFailure==="continue"?"continue":"pause"};
 }
 function pickEditable(value:Record<string,unknown>){return{name:value.name,description:value.description,icon:value.icon,prompt:value.prompt,enabled:value.enabled,trigger:value.trigger,conditions:value.conditions,conditionOperator:value.conditionOperator,actions:value.actions,output:value.output,policy:value.policy};}
-function requireId(value:unknown){return requireText(value,"ID da automação",200);}
+function requireId(value:unknown){return requireText(value,"ID da macro",200);}
+function requireBoolean(value:unknown,name:string){if(typeof value!=="boolean")throw new Error(`${name} inválido.`);return value;}
 function requireRecord(value:unknown,name:string):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw new Error(`${name} inválida.`);return value as Record<string,unknown>;}
 function requireText(value:unknown,name:string,max:number){if(typeof value!=="string"||!value.trim()||value.trim().length>max)throw new Error(`${name} inválido.`);return value.trim();}
 function optionalText(value:unknown,name:string,max:number){if(value===undefined||value===null||value==="")return undefined;if(typeof value!=="string"||value.trim().length>max)throw new Error(`${name} inválido.`);return value.trim();}
 function requireInteger(value:unknown,name:string,min:number,max:number){const number=Number(value);if(!Number.isInteger(number)||number<min||number>max)throw new Error(`${name} inválido.`);return number;}
 function requireNumber(value:unknown,name:string,min:number,max:number){const number=Number(value);if(!Number.isFinite(number)||number<min||number>max)throw new Error(`${name} inválido.`);return number;}
-function safeJsonValue(value:unknown):unknown{let encoded:string;try{encoded=JSON.stringify(value);}catch{throw new Error("Configuração contém valor não serializável.");}if(encoded.length>50000)throw new Error("Configuração da automação excede o limite permitido.");return JSON.parse(encoded) as unknown;}
+function safeJsonValue(value:unknown):unknown{let encoded:string;try{encoded=JSON.stringify(value);}catch{throw new Error("Configuração contém valor não serializável.");}if(encoded.length>50000)throw new Error("Configuração da macro excede o limite permitido.");return JSON.parse(encoded) as unknown;}

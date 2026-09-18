@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, FolderOpen, Globe2, Paperclip, Send, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
-import type { AutomationViewModel, DocumentRecord, NexoSettings } from "@nexo/shared";
+import { FileText, FolderOpen, Globe2, Paperclip, Send, Sparkles, Square, Upload, Zap, type LucideIcon } from "lucide-react";
+import type { MacroView, DocumentRecord, NexoSettings } from "@nexo/shared";
 import type { AssistantAttachment } from "../../../stores/assistant";
 import { useAutoGrowTextarea } from "../../../hooks/useAutoGrowTextarea";
 import { useChatKeyboard } from "../../../hooks/useChatKeyboard";
@@ -26,7 +26,7 @@ function expandCommand(value: string) {
   return prefix[command.toLowerCase()] ? `${prefix[command.toLowerCase()]}${query ? `: ${query}` : ""}` : value;
 }
 
-export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemove, onSend, onStop }: {
+export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemove, onSend, onStop, onDropFiles }: {
   attachments: AssistantAttachment[];
   busy: boolean;
   onAttach: () => void;
@@ -34,13 +34,16 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
   onRemove: (id: string) => void;
   onSend: (value: string) => Promise<boolean>;
   onStop: () => void;
+  onDropFiles: (files: File[]) => Promise<void>;
 }) {
   const [text, setText] = useState("");
   const [mentionChoices, setMentionChoices] = useState<MentionChoice[]>([]);
   const [mentionsLoading, setMentionsLoading] = useState(true);
   const [mentionContext, setMentionContext] = useState<{ query: string; start: number } | null>(null);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [selected, setSelected] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const dragDepth = useRef(0);
   useAutoGrowTextarea(ref, text);
   const stop = useCallback(() => onStop(), [onStop]);
   useChatKeyboard(ref, stop);
@@ -52,7 +55,7 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
     void Promise.all([
       read<NexoSettings | null>(() => window.nexo.getSettings(), null),
       read<DocumentRecord[]>(() => window.nexo.listRecentDocuments?.() ?? Promise.resolve([]), []),
-      read<AutomationViewModel[]>(() => window.nexo.listAutomations?.() ?? Promise.resolve([]), [])
+      read<MacroView[]>(() => window.nexo.listMacros?.() ?? Promise.resolve([]), [])
     ]).then(([settings, documents, macros]) => {
       if (!active) return;
       const folders: MentionChoice[] = (settings?.allowedRoots ?? []).map(root => ({
@@ -109,7 +112,12 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(nextCursor, nextCursor); });
   };
 
-  return <footer className="composerDock"><div className="chatColumn"><div className="composer">
+  return <footer className="composerDock"><div className="chatColumn"><div className={`composer${draggingFiles ? " isReceivingFiles" : ""}`}
+    onDragEnter={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); dragDepth.current += 1; setDraggingFiles(true); }}
+    onDragOver={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+    onDragLeave={event => { if (!Array.from(event.dataTransfer.types).includes("Files") || event.currentTarget.contains(event.relatedTarget as Node | null)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDraggingFiles(false); }}
+    onDrop={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); dragDepth.current = 0; setDraggingFiles(false); const files = Array.from(event.dataTransfer.files); if (files.length) void onDropFiles(files); }}>
+    {draggingFiles && <div className="composerDropOverlay" role="status"><Upload size={20}/><strong>Solte para anexar</strong><span>PDF, DOCX, TXT ou MD</span></div>}
     <AttachmentTray items={attachments} onRemove={onRemove}/>
     <textarea ref={ref} value={text} onChange={event => {
       const value = event.currentTarget.value;
