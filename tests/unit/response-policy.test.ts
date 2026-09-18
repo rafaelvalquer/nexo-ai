@@ -26,6 +26,11 @@ describe("responsePolicy", () => {
     }
   });
 
+  it("finaliza criação de arquivo e pasta de forma determinística, sem síntese pelo modelo", () => {
+    expect(responsePolicy(["create_text_file"])).toEqual({ mode: "deterministic", appendText: true });
+    expect(responsePolicy(["create_folder"])).toEqual({ mode: "deterministic", appendText: true });
+  });
+
   it("retorna mode synthesize e appendText true para ferramentas não-apresentação", () => {
     const policy = responsePolicy(["read_file"]);
     expect(policy.mode).toBe("synthesize");
