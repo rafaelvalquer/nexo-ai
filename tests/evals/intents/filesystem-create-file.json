@@ -1,0 +1,102 @@
+[
+  {
+    "input": "crie teste.txt em downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie o arquivo teste.txt na pasta downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie um arquivo chamado teste.txt em downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie teste.txt em downloads com conteúdo abc",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie teste.txt no download com o texto abc",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "gere o arquivo teste.txt nos downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "faça um arquivo teste.txt em downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "salve teste.txt em downloads com conteúdo abc",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie arquivo teste.md em downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie notas.txt dentro de downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "gere dados.csv em downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie teste123.txt na pasta download com o conteudo teste",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie arquivo vazio.txt no download",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "faça um arquivo chamado exemplo.txt nos downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "grave teste.txt em downloads contendo abc",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "escreva arquivo teste.txt em downloads com texto abc",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "criar arquivo teste.txt nos meus downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "gera teste.md na pasta downloads",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "crie log.txt dentro da pasta download",
+    "operation": "create_text_file",
+    "entities": {}
+  },
+  {
+    "input": "faça dados.csv no meu download",
+    "operation": "create_text_file",
+    "entities": {}
+  }
+]

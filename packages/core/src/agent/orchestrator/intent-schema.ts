@@ -35,6 +35,12 @@ export type DeferredAction =
   | {
       kind: "filesystem.trash";
       path: string;
+    }
+  | {
+      kind: "filesystem.write_text";
+      fileName: string;
+      content: string;
+      root?: string;
     };
 
 export type OrchestrationContext = {

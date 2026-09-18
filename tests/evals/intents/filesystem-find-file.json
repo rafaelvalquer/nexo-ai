@@ -1,0 +1,77 @@
+[
+  {
+    "input": "procure arquivo teste",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "procure teste.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "encontre teste.txt em downloads",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "busque o arquivo teste123.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "localize notas.md",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "ache dados.csv nos downloads",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "procure documento.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "encontre arquivo relatorio.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "busque teste sem extensão",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "procure teste em downloads",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "localize teste123.txt na pasta downloads",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "ache o arquivo vazio.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "encontre notas.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "procure meu_arquivo.txt",
+    "operation": "find_file",
+    "entities": {}
+  },
+  {
+    "input": "busque arquivo exemplo.md",
+    "operation": "find_file",
+    "entities": {}
+  }
+]

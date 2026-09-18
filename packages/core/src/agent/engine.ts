@@ -111,6 +111,7 @@ export class AgentEngine{
     // LLM plan. Mutations still go through executePlan and the regular policy.
     const deterministic=this.commandService.route(resolvedUserText,previous);
     if(deterministic.type!=="unknown"){
+      void this.commandService.evaluateShadow(resolvedUserText,deterministic,previous,hooks.signal).catch(()=>undefined);
       this.metrics?.record("agent.route",1,{route:deterministic.type==="chat"&&deterministic.stream?"llm":"deterministic"});
       this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.type});
       if(deterministic.type==="clarification"){
@@ -121,6 +122,18 @@ export class AgentEngine{
       if(deterministic.type==="tool"||deterministic.type==="macro")return this.executeDeterministicRoute(resolvedUserText,deterministic,hooks,context);
       if(deterministic.type==="chat"&&deterministic.response){hooks.onReplaceText?.(deterministic.response);hooks.onStatus?.("Resposta concluída.");return{text:deterministic.response,engine:"fast-path"};}
       if(deterministic.type==="chat"&&deterministic.stream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
+    }
+
+    const hybrid=await this.commandService.routeHybrid(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
+    if(hybrid.type!=="unknown"){
+      this.metrics?.record("agent.route",1,{route:"hybrid-intent"});
+      if(hybrid.type==="tool"||hybrid.type==="macro")return this.executeDeterministicRoute(resolvedUserText,hybrid,hooks,context);
+      if(hybrid.type==="chat"&&hybrid.response){hooks.onReplaceText?.(hybrid.response);hooks.onStatus?.("Preciso de uma confirmação de intenção.");return{text:hybrid.response,engine:"fast-path"};}
+      if(hybrid.type==="chat"&&hybrid.stream){
+        hooks.onStatus?.("Pedido informacional identificado. A IA local está gerando a resposta…");hooks.onReplaceText?.("");
+        try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}
+        catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
+      }
     }
 
     this.metrics?.record("agent.route",1,{route:this.agentLoopMode()==="legacy"?"llm":"agent"});
@@ -262,7 +275,7 @@ export class AgentEngine{
     const step:PlanStep=route.type==="macro"
       ?{tool:`macro_${route.operation}`,input:route.input,explanation:route.explanation}
       :{tool:route.tool,input:route.input,explanation:route.explanation,approval:route.approval,executionId:route.executionId};
-    const metadata:Pick<Plan,"origin"|"intent"|"deferredAction"|"responseMode">={origin:"fast",intent:route.type==="tool"?route.intent:undefined,responseMode:route.type==="tool"?route.responseMode:undefined};
+    const metadata:Pick<Plan,"origin"|"intent"|"deferredAction"|"responseMode">={origin:"fast",intent:route.type==="tool"?route.intent:undefined,deferredAction:route.type==="tool"?route.deferredAction:undefined,responseMode:route.type==="tool"?route.responseMode:undefined};
     return this.executeSteps(userText,[step],metadata,hooks,context);
   }
 

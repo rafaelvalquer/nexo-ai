@@ -10,6 +10,7 @@ export function materializeDeferredAction(action: DeferredAction, result: ToolRe
   if (action.kind === "email.bulk") return materializeEmail(action, result.data);
   if (action.kind === "calendar.delete") return materializeCalendarDelete(action, result.data);
   if (action.kind === "calendar.update") return materializeCalendarUpdate(action, result.data);
+  if (action.kind === "filesystem.write_text") return materializeFilesystemWrite(action, result.data);
   return materializeFilesystemTrash(action, result.data);
 }
 
@@ -84,6 +85,27 @@ function materializeCalendarUpdate(action: Extract<DeferredAction, { kind: "cale
   };
 }
 
+function materializeFilesystemWrite(action:Extract<DeferredAction,{kind:"filesystem.write_text"}>,data:unknown):MaterializedAction{
+  const matches=Array.isArray((data as any)?.matches)?(data as any).matches.filter((item:any)=>item&&typeof item.path==="string"):[];
+  if(!matches.length)return{direct:`Não encontrei ${action.fileName} nas pastas autorizadas. Nenhum arquivo foi alterado.`};
+  if(matches.length>1){
+    const list=matches.slice(0,10).map((item:any,index:number)=>`${index+1}. ${item.path}`).join("\n");
+    return{direct:`Encontrei ${matches.length} arquivos chamados ${action.fileName}. Para evitar alterar o arquivo errado, informe o caminho ou escolha um deles:\n${list}`};
+  }
+  const target=String(matches[0].path);
+  return{step:{
+    tool:"write_text_file",
+    input:{path:target,content:action.content},
+    explanation:`Aguardando confirmação para alterar ${path.basename(target)}…`,
+    approval:{
+      domain:"filesystem",actionType:"update",affectedCount:1,
+      preview:`Nome: ${path.basename(target)}\nCaminho: ${target}\nNovo conteúdo:\n${previewText(action.content)}`,
+      consequence:"O conteúdo atual do arquivo será substituído pelo novo conteúdo informado.",
+      expiresInMs:5*60_000
+    }
+  }};
+}
+
 function materializeFilesystemTrash(action: Extract<DeferredAction, { kind: "filesystem.trash" }>, data: unknown): MaterializedAction {
   const info = data && typeof data === "object" ? data as { size?: number; isDirectory?: boolean } : {};
   const name = path.basename(action.path);
@@ -118,3 +140,5 @@ function formatBytes(bytes: number) {
   while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
   return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[index]}`;
 }
+
+function previewText(value:string){return value.length<=1000?value:`${value.slice(0,1000)}\n… (${value.length-1000} caracteres adicionais)`;}

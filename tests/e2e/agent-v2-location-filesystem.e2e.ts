@@ -170,3 +170,127 @@ test("Agent V2 finds an extensionless filename across all authorized roots witho
     fs.rmSync(dataDir,{recursive:true,force:true});fs.rmSync(root,{recursive:true,force:true});
   }
 });
+
+
+test("Hybrid Intent resolves natural folder wording through structured Ollama and preserves approval", async () => {
+  test.setTimeout(120_000);
+  const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-hybrid-folder-db-"));
+  const root=fs.mkdtempSync(path.join(process.cwd(),".nexo-hybrid-folder-"));
+  const downloads=path.join(root,"Downloads");
+  const expected=path.join(downloads,"teste");
+  fs.mkdirSync(downloads,{recursive:true});
+  let structuredCalls=0,unexpectedChatCalls=0;
+
+  const ollama=http.createServer((request,response)=>{
+    response.setHeader("content-type","application/json");
+    if(request.url==="/api/tags"){response.end(JSON.stringify({models:[{name:"qwen3:1.7b"}]}));return;}
+    if(request.url!=="/api/chat"){response.statusCode=404;response.end("{}");return;}
+    let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{
+      const payload=JSON.parse(body);
+      if(payload.format){
+        structuredCalls++;
+        response.end(JSON.stringify({message:{content:JSON.stringify({
+          schemaVersion:1,domain:"filesystem",intent:"create",operation:"create_folder",
+          entities:{name:"teste",folder:"downloads"},referencesPreviousResult:false,
+          ambiguities:[],missing:[],modelConfidence:.99
+        })},done:true}));
+        return;
+      }
+      unexpectedChatCalls++;
+      response.end(JSON.stringify({message:{content:"Esta chamada não deveria ser necessária."},done:true}));
+    });
+  });
+  await new Promise<void>(resolve=>ollama.listen(0,"127.0.0.1",resolve));
+  const address=ollama.address();if(!address||typeof address==="string")throw new Error("Mock Ollama indisponível.");
+  const app=await electron.launch({
+    executablePath:path.resolve("node_modules/electron/dist/electron.exe"),
+    args:[path.resolve("apps/desktop")],
+    env:{...process.env,NEXO_DATA_DIR:dataDir,NEXO_CORE_PORT:"0",NEXO_OLLAMA_URL:`http://127.0.0.1:${address.port}`,NEXO_MODEL:"qwen3:1.7b",NEXO_SYSTEM_HOME:root,NEXO_SYSTEM_DOWNLOADS:downloads,NODE_ENV:"test"}
+  });
+  try{
+    const page=await app.firstWindow();await expect(page.locator("#root .app")).toBeVisible();
+    await page.evaluate(rootPath=>window.nexo.updateSettings({
+      allowedRoots:[rootPath],fileWritesEnabled:true,autonomy:"balanced",agentLoopMode:"full",agentLegacyFallbackEnabled:false,
+      hybridIntentResolverEnabled:true,hybridIntentShadowMode:false,hybridIntentFilesystemEnabled:true
+    }),downloads);
+    const conversation=await page.evaluate(()=>window.nexo.createConversation("Hybrid folder E2E"));
+    const task=await page.evaluate(id=>window.nexo.startChatTask(id,"faz uma pastinha chamada teste nos meus downloads",[]),conversation.id);
+    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("waiting_approval");
+    const approval=await page.evaluate(()=>window.nexo.listApprovals().then(rows=>rows.find((row:any)=>row.status==="pending")));
+    expect(approval?.toolName).toBe("create_folder");
+    expect(approval?.input?.path).toBe(expected);
+    expect(fs.existsSync(expected)).toBe(false);
+    await page.evaluate(id=>window.nexo.resolveApproval(id,true),approval!.id);
+    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("completed");
+    expect(fs.statSync(expected).isDirectory()).toBe(true);
+    expect(structuredCalls).toBe(1);
+    expect(unexpectedChatCalls).toBe(0);
+  }finally{
+    await app.close();await new Promise<void>(resolve=>ollama.close(()=>resolve()));
+    fs.rmSync(dataDir,{recursive:true,force:true});
+    if(!path.resolve(root).startsWith(`${path.resolve(process.cwd())}${path.sep}.nexo-hybrid-folder-`))throw new Error("Unsafe test cleanup");
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+test("Hybrid Intent finds one text file before write and only mutates after approval", async () => {
+  test.setTimeout(120_000);
+  const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-hybrid-write-db-"));
+  const root=fs.mkdtempSync(path.join(process.cwd(),".nexo-hybrid-write-"));
+  const downloads=path.join(root,"Downloads");
+  const target=path.join(downloads,"teste123.txt");
+  fs.mkdirSync(downloads,{recursive:true});fs.writeFileSync(target,"teste","utf8");
+  let structuredCalls=0,unexpectedChatCalls=0;
+
+  const ollama=http.createServer((request,response)=>{
+    response.setHeader("content-type","application/json");
+    if(request.url==="/api/tags"){response.end(JSON.stringify({models:[{name:"qwen3:1.7b"}]}));return;}
+    if(request.url!=="/api/chat"){response.statusCode=404;response.end("{}");return;}
+    let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{
+      const payload=JSON.parse(body);
+      if(payload.format){
+        structuredCalls++;
+        response.end(JSON.stringify({message:{content:JSON.stringify({
+          schemaVersion:1,domain:"filesystem",intent:"update",operation:"write_text_file",
+          entities:{file:"teste123.txt",content:"teste modificação"},referencesPreviousResult:false,
+          ambiguities:[],missing:[],modelConfidence:.99
+        })},done:true}));
+        return;
+      }
+      unexpectedChatCalls++;
+      response.end(JSON.stringify({message:{content:"Esta chamada não deveria ser necessária."},done:true}));
+    });
+  });
+  await new Promise<void>(resolve=>ollama.listen(0,"127.0.0.1",resolve));
+  const address=ollama.address();if(!address||typeof address==="string")throw new Error("Mock Ollama indisponível.");
+  const app=await electron.launch({
+    executablePath:path.resolve("node_modules/electron/dist/electron.exe"),
+    args:[path.resolve("apps/desktop")],
+    env:{...process.env,NEXO_DATA_DIR:dataDir,NEXO_CORE_PORT:"0",NEXO_OLLAMA_URL:`http://127.0.0.1:${address.port}`,NEXO_MODEL:"qwen3:1.7b",NEXO_SYSTEM_HOME:root,NEXO_SYSTEM_DOWNLOADS:downloads,NODE_ENV:"test"}
+  });
+  try{
+    const page=await app.firstWindow();await expect(page.locator("#root .app")).toBeVisible();
+    await page.evaluate(rootPath=>window.nexo.updateSettings({
+      allowedRoots:[rootPath],fileWritesEnabled:true,autonomy:"balanced",agentLoopMode:"full",agentLegacyFallbackEnabled:false,
+      hybridIntentResolverEnabled:true,hybridIntentShadowMode:false,hybridIntentFilesystemEnabled:true
+    }),downloads);
+    const conversation=await page.evaluate(()=>window.nexo.createConversation("Hybrid write E2E"));
+    const task=await page.evaluate(id=>window.nexo.startChatTask(id,"alterar o conteudo do arquivo teste123.txt para teste modificação",[]),conversation.id);
+    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("waiting_approval");
+    expect(fs.readFileSync(target,"utf8")).toBe("teste");
+    const approval=await page.evaluate(()=>window.nexo.listApprovals().then(rows=>rows.find((row:any)=>row.status==="pending")));
+    expect(approval?.toolName).toBe("write_text_file");
+    expect(approval?.input).toMatchObject({path:target,content:"teste modificação"});
+    expect(approval?.preview).toContain("Novo conteúdo");
+    await page.evaluate(id=>window.nexo.resolveApproval(id,true),approval!.id);
+    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("completed");
+    expect(fs.readFileSync(target,"utf8")).toBe("teste modificação");
+    expect(structuredCalls).toBe(1);
+    expect(unexpectedChatCalls).toBe(0);
+  }finally{
+    await app.close();await new Promise<void>(resolve=>ollama.close(()=>resolve()));
+    fs.rmSync(dataDir,{recursive:true,force:true});
+    if(!path.resolve(root).startsWith(`${path.resolve(process.cwd())}${path.sep}.nexo-hybrid-write-`))throw new Error("Unsafe test cleanup");
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
