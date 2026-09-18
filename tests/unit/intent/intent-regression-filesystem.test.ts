@@ -13,6 +13,13 @@ const folderIntent:CanonicalIntent={schemaVersion:1,domain:"filesystem",intent:"
 const writeIntent:CanonicalIntent={schemaVersion:1,domain:"filesystem",intent:"update",operation:"write_text_file",entities:{file:{value:"teste123.txt",source:"user",confidence:.99},content:{value:"teste modificação",source:"user",confidence:.99}},referencesPreviousResult:false,ambiguities:[],missing:[],source:"llm",diagnostics:{rawModelConfidence:.99,resolverVersion:"test"}};
 
 describe("filesystem hybrid regression",()=>{
+  it("não transforma destino não reconhecido em nome de pasta relativo",()=>{
+    const service=new CommandService(registry,()=>[root]);
+    const routed=service.route("crie a pasta teste dentro da pasta downloads");
+    expect(routed).toMatchObject({type:"tool",tool:"create_folder",input:{path:path.join(root,"teste")}});
+    if(routed.type==="tool")expect(String(routed.input.path)).not.toContain("teste dentro da pasta");
+  });
+
   it("mantém o fast path existente como prioridade",()=>{
     const service=new CommandService(registry,()=>[root]);
     expect(service.route("crie teste.txt em Downloads")).toMatchObject({type:"tool",tool:"create_text_file"});
