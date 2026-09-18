@@ -127,6 +127,28 @@ test("catálogo de gadgets usa NexoDrawer e restaura foco ao fechar com Escape",
   await page.keyboard.press("Escape");await expect(drawer).not.toBeVisible();await expect(opener).toBeFocused();
 });
 
+test("catálogo lazy anuncia e mostra skeleton enquanto carrega",async({page})=>{
+  let releaseChunk!:()=>void;
+  let markChunkRequested!:()=>void;
+  const chunkGate=new Promise<void>(resolve=>{releaseChunk=resolve;});
+  const chunkRequested=new Promise<void>(resolve=>{markChunkRequested=resolve;});
+  await page.route("**/components/dashboard/GadgetCatalog.tsx*",async route=>{markChunkRequested();await chunkGate;await route.continue();});
+  try{
+    await page.goto(url);
+    await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+    await page.locator(".dashboardAddButton").click();
+    await chunkRequested;
+    const loading=page.getByRole("status",{name:"Carregando catálogo de gadgets"});
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveAttribute("aria-busy","true");
+    await expect(page.getByRole("dialog",{name:"Adicionar gadget"})).toBeVisible();
+    await expect(page.locator(".dashboardCatalogLoadingRow")).toHaveCount(5);
+  }finally{releaseChunk();}
+  await expect(page.getByRole("dialog",{name:"Adicionar gadget"})).toBeVisible();
+  await expect(page.locator(".gadgetCatalog")).toBeVisible();
+  await expect(page.locator(".dashboardCatalogLoading")).toHaveCount(0);
+});
+
 test("adiciona E-mail e Agenda pelo catálogo e restaura layout no reload",async({page})=>{
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();await expect(page.getByRole("heading",{name:/Meu dashboard/})).toBeVisible();
   await expect(page.getByText("Tech Pulse")).toHaveCount(0);const addGadget=page.locator(".dashboardAddButton");await expect(addGadget).toBeVisible();

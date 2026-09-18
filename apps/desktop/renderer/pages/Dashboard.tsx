@@ -8,13 +8,29 @@ import { useVisualStore } from "../stores/visual";
 import { useDeveloperDiagnosticsEnabled } from "../hooks/useDeveloperDiagnostics";
 import { userFacingError } from "../utils/user-facing-error";
 import { Tooltip } from "../components/ui/Tooltip";
+import { NexoDrawer } from "../components/ui/NexoDrawer";
+import { Skeleton } from "../components/ui/Skeleton";
 import type { DashboardGadgetInstance, GadgetSize } from "@nexo/shared";
 import "./dashboard.css";
 import "./dashboard-tokens.css";
 import "./dashboard-motion.css";
+import "./dashboard-catalog-loading.css";
 
 const NexoOrb = lazy(() => import("../components/ai/NexoOrb").then(module => ({ default: module.NexoOrb })));
 const GadgetCatalog = lazy(() => import("../components/dashboard/GadgetCatalog").then(module => ({ default: module.GadgetCatalog })));
+
+function GadgetCatalogLoading({ initial, close }: { initial?: DashboardGadgetInstance; close: () => void }) {
+  const label = initial ? "Carregando configuração do gadget" : "Carregando catálogo de gadgets";
+  return <NexoDrawer open title={initial ? "Carregando configuração" : "Adicionar gadget"} eyebrow="PERSONALIZE SEU ESPAÇO" onClose={close} className="dashboardCatalogLoading">
+    <div className="dashboardCatalogLoadingBody" role="status" aria-busy="true" aria-label={label}>
+      <span className="dashboardCatalogLoadingAnnouncement">{initial ? "Preparando a configuração…" : "Preparando o catálogo de gadgets…"}</span>
+      {initial ? <div className="dashboardCatalogLoadingSetup"><Skeleton className="dashboardCatalogLoadingParagraph"/><Skeleton className="dashboardCatalogLoadingField"/><Skeleton className="dashboardCatalogLoadingField"/><div><Skeleton className="dashboardCatalogLoadingButton"/><Skeleton className="dashboardCatalogLoadingButton dashboardCatalogLoadingButtonPrimary"/></div></div> : <>
+        <Skeleton className="dashboardCatalogLoadingSearch"/>
+        <div className="dashboardCatalogLoadingGroup"><Skeleton className="dashboardCatalogLoadingLabel"/>{[0,1,2,3,4].map(index=><div className="dashboardCatalogLoadingRow" key={index}><Skeleton className="dashboardCatalogLoadingIcon"/><span><Skeleton className="dashboardCatalogLoadingTitle"/><Skeleton className="dashboardCatalogLoadingDescription"/></span><Skeleton className="dashboardCatalogLoadingAction"/></div>)}</div>
+      </>}
+    </div>
+  </NexoDrawer>;
+}
 
 export function Dashboard(){
   const {layout,catalog,data,loading,error,editing,load,refresh,add,remove,configure,resize,reorder,setEditing}=useDashboardStore(),setPage=useAppStore(state=>state.setPage),status=useAppStore(state=>state.status) as any,tasks=useAssistantStore(state=>state.tasks),setVisual=useVisualStore(state=>state.set),diagnostics=useDeveloperDiagnosticsEnabled();
@@ -42,6 +58,6 @@ export function Dashboard(){
       </div>}
     </section>
     <footer className="dashboardPageFooter"><span><Command size={12}/> NEXO DESKTOP</span><span>LOCAL-FIRST INTELLIGENCE <i>·</i> SOB SEU CONTROLE</span><button onClick={()=>setPage("Configurações")}>Configurações <ArrowUpRight size={12}/></button></footer>
-    {(catalogOpen||configuring)&&<Suspense fallback={null}><GadgetCatalog catalog={catalog} initial={configuring} close={()=>{setCatalogOpen(false);setConfiguring(undefined);}} add={add} save={configure}/></Suspense>}
+    {(catalogOpen||configuring)&&<Suspense fallback={<GadgetCatalogLoading initial={configuring} close={()=>{setCatalogOpen(false);setConfiguring(undefined);}}/>}><GadgetCatalog catalog={catalog} initial={configuring} close={()=>{setCatalogOpen(false);setConfiguring(undefined);}} add={add} save={configure}/></Suspense>}
   </div>;
 }
