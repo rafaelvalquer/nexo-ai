@@ -113,10 +113,12 @@ test("dangerous settings actions use an accessible confirmation drawer",async({p
 
 test("the settings confirmation drawer fits narrow screens without horizontal overflow",async({page},testInfo)=>{
   await page.setViewportSize({width:390,height:844});
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.goto(url);
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
   await page.getByRole("button",{name:"Limpar memória"}).click();
   await expect(page.getByRole("dialog",{name:"Limpar memória?"})).toBeVisible();
+  await expect.poll(()=>page.locator(".nexoDrawerOverlay").evaluate(element=>getComputedStyle(element).backdropFilter)).toBe("blur(8px)");
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath("settings-confirmation-mobile.png")});
 });

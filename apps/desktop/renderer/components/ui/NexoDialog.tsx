@@ -41,7 +41,7 @@ export function NexoDialog({ open, title, eyebrow, onClose, children, className 
 
   return createPortal(<AnimatePresence>
     {open && <motion.div className="nexoDialogOverlay" key="overlay" role="presentation"
-      initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      initial={reducedMotion ? false : { opacity: 0, backdropFilter: "blur(0px)" }} animate={{ opacity: 1, backdropFilter: `blur(${motionTokens.blur.backdrop}px)` }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, backdropFilter: "blur(0px)" }}
       transition={{ duration: reducedMotion ? 0 : motionTokens.duration.fast / 1000, ease: motionTokens.ease.out }}
       onMouseDown={event => { if (event.target === event.currentTarget) closeHandler.current(); }}>
       <motion.section ref={panelRef} className={`nexoDialogPanel ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
