@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 
-test("Agent V2 resolves Downloads and creates an empty text file deterministically", async () => {
+test("Agent V2 requires approval in balanced mode and creates an empty text file without synthesis", async () => {
   test.setTimeout(120_000);
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-v2-location-db-"));
   const root = fs.mkdtempSync(path.join(process.cwd(), ".nexo-agent-v2-location-"));
@@ -53,7 +53,7 @@ test("Agent V2 resolves Downloads and creates an empty text file deterministical
   try {
     const page = await app.firstWindow();
     await expect(page.locator("#root .app")).toBeVisible();
-    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, autonomy: "cautious", agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
+    await page.evaluate(rootPath => window.nexo.updateSettings({ allowedRoots: [rootPath], fileWritesEnabled: true, autonomy: "balanced", agentLoopMode: "full", agentLegacyFallbackEnabled: false }), root);
     const conversation = await page.evaluate(() => window.nexo.createConversation("Location filesystem E2E"));
     const task = await page.evaluate(id => window.nexo.startChatTask(id, "Crie teste.txt em Downloads\\NexoTeste", []), conversation.id);
 
@@ -61,6 +61,9 @@ test("Agent V2 resolves Downloads and creates an empty text file deterministical
     const approval = await page.evaluate(() => window.nexo.listApprovals().then(rows => rows.find((row: any) => row.status === "pending")));
     expect(approval?.toolName).toBe("create_text_file");
     expect(approval?.input?.path).toBe(expected);
+    expect(approval?.reason).toBe("Criar arquivo teste.txt");
+    expect(approval?.preview).toContain("Nome: teste.txt");
+    expect(approval?.preview).toContain(`Caminho: ${expected}`);
     expect(fs.existsSync(expected)).toBe(false);
 
     await page.evaluate(id => window.nexo.resolveApproval(id, true), approval!.id);
