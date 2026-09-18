@@ -7,10 +7,39 @@ test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("app
 test.afterAll(async()=>{await server?.close();});
 
 test("Dashboard usa fallback neural sem átomo e mostra cinco atalhos",async({page})=>{
+  let orbSceneRequested=false;
+  page.on("request",request=>{if(request.url().includes("/components/ai/orb/OrbScene.tsx"))orbSceneRequested=true;});
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
-  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback, .nucleusCanvas").first()).toBeVisible();
+  const palette=await page.locator(".dashboardPage").evaluate(node=>({violet:getComputedStyle(node).getPropertyValue("--dash-violet").trim(),token:getComputedStyle(document.documentElement).getPropertyValue("--nexo-violet").trim(),hero:getComputedStyle(document.querySelector(".dashboardHero")!).backgroundImage}));
+  expect(palette.violet).toBe(palette.token);expect(palette.hero).toContain("radial-gradient");
+  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback")).toBeVisible();await expect(page.locator(".nucleusCanvas")).toHaveCount(0);expect(orbSceneRequested).toBe(false);
+  const orb=page.locator(".nexoNucleus");await expect(orb).toHaveCSS("--nucleus-core","#765cff");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
+  await expect(orb).toHaveCSS("--nucleus-core","#3bd89f");await expect(orb).toHaveCSS("--nucleus-ring","#8cfdca");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
   await page.getByRole("button",{name:"Explorar núcleo"}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
+});
+
+test("a troca para uma rota lazy mostra skeleton contextual e acessível",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  let releaseChunk!:()=>void;
+  let markChunkRequested!:()=>void;
+  const chunkGate=new Promise<void>(resolve=>{releaseChunk=resolve;});
+  const chunkRequested=new Promise<void>(resolve=>{markChunkRequested=resolve;});
+  await page.route("**/pages/Automations.tsx*",async route=>{markChunkRequested();await chunkGate;await route.continue();});
+  try{
+    await page.goto(url);
+    await page.locator(".sidebar").getByRole("button",{name:"Macros",exact:true}).click();
+    await chunkRequested;
+    const loading=page.getByRole("status",{name:"Carregando Macros"});
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveAttribute("aria-busy","true");
+    const skeletons=page.locator(".routeLoadingMacroGrid .routeLoadingMacroCard");
+    await expect(skeletons).toHaveCount(3);
+    await expect.poll(()=>skeletons.first().evaluate(element=>getComputedStyle(element).animationName)).toBe("none");
+  }finally{releaseChunk();}
+  await expect(page.getByRole("heading",{name:"Macros",exact:true})).toBeVisible();
 });
 
 test("dashboard refresh tooltip appears on keyboard focus and hover",async({page})=>{
@@ -86,8 +115,15 @@ test("catálogo de gadgets usa NexoDrawer e restaura foco ao fechar com Escape",
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
   const opener=page.locator(".dashboardAddButton");await opener.click();
   const drawer=page.getByRole("dialog",{name:"Adicionar gadget"});await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole("button",{name:"Fechar painel"})).toBeFocused();
+  const firstFocusable=drawer.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").first();
+  const lastFocusable=drawer.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").last();
+  await expect(firstFocusable).toHaveAccessibleName("Fechar painel");
+  await expect(firstFocusable).toBeFocused();
   await page.screenshot({path:testInfo.outputPath("dashboard-gadget-drawer.png")});
+  await page.keyboard.press("Shift+Tab");await expect(lastFocusable).toBeFocused();
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
+  await page.locator("#page-content").evaluate(element=>(element as HTMLElement).focus());
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
   await page.keyboard.press("Escape");await expect(drawer).not.toBeVisible();await expect(opener).toBeFocused();
 });
 

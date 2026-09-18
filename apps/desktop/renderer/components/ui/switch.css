@@ -60,7 +60,7 @@
 }
 
 .uiSwitchInput:checked + .uiSwitchTrack .uiSwitchThumb {
-  background: var(--nexo-text-on-accent, #fff);
+  background: var(--nexo-text-on-violet);
   transform: translateX(16px);
 }
 

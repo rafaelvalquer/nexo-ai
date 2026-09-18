@@ -82,7 +82,7 @@ test("file, folder, calendar and generic cards preserve keyboard controls and le
   await expect(page.locator(".resourceCard")).toHaveCount(4);await expect(page.getByText("Mensagem antiga",{exact:true})).toBeVisible();await expect(page.getByText("nunca exibir")).toHaveCount(0);
   const buttons=page.locator(".resourceCardActions button");
   const expected=new Set(await buttons.evaluateAll(elements=>elements.map(element=>element.getAttribute("aria-label"))));
-  await buttons.first().focus();const visited=new Set<string>();
+  await buttons.first().focus();await expect(page.getByRole("tooltip")).toHaveText(await buttons.first().getAttribute("aria-label")??"");const visited=new Set<string>();
   for(let index=0;index<90&&visited.size<expected.size;index++){
     const label=await page.evaluate(()=>document.activeElement?.classList.contains("resourceActionButton")?document.activeElement.getAttribute("aria-label"):null);
     if(label)visited.add(label);await page.keyboard.press("Tab");
@@ -115,9 +115,40 @@ test("browser preview uses the shared accessible dialog and restores focus",asyn
   const dialog=page.getByRole("dialog",{name:"Nexo Browser"});
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText("Comparando resultados",{exact:true})).toBeVisible();
-  await expect(dialog.getByRole("button",{name:"Fechar diálogo"})).toBeFocused();
+  const firstFocusable=dialog.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").first();
+  const lastFocusable=dialog.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").last();
+  await expect(firstFocusable).toHaveAccessibleName("Fechar diálogo");
+  await expect(firstFocusable).toBeFocused();
+  await page.keyboard.press("Shift+Tab");await expect(lastFocusable).toBeFocused();
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
+  await page.locator("#page-content").evaluate(element=>(element as HTMLElement).focus());
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
   await page.screenshot({path:info.outputPath("browser-preview-dialog.png")});
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(expand).toBeFocused();
+});
+
+test("browser and email review auto-scroll without animation when reduced motion is active",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  const startedAt=new Date().toISOString(),run={id:"browser-reduced-motion",taskId:"task-browser-reduced-motion",conversationId:"preview-1",request:"Pesquisar documentação",status:"running",mode:"research",allowedDomains:["example.com"],currentUrl:"https://example.com/docs",pageTitle:"Documentação",currentStep:"Abrindo fonte",stepCount:1,startedAt};
+  const messages=[{id:"reduced-motion-blocks",conversationId:"preview-1",role:"assistant",content:"Revisões pendentes",createdAt:startedAt,blocks:[{id:"browser-reduced",version:1,type:"browser_run",runId:run.id,title:run.request,status:run.status,url:run.currentUrl,pageTitle:run.pageTitle,step:run.currentStep,startedAt},{id:"email-reduced",version:1,type:"email_compose_review",draftId:"draft-reduced",status:"review",fields:{to:["ana@example.com"],subject:"Resumo",bodyText:"Conteúdo para revisar"}}]}];
+  await page.evaluate(async({messages,run,modulePath})=>{
+    const api=(window as any).nexo;
+    const originalScrollIntoView=HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView=function(options?:any){if(this.classList.contains("browserRunBlock")||this.classList.contains("emailComposeReview")){const calls=(window as any).__reducedScrollCalls??=[];calls.push({target:this.className,behavior:options?.behavior??"auto"});(window as any).__reducedScrollCalls=calls;}return originalScrollIntoView.call(this,options);};
+    api.conversationMessages=async()=>structuredClone(messages);
+    api.getBrowserRun=async()=>structuredClone(run);api.getBrowserRunEvents=async()=>[];api.onBrowserRunEvent=()=>()=>{};api.subscribeBrowserFrames=()=>()=>{};
+    api.getEmailDraft=async()=>({id:"draft-reduced",conversationId:"preview-1",to:["ana@example.com"],subject:"Resumo",bodyText:"Conteúdo para revisar",version:1,status:"review",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+    const{useAssistantStore}=await import(modulePath);await useAssistantStore.getState().sync();
+  },{messages,run,modulePath:"/stores/assistant.ts"});
+  await expect(page.locator(".browserRunBlock")).toBeVisible();
+  await expect(page.locator(".emailComposeReview")).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__reducedScrollCalls?.length??0)).toBe(2);
+  const calls=await page.evaluate(()=>(window as any).__reducedScrollCalls as {target:string;behavior:string}[]);
+  expect(calls.map(call=>call.target).sort()).toEqual(["browserRunBlock running","emailComposeReview"].sort());
+  expect(calls.every(call=>call.behavior==="auto")).toBe(true);
+  const removeRecipient=page.getByRole("button",{name:"Remover ana@example.com"});
+  await removeRecipient.focus();
+  await expect(page.getByRole("tooltip")).toHaveText("Remover ana@example.com");
 });

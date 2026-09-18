@@ -48,11 +48,41 @@
   max-width: 620px;
   margin: 20px 0;
   padding: 10px 12px;
-  border: 1px solid #293343;
+  border: 1px solid var(--nexo-border);
   border-radius: 10px;
-  background: #10141a;
-  color: #8f9bae;
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text-secondary);
 }
+
+.toolCatalogControls { display:flex; align-items:center; gap:10px; }
+.toolCatalogControls .toolSearch { flex:1; margin:20px 0; }
+.toolRefresh,.toolStale button,.toolLoadError button,.toolEmpty button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:0 11px; border:1px solid var(--nexo-border); border-radius:9px; color:var(--nexo-text-secondary); background:var(--nexo-surface-2); font-size:11px; cursor:pointer; }
+.toolRefresh:hover,.toolStale button:hover,.toolLoadError button:hover,.toolEmpty button:hover { color:var(--nexo-text); border-color:var(--nexo-border-strong); }
+.toolRefresh:disabled,.toolStale button:disabled,.toolLoadError button:disabled,.toolEmpty button:disabled { opacity:.6; cursor:wait; }
+.toolRefreshingIcon { animation:toolCatalogSpin 900ms linear infinite; }
+.toolRefreshStatus { display:block; margin:0 0 12px; color:var(--nexo-text-muted); font-size:11px; }
+.toolStale { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:10px 0 16px; padding:11px 13px; border:1px solid color-mix(in srgb,var(--nexo-warning) 25%,transparent); border-radius:10px; color:var(--nexo-text-secondary); background:color-mix(in srgb,var(--nexo-warning) 7%,var(--nexo-surface-1)); font-size:11px; }
+.toolStale button { flex:none; }
+.toolLoadError,.toolEmpty { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:13px; margin:18px 0; padding:18px; border:1px solid var(--nexo-border); border-radius:13px; background:var(--nexo-surface-1); }
+.toolLoadError { border-color:color-mix(in srgb,var(--nexo-danger) 28%,var(--nexo-border)); }
+.toolLoadError>svg { color:var(--nexo-danger); }
+.toolEmpty>svg { color:var(--nexo-violet); }
+.toolLoadError h2,.toolEmpty h2 { margin:0 0 5px; color:var(--nexo-text); font-size:14px; font-weight:550; }
+.toolLoadError p,.toolEmpty p { margin:0; color:var(--nexo-text-secondary); font-size:11px; line-height:1.5; }
+.toolEmpty { grid-template-columns:auto minmax(0,1fr); }
+.toolEmpty h2,.toolEmpty p { grid-column:2; }
+.toolEmpty button { grid-column:2; justify-self:start; }
+.toolLoadingGrid { margin:18px 0; }
+.toolSkeletonCard { display:grid; align-content:start; gap:11px; min-height:154px; padding:15px; border:1px solid var(--nexo-border); border-radius:13px; background:var(--nexo-surface-1); }
+.toolSkeletonTitle { width:58%; height:15px; }
+.toolSkeletonLine { width:92%; height:10px; }
+.toolSkeletonLine.short { width:67%; }
+.toolSkeletonFooter { width:100%; height:26px; margin-top:16px; }
+.toolNoResults { margin:18px 0; color:var(--nexo-text-muted); font-size:12px; }
+.toolDiagnosticError { display:block; margin:6px 0; color:var(--nexo-text-muted); font-size:10px; }
+@keyframes toolCatalogSpin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .toolRefreshingIcon { animation:none; } }
+@media(max-width:640px) { .toolCatalogControls { align-items:stretch; } .toolCatalogControls .toolSearch { min-width:0; } .toolCatalogControls .toolRefresh { width:38px; flex:none; overflow:hidden; font-size:0; padding:0; } .toolStale { align-items:flex-start; flex-direction:column; } .toolLoadError { grid-template-columns:auto minmax(0,1fr); } .toolLoadError button { grid-column:2; justify-self:start; } }
 
 .toolSearch input {
   flex: 1;
@@ -87,26 +117,26 @@
 
 .toolCard {
   padding: 15px;
-  border: 1px solid #252e3b;
+  border: 1px solid var(--nexo-border);
   border-radius: 13px;
-  background: linear-gradient(145deg,#131923,#0f131a);
+  background: var(--nexo-surface-1);
 }
 
 .toolCardTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #aaa0ff;
+  color: var(--nexo-violet);
 }
 
 .toolCardTitle code {
-  color: #e3e8f2;
+  color: var(--nexo-text);
   font-size: 13px;
 }
 
 .toolCard p {
   min-height: 38px;
-  color: #9ba6b7;
+  color: var(--nexo-text-secondary);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -116,7 +146,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 9px;
-  border-top: 1px solid #252c38;
+  border-top: 1px solid var(--nexo-border);
   padding-top: 10px;
 }
 
@@ -124,7 +154,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #9da9bc;
+  color: var(--nexo-text-secondary);
   font-size: 11px;
 }
 

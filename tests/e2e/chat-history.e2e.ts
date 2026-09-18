@@ -51,3 +51,25 @@ test("allows retry and keeps the reader anchored while another response streams"
   await expect(page.locator(".chatMessage.streaming")).toHaveCount(1);
   await expect.poll(async()=>Math.abs((await page.locator('[data-message-id="history-0501"]').evaluate(node=>node.getBoundingClientRect().top))-before)).toBeLessThan(3);
 });
+
+test.describe("reduced motion chat navigation",()=>{
+test.use({reducedMotion:"reduce"});
+test("makes the jump-to-latest action immediate",async({page})=>{
+  const viewport=page.locator(".chatViewport");
+  await viewport.evaluate(node=>{node.scrollTop=0;node.dispatchEvent(new Event("scroll",{bubbles:true}));});
+  await page.evaluate(async(modulePath)=>{
+    const {useAssistantStore}=await import(modulePath),now=new Date().toISOString();
+    const task={id:"reduced-motion-stream",type:"assistant-chat",status:"running",conversationId:"preview-1",createdAt:now,startedAt:now,input:{},progressText:""};
+    (window as any).nexo.listActiveTasks=async()=>[task];
+    useAssistantStore.getState().handleTaskEvent({kind:"created",taskId:task.id,task});
+    for(let index=0;index<8;index++)useAssistantStore.getState().handleTaskEvent({kind:"token",taskId:task.id,token:"continuação "});
+  },"/stores/assistant.ts");
+  await expect(page.locator(".chatMessage.streaming")).toBeVisible();
+  const jump=page.getByRole("button",{name:"Nova resposta",exact:true});
+  await expect(jump).toBeVisible();
+  await page.evaluate(()=>{const original=(HTMLElement.prototype as any).scrollTo;HTMLElement.prototype.scrollTo=function(options:any,...args:any[]){if(this.classList.contains("chatViewport"))(window as any).__chatScrollBehavior=options?.behavior??"positional";return original.call(this,options,...args);};});
+  await jump.click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__chatScrollBehavior)).toBe("auto");
+  await expect.poll(()=>viewport.evaluate(node=>node.scrollHeight-node.scrollTop-node.clientHeight)).toBeLessThanOrEqual(1);
+});
+});

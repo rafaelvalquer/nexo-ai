@@ -14,10 +14,11 @@ test("the simplified navigation exposes developer tool logs only when enabled",a
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
   const developerSwitch=page.getByRole("switch",{name:"Modo desenvolvedor: mostrar logs técnicos"});
   await expect(developerSwitch).toBeVisible();
-  await expect(developerSwitch).toHaveCSS("display","flex");
+  await expect(developerSwitch.locator("xpath=..")).toHaveCSS("display","flex");
   await expect(page.getByLabel("Modo desenvolvedor: mostrar logs técnicos")).not.toBeChecked();
   await expect(page.getByText("Modo do Agent")).toHaveCount(0);
-  await page.getByLabel("Modo desenvolvedor: mostrar logs técnicos").check();
+  await developerSwitch.locator("xpath=..").click();
+  await expect(developerSwitch).toBeChecked();
   await expect(developerSwitch).toBeChecked();
   await expect(page.getByText("Execuções recentes")).toBeVisible();
   await page.getByText("Execuções recentes").click();
@@ -32,10 +33,21 @@ test("settings bootstrap exposes a retry state after a temporary local read fail
   const error=page.getByRole("alert");
   await expect(error.getByRole("heading",{name:"Não foi possível abrir esta área"})).toBeVisible();
   await expect(error.getByText("Não consegui carregar suas configurações locais.")).toBeVisible();
+  await expect(error).toHaveCSS("animation-name","nexoErrorNudge");
   await error.getByRole("button",{name:"Tentar novamente"}).click();
   await expect(page.getByRole("heading",{name:"Configurações",exact:true})).toBeVisible();
   await expect(page.getByLabel("URL do Ollama")).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__settingsReadAttempts())).toBeGreaterThan(1);
+});
+
+test("localized error feedback respects reduced motion",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto(url);
+  await page.evaluate(()=>{const api=(window as any).nexo;api.getSettings=async()=>{throw new Error("private database detail");};});
+  await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
+  const error=page.getByRole("alert");
+  await expect(error.getByRole("heading",{name:"Não foi possível abrir esta área"})).toBeVisible();
+  await expect(error).toHaveCSS("animation-name","none");
 });
 
 test("About settings expose SemVer and reproducible build identifiers",async({page})=>{
@@ -69,14 +81,14 @@ test("local AI settings can test Ollama and report the connection result",async(
 test("local AI connection errors stay friendly unless developer diagnostics are enabled",async({page})=>{
   await page.goto(url);
   await page.waitForFunction(()=>Boolean((window as any).nexo));
-  await page.evaluate(()=>{const api=(window as any).nexo,original=api.getSettings;api.getSettings=async()=>({...await original(),developerDiagnosticsEnabled:false});api.status=async()=>({llm:{ok:false,detail:"ECONNREFUSED 127.0.0.1:11434 · socket hang up"},models:[]});});
+  await page.evaluate(()=>{const api=(window as any).nexo,original=api.getSettings;api.getSettings=async()=>({...await original(),developerDiagnosticsEnabled:false});api.updateSettings=async(patch:any)=>({...await api.getSettings(),...patch});api.status=async()=>({llm:{ok:false,detail:"ECONNREFUSED 127.0.0.1:11434 · socket hang up"},models:[]});});
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
   await page.getByRole("button",{name:"Testar conexão"}).click();
   await expect(page.locator(".settingsAiStatus")).toContainText("Ollama desconectado");
   await expect(page.locator(".settingsAiStatus")).not.toContainText("ECONNREFUSED");
   await expect(page.getByText("Confira se o Ollama está aberto e se a URL configurada está correta.")).toBeVisible();
   await page.getByLabel("Modo desenvolvedor: mostrar logs técnicos").scrollIntoViewIfNeeded();
-  await page.getByLabel("Modo desenvolvedor: mostrar logs técnicos").check({force:true});
+  await page.getByRole("switch",{name:"Modo desenvolvedor: mostrar logs técnicos"}).locator("xpath=..").click();
   await expect(page.getByLabel("Modo desenvolvedor: mostrar logs técnicos")).toBeChecked();
   await page.getByRole("button",{name:"Testar conexão"}).click();
   await expect(page.locator(".settingsAiStatus")).toContainText("ECONNREFUSED 127.0.0.1:11434");
@@ -86,12 +98,14 @@ test("dangerous settings actions use an accessible confirmation drawer",async({p
   await page.goto(url);
   await page.evaluate(async()=>{const api=(window as any).nexo;api.intentLearningCount=async()=>2;api.clearMemory=async()=>({ok:true});const current=await api.getSettings();api.updateSettings=async(patch:any)=>Object.assign({},current,patch);});
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
+  await page.getByRole("button",{name:"Memória",exact:true}).click();
   await page.getByRole("button",{name:"Limpar memória"}).click();
   const dialog=page.getByRole("dialog",{name:"Limpar memória?"});
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(/todas as memórias salvas serão removidas/i)).toBeVisible();
   await dialog.getByRole("button",{name:"Cancelar"}).click();
   await expect(dialog).not.toBeVisible();
+  await page.getByRole("button",{name:"Memória",exact:true}).click();
   await page.getByRole("button",{name:"Limpar memória"}).click();
   await dialog.getByRole("button",{name:"Limpar memória",exact:true}).click();
   await expect(page.getByText("As memórias salvas foram removidas.")).toBeVisible();
@@ -136,6 +150,25 @@ test("settings use side navigation on desktop and a destination selector on comp
   await expect(page.locator(".settingsNavLinks")).toBeHidden();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath("settings-compact-920.png")});
+});
+
+test("compact settings selector opens deep sections and uses native immediate scrolling for reduced motion",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto(url);
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
+  const selector=page.getByRole("combobox",{name:"Navegar pelas configurações"});
+  await expect(selector).toBeVisible();
+  await page.evaluate(()=>{const original=Element.prototype.scrollIntoView;Element.prototype.scrollIntoView=function(options?:ScrollIntoViewOptions){if(this.matches(".settingsAbout,.settingsToolsCatalog,.settingsConnections")||this.matches(".settings h3"))(window as any).__settingsNavigationBehavior=options?.behavior??"auto";return original.call(this,options);};});
+  await selector.selectOption("Sobre");
+  await expect(page.locator(".settingsAbout")).toHaveAttribute("open","");
+  await expect(page.locator(".settingsAbout").getByRole("heading",{name:"Nexo AI"})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__settingsNavigationBehavior)).toBe("auto");
+  await expect(selector).toHaveValue("Sobre");
+  await selector.selectOption("Catálogo");
+  await expect(page.locator(".settingsToolsCatalog")).toHaveAttribute("open","");
+  await expect(selector).toHaveValue("Catálogo");
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
 test("Settings mantém seletor de seção, conteúdo e ações sem overflow nos breakpoints desktop",async({page},info)=>{

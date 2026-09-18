@@ -47,7 +47,7 @@ export function Assistant() {
       <ChatTabs sessions={assistant.sessions} activeId={assistant.activeSessionId}
         onCreate={() => void assistant.createSession()} onSelect={assistant.selectSession}
         onClose={id => void assistant.closeSession(id)} />
-      <div className="assistantSessionPanel">
+      <div className="assistantSessionPanel" id="assistant-active-chat-panel" role="tabpanel" aria-label="Conversa ativa" tabIndex={0}>
         <Tooltip className="mobileChatsTooltip" content="Abrir conversas"><button type="button" className="mobileChatsTrigger" aria-label="Abrir conversas" onClick={() => setChatsOpen(true)}><PanelLeft size={17}/></button></Tooltip>
         <AssistantHeader model={assistant.model} busy={assistant.isStreaming} elapsed={assistant.elapsed} onExecution={() => setDrawerOpen(true)} />
         {session && <div className="activeChatIdentity">
@@ -70,10 +70,11 @@ export function Assistant() {
         </ChatViewport>
         <ScrollToBottom visible={!scroll.isNearBottom || scroll.hasUnreadBelow} unread={scroll.hasUnreadBelow} onClick={() => scroll.scrollToBottom("smooth")} />
         <Composer attachments={assistant.attachments} busy={assistant.isStreaming} onAttach={assistant.attach}
-          onAttachDocument={assistant.attachDocument} onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop} />
-        <WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed} />
+          onAttachDocument={assistant.attachDocument} onRemove={assistant.removeAttachment} onSend={send} onStop={assistant.stop}
+          onDropFiles={files => session ? assistant.attachDroppedFiles(session.id, files) : Promise.resolve()} />
         <ExecutionDrawer task={assistant.activeTask} elapsed={assistant.elapsed} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       </div>
+      <WideExecutionRail task={assistant.activeTask} elapsed={assistant.elapsed} />
       <NexoDrawer open={chatsOpen} onClose={() => setChatsOpen(false)} eyebrow="ASSISTENTE LOCAL" title="Conversas" side="left" className="mobileChatDrawer">
         <ChatTabs sessions={assistant.sessions} activeId={assistant.activeSessionId} onCreate={() => void assistant.createSession()} onSelect={id => {assistant.selectSession(id);setChatsOpen(false);}} onClose={id => void assistant.closeSession(id)}/>
       </NexoDrawer>

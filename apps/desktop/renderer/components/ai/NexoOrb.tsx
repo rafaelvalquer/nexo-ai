@@ -1,10 +1,11 @@
-import { Component, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowUpRight, FileText, MessageSquare, Orbit, Pause, Play, Plus, X, Zap, Settings2 } from "lucide-react";
 import { useVisualStore } from "../../stores/visual";
 import { useAppStore } from "../../stores/app";
-import { OrbScene, type OrbInteraction } from "./orb/OrbScene";
+import type { OrbInteraction } from "./orb/OrbScene";
 import { orbColors } from "./orb/states";
 import "./orb/nucleus.css";
+const OrbScene = lazy(() => import("./orb/OrbScene").then(module => ({ default: module.OrbScene })));
 function Fallback() {
   return <div className="neuralFallback" aria-hidden="true"><div className="neuralCore"/><i/><i/><i/><span/><span/><span/><span/></div>;
 }
@@ -17,7 +18,7 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
   const { state, label } = useVisualStore();
   const navigate = useAppStore(store => store.setPage);
   const [webgl, setWebgl] = useState<"checking"|"ready"|"unavailable">("checking"), [reduced, setReduced] = useState(false);
-  const [paused, setPaused] = useState(false), [expanded, setExpanded] = useState(false), [visible, setVisible] = useState(true);
+  const [paused, setPaused] = useState(false), [expanded, setExpanded] = useState(false), [visible, setVisible] = useState(false);
   const host = useRef<HTMLDivElement>(null);
   const interaction = useRef<OrbInteraction>({ x: 0, y: 0, expanded: false });
   interaction.current.expanded = expanded;
@@ -31,12 +32,16 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
       setWebgl(context ? "ready" : "unavailable");
       context?.getExtension("WEBGL_lose_context")?.loseContext();
     } catch { setWebgl("unavailable"); }
-    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .05 });
-    if (host.current) observer.observe(host.current);
-    return () => { media.removeEventListener("change", update); observer.disconnect(); };
+    const observer = typeof IntersectionObserver === "undefined"
+      ? undefined
+      : new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .05 });
+    if (observer && host.current) observer.observe(host.current);
+    else setVisible(true);
+    return () => { media.removeEventListener("change", update); observer?.disconnect(); };
   }, []);
   const stopped = paused || reduced || !visible;
-  return <div ref={host} className={`nexoNucleus ${compact ? "compact" : ""} ${expanded ? "expanded" : ""} ${stopped ? "still" : ""}`} style={{ "--nucleus-accent": orbColors[state].ring } as CSSProperties}>
+  const shouldRenderScene = webgl === "ready" && !reduced && visible && (state !== "idle" || expanded);
+  return <div ref={host} className={`nexoNucleus ${compact ? "compact" : ""} ${expanded ? "expanded" : ""} ${stopped ? "still" : ""}`} style={{ "--nucleus-accent": orbColors[state].ring, "--nucleus-core": orbColors[state].core, "--nucleus-glow": orbColors[state].glow, "--nucleus-ring": orbColors[state].ring } as CSSProperties}>
     <div className="nucleusCoordinates" aria-hidden="true"><span>NEXO / CORE</span><span>LOCAL INTELLIGENCE</span></div>
     <div className="nucleusHalo" aria-hidden="true" />
     <div className="nucleusReticle" aria-hidden="true" />
@@ -45,7 +50,7 @@ export function NexoOrb({ compact = false }: { compact?: boolean }) {
       onPointerMove={event => { const rect = event.currentTarget.getBoundingClientRect(); interaction.current.x = (event.clientX - rect.left) / rect.width * 2 - 1; interaction.current.y = (event.clientY - rect.top) / rect.height * 2 - 1; }}
       onPointerLeave={() => { interaction.current.x = 0; interaction.current.y = 0; }}
       onKeyDown={event => { if (event.key === "Escape") setExpanded(false); }}>
-      {webgl === "ready" && !reduced ? <SceneBoundary><OrbScene state={state} interaction={interaction} paused={stopped} /></SceneBoundary> : <Fallback />}
+      {shouldRenderScene ? <SceneBoundary><Suspense fallback={<Fallback />}><OrbScene state={state} interaction={interaction} paused={stopped} onUnavailable={() => setWebgl("unavailable")} /></Suspense></SceneBoundary> : <Fallback />}
     </button>
     {expanded && <nav className="nucleusSatellites" aria-label="Atalhos do núcleo">
       <button className="satelliteAssistant" onClick={() => navigate("Assistente")}><MessageSquare size={14} />Conversar<ArrowUpRight size={12} /></button>

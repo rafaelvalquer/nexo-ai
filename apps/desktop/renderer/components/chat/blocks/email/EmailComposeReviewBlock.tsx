@@ -1,4 +1,5 @@
 import { useCallback,useEffect,useRef,useState } from "react";
+import { useReducedMotion } from "motion/react";
 import { Mail } from "lucide-react";
 import type { EmailComposeDraftSnapshot,EmailComposeReviewBlock as EmailComposeReviewModel } from "@nexo/shared";
 import { RecipientInput } from "./RecipientInput";
@@ -13,11 +14,12 @@ const EMAIL=/^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/;
 type Fields={to:string[];subject:string;bodyText:string};
 
 export function EmailComposeReviewBlock({block}:{block:EmailComposeReviewModel}){
+  const reduceMotion=useReducedMotion();
   const diagnostics=useDeveloperDiagnosticsEnabled();
   const initial:EmailComposeDraftSnapshot={id:block.draftId,conversationId:"",to:[...block.fields.to],subject:block.fields.subject,bodyText:block.fields.bodyText,version:1,status:block.status==="expired"?"cancelled":block.status,approvalId:block.approvalId,createdAt:"",updatedAt:"",sentAt:block.sentAt};
   const[draft,setDraft]=useState<EmailComposeDraftSnapshot>(initial),[fields,setFields]=useState<Fields>({...block.fields,to:[...block.fields.to]}),[busy,setBusy]=useState(false),[error,setError]=useState(block.error?userFacingError(block.error,"Não foi possível preparar o e-mail para revisão.",diagnostics):"");
-  const draftRef=useRef(draft),fieldsRef=useRef(fields),saveChain=useRef<Promise<EmailComposeDraftSnapshot>>(Promise.resolve(initial)),timerRef=useRef<number>(),rootRef=useRef<HTMLElement>(null);
-  draftRef.current=draft;fieldsRef.current=fields;
+  const draftRef=useRef(draft),fieldsRef=useRef(fields),saveChain=useRef<Promise<EmailComposeDraftSnapshot>>(Promise.resolve(initial)),timerRef=useRef<number>(),rootRef=useRef<HTMLElement>(null),reduceMotionRef=useRef(reduceMotion);
+  draftRef.current=draft;fieldsRef.current=fields;reduceMotionRef.current=reduceMotion;
 
   const applyDraft=useCallback((next:EmailComposeDraftSnapshot)=>{draftRef.current=next;setDraft(next);setFields({to:[...next.to],subject:next.subject,bodyText:next.bodyText});setError(next.lastError?userFacingError(next.lastError,"Não foi possível atualizar o e-mail. Tente novamente.",diagnostics):"");return next;},[diagnostics]);
   const applyPersistedVersion=useCallback((next:EmailComposeDraftSnapshot)=>{draftRef.current=next;setDraft(next);setError(next.lastError?userFacingError(next.lastError,"Não foi possível atualizar o e-mail. Tente novamente.",diagnostics):"");return next;},[diagnostics]);
@@ -34,10 +36,10 @@ export function EmailComposeReviewBlock({block}:{block:EmailComposeReviewModel})
   },[applyPersistedVersion]);
 
   useEffect(()=>{
-    let active=true;
+    let active=true,firstFrame:number|undefined,secondFrame:number|undefined;
     void (async()=>{try{const current=await window.nexo.getEmailDraft(block.draftId) as EmailComposeDraftSnapshot;if(active){applyDraft(current);saveChain.current=Promise.resolve(current);}}catch(caught){if(active)setError(userFacingError(caught,"Não consegui carregar o e-mail para revisão. Tente novamente.",diagnostics));}})();
-    requestAnimationFrame(()=>requestAnimationFrame(()=>rootRef.current?.scrollIntoView({behavior:"smooth",block:"center"})));
-    return()=>{active=false;};
+    firstFrame=requestAnimationFrame(()=>{secondFrame=requestAnimationFrame(()=>{if(active)rootRef.current?.scrollIntoView({behavior:reduceMotionRef.current?"auto":"smooth",block:"center"});});});
+    return()=>{active=false;if(firstFrame!==undefined)cancelAnimationFrame(firstFrame);if(secondFrame!==undefined)cancelAnimationFrame(secondFrame);};
   },[applyDraft,block.draftId,diagnostics]);
 
   useEffect(()=>{

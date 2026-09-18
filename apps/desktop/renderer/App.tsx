@@ -7,13 +7,15 @@ import { useAssistantStore } from "./stores/assistant";
 import { Onboarding } from "./components/shell/Onboarding";
 import { OllamaModelInstaller } from "./components/shell/OllamaModelInstaller";
 import { ToastViewport } from "./components/shell/ToastViewport";
+import { PageLoading } from "./components/ui/PageLoading";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useNotificationsStore } from "./stores/notifications";
 import { motionTokens } from "./design/motion";
 import { userFacingError } from "./utils/user-facing-error";
 import { developerDiagnosticsEnabled } from "./hooks/useDeveloperDiagnostics";
+import { type AppRoute } from "./app-routes";
 
-const pages: Record<string, ComponentType> = {
+const pages: Record<AppRoute, ComponentType> = {
   Dashboard: lazy(()=>import("./pages/Dashboard").then(module=>({default:module.Dashboard}))),
   Assistente: lazy(()=>import("./pages/Assistant").then(module=>({default:module.Assistant}))),
   Macros: lazy(()=>import("./pages/Automations").then(module=>({default:module.Automations}))),
@@ -25,7 +27,7 @@ const pages: Record<string, ComponentType> = {
   Memória: lazy(()=>import("./pages/Memory").then(module=>({default:module.Memory}))),
   Diagnóstico: lazy(()=>import("./pages/Diagnostics").then(module=>({default:module.Diagnostics}))),
   Ferramentas: lazy(()=>import("./pages/Tools").then(module=>({default:module.Tools}))),
-  Conexões: lazy(()=>import("./pages/Connections").then(module=>({default:module.Connections})))
+  Conexões: lazy(()=>import("./pages/Connections").then(module=>({default:module.Connections}))),
 };
 
 class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -39,7 +41,7 @@ export function App() {
   const page = useAppStore(s => s.page);
   const syncAssistant = useAssistantStore(s => s.sync);
   const handleTaskEvent = useAssistantStore(s => s.handleTaskEvent);
-  const Page = pages[page] ?? pages.Assistente;
+  const Page = pages[page as AppRoute] ?? pages.Assistente;
   useEffect(()=>{let active=true;const refresh=()=>void window.nexo.status().then(value=>{if(active)useAppStore.getState().setStatus(value);}).catch(()=>undefined);refresh();const timer=window.setInterval(refresh,30000);return()=>{active=false;window.clearInterval(timer);};},[]);
 
   useEffect(() => {
@@ -51,5 +53,5 @@ export function App() {
   }, [syncAssistant, handleTaskEvent]);
 
   const collapsed=useAppStore(s=>s.sidebarCollapsed); const reduceMotion=useReducedMotion();
-  return <div className={`app${collapsed?" sidebarCollapsed":""}`}><a className="skipToContent" href="#page-content">Pular para o conteúdo da página</a><Sidebar /><main id="page-content" tabIndex={-1} className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><AnimatePresence mode="wait" initial={false}><motion.div key={page} className={`pageMotion${page==="Assistente"?" assistantPageMotion":""}`} initial={reduceMotion?false:{opacity:0,y:motionTokens.distance.subtle}} animate={{opacity:1,y:0}} exit={reduceMotion?{opacity:0}:{opacity:0,y:-2}} transition={{duration:reduceMotion?0:motionTokens.duration.page/1000,ease:motionTokens.ease.out}}><PageErrorBoundary key={page}><Suspense fallback={<div className="pageLoading"><span className="loadingDot"/>Abrindo {page}…</div>}><Page /></Suspense></PageErrorBoundary></motion.div></AnimatePresence></main><CommandPalette /><Onboarding /><OllamaModelInstaller /><ToastViewport /></div>;
+  return <div className={`app${collapsed?" sidebarCollapsed":""}`}><a className="skipToContent" href="#page-content">Pular para o conteúdo da página</a><Sidebar /><main id="page-content" tabIndex={-1} className={page === "Assistente" ? "assistantMain" : ""}><Topbar /><AnimatePresence mode="wait" initial={false}><motion.div key={page} className={`pageMotion${page==="Assistente"?" assistantPageMotion":""}`} initial={reduceMotion?false:{opacity:0,y:motionTokens.distance.subtle}} animate={{opacity:1,y:0}} exit={reduceMotion?{opacity:0}:{opacity:0,y:-2}} transition={{duration:reduceMotion?0:motionTokens.duration.page/1000,ease:motionTokens.ease.out}}><PageErrorBoundary key={page}><Suspense fallback={<div className="pageLoading" role="status" aria-label={`Carregando ${page}`} aria-busy="true"><span className="pageLoadingAnnouncement">Abrindo {page}…</span><PageLoading page={page}/></div>}><Page /></Suspense></PageErrorBoundary></motion.div></AnimatePresence></main><CommandPalette /><Onboarding /><OllamaModelInstaller /><ToastViewport /></div>;
 }

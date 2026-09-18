@@ -38,21 +38,22 @@ const SETTINGS_SECTIONS=["IA local","Execução","Ferramentas","Catálogo","Segu
 function navigateToSettingsSection(label:string){
   const target=label==="Catálogo"?document.querySelector<HTMLDetailsElement>(".settingsToolsCatalog"):label==="Contas e integrações"?document.querySelector<HTMLDetailsElement>(".settingsConnections"):label==="Sobre"?document.querySelector<HTMLDetailsElement>(".settingsAbout"):Array.from(document.querySelectorAll(".settings h3")).find(item=>item.textContent?.trim()===label);
   if(target instanceof HTMLDetailsElement)target.open=true;
-  target?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth",block:"start"});
+  target?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
 }
 function observeSettingsSections(onChange:(label:string)=>void){
-  const root=document.querySelector(".app > main");
+  if(!document.querySelector(".app > main"))return()=>undefined;
   const targets=SETTINGS_SECTIONS.flatMap(label=>{
     const target=label==="Catálogo"?document.querySelector(".settingsToolsCatalog > summary"):label==="Contas e integrações"?document.querySelector(".settingsConnections > summary"):label==="Sobre"?document.querySelector(".settingsAbout > summary"):Array.from(document.querySelectorAll(".settings h3")).find(item=>item.textContent?.trim()===label);
     if(!target)return[];
     target.setAttribute("data-settings-section",label);
     return[target];
   });
-  const observer=new IntersectionObserver(entries=>{
-    const visible=entries.filter(entry=>entry.isIntersecting).sort((left,right)=>left.boundingClientRect.top-right.boundingClientRect.top)[0];
+  const observer=new IntersectionObserver(()=>{
+    const rootBounds={top:0,height:document.documentElement.clientHeight},activeTop=rootBounds.top+88,activeBottom=rootBounds.top+rootBounds.height*.32;
+    const visible=targets.map(target=>({target,rect:target.getBoundingClientRect()})).filter(item=>item.rect.bottom>activeTop&&item.rect.top<activeBottom).sort((left,right)=>left.rect.top-right.rect.top)[0];
     const label=visible?.target.getAttribute("data-settings-section");
     if(label)onChange(label);
-  },{root,rootMargin:"-88px 0px -68% 0px",threshold:0});
+  },{root:null,rootMargin:"-88px 0px -68% 0px",threshold:0});
   targets.forEach(target=>observer.observe(target));
   return()=>observer.disconnect();
 }

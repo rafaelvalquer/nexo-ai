@@ -56,8 +56,11 @@ test("Electron abre o Pixel Office e recebe evento real", async () => {
   try {
     const page = await application.firstWindow();
     const errors: string[] = [];
+    const officeAssets: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
+    page.on("request", request => { if (/PixelOfficeCanvas-|nexo-office-personal-|nexo-octopus-colors-/.test(request.url())) officeAssets.push(request.url()); });
     await expect(page.locator("#root .app")).toBeVisible({ timeout: 15_000 });
+    expect(officeAssets).toEqual([]);
     const welcome=page.getByRole("dialog",{name:"Seu assistente local está pronto para ser configurado."});
     await expect(welcome.getByRole("button",{name:"Pular configuração"})).toBeFocused();
     await page.keyboard.press("Shift+Tab");
@@ -70,6 +73,7 @@ test("Electron abre o Pixel Office e recebe evento real", async () => {
     await page.evaluate(() => window.nexo.updateSettings({ agentLoopMode: "legacy" }));
     await page.getByRole("button", { name: "Escritório", exact: true }).click();
     await expect(page.locator("canvas")).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => officeAssets.filter(url => /PixelOfficeCanvas-|nexo-office-personal-|nexo-octopus-colors-/.test(url)).length).toBe(3);
     await expect(page.getByRole("heading", { name: "Pixel Office", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Assistente", exact: true }).click();
     await expect(page.locator(".assistantPage")).toBeVisible();

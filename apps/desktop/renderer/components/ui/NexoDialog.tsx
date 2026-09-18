@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { motionTokens } from "../../design/motion";
+import { trapTabKey } from "./focus-trap";
 
 type NexoDialogProps = {
   open: boolean;
@@ -35,13 +36,7 @@ export function NexoDialog({ open, title, eyebrow, onClose, children, className 
         closeHandler.current();
         return;
       }
-      if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")]
-        .filter(element => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
-      if (!focusable.length) { event.preventDefault(); panelRef.current.focus(); return; }
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      if (panelRef.current) trapTabKey(panelRef.current, event);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {

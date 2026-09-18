@@ -4,6 +4,8 @@
   --dash-ink: var(--nexo-text);
   --dash-violet: var(--nexo-violet);
   --dash-cyan: var(--nexo-cyan);
+  --dash-violet-bright: color-mix(in srgb, var(--nexo-violet) 68%, white);
+  --dash-violet-light: color-mix(in srgb, var(--nexo-violet) 53%, white);
 }
 
 .dashboardConnection { background: var(--nexo-surface-1); border-color: var(--nexo-border-strong); }
@@ -38,7 +40,8 @@
 .catalogGadget small,.gadgetCatalogList h3,.attribution { color: var(--nexo-text-muted); }
 .catalogGadget b,.catalogGadget > svg:last-child,.newsGadget > button:hover b { color: var(--nexo-violet); }
 .onlineTag { background: color-mix(in srgb,var(--nexo-success) 14%,transparent); color: var(--nexo-success) !important; }
-.gadgetSearch,.gadgetSearch input,.gadgetSetup input:not([type=radio]) { border-color: var(--nexo-border-strong); background: var(--nexo-bg-raised); color: var(--nexo-text); }
+.gadgetSearch,.gadgetSetup input:not([type=radio]) { border-color: var(--nexo-border-strong); background: var(--nexo-bg-raised); color: var(--nexo-text); }
+.gadgetSearch input { background: transparent; color: var(--nexo-text); }
 .gadgetSetup > p,.gadgetSetup > label,.coordinateFields label,.gadgetSetup legend { color: var(--nexo-text-secondary); }
 .gadgetSetup fieldset { border-color: var(--nexo-border); }
 .gadgetSetup fieldset label,.catalogGadget { color: var(--nexo-text-secondary); }

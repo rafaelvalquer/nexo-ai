@@ -1,0 +1,47 @@
+.pageLoading {
+  display: block;
+  min-width: 0;
+  min-height: 220px;
+  color: var(--nexo-text-secondary);
+}
+.assistantPageMotion > .pageLoading { display: flex; flex: 1; min-height: 0; }
+.pageLoadingAnnouncement { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+.routeLoading { display: grid; gap: 20px; width: min(100%, 1320px); min-width: 0; margin: 0 auto; padding: 16px 0 24px; }
+.routeLoadingHeader { display: grid; justify-items: start; gap: 11px; }
+.routeLoadingEyebrow { width: 120px; height: 9px; border-radius: 999px; }
+.routeLoadingTitle { width: min(320px, 58vw); height: 30px; }
+.routeLoadingCardGrid,.routeLoadingMacroGrid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+.routeLoadingCard,.routeLoadingMacroCard { min-height: 152px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-lg); }
+.routeLoadingAssistant { display: grid; grid-template-columns: minmax(150px,220px) minmax(0,1fr); gap: 16px; min-height: min(62vh,680px); }
+.routeLoadingChatList,.routeLoadingConversation { min-height: 0; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-lg); background-color: var(--nexo-surface-1); }
+.routeLoadingConversation { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 22px; }
+.routeLoadingMessage { min-height: 58px; border-radius: 15px; }
+.routeLoadingMessageUser { width: min(58%,420px); align-self: flex-end; }
+.routeLoadingMessageAssistant { width: min(78%,620px); min-height: 126px; }
+.routeLoadingComposer { width: 100%; height: 66px; margin-top: auto; border: 1px solid var(--nexo-border); border-radius: 15px; }
+.routeLoadingMacroCard { min-height: 230px; }
+.routeLoadingOffice { display: grid; grid-template-columns: minmax(0,1fr) minmax(190px,260px); gap: 14px; min-height: min(62vh,680px); }
+.routeLoadingCanvas,.routeLoadingOfficeRail { min-height: 0; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-lg); }
+.routeLoadingOfficeRail { min-height: 220px; }
+.routeLoadingSettings { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 18px; }
+.routeLoadingSettingsNav { min-height: 280px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-lg); }
+.routeLoadingSettings > div { display: grid; align-content: start; gap: 12px; }
+.routeLoadingSettingRow { min-height: 62px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-r-md,12px); }
+.routeLoadingDocumentList { display: grid; }
+.routeLoadingDocumentRow { min-height: 76px; border-bottom: 1px solid var(--nexo-border); border-radius: 0; }
+.routeLoadingCard { min-height: 180px; }
+
+@media (max-width: 959px) {
+  .routeLoadingSettings { grid-template-columns: minmax(0,1fr); }
+  .routeLoadingSettingsNav { min-height: 44px; }
+  .routeLoadingOffice { grid-template-columns: minmax(0,1fr); }
+  .routeLoadingOfficeRail { display: none; }
+}
+
+@media (max-width: 720px) {
+  .routeLoadingCardGrid,.routeLoadingMacroGrid { grid-template-columns: minmax(0,1fr); }
+  .routeLoadingCardGrid .routeLoadingCard:nth-child(n+2),.routeLoadingMacroGrid .routeLoadingMacroCard:nth-child(n+3) { display: none; }
+  .routeLoadingAssistant { grid-template-columns: minmax(0,1fr); }
+  .routeLoadingChatList { display: none; }
+}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
+import { Tooltip } from "../../../ui/Tooltip";
 
 const EMAIL=/^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/;
 
@@ -15,7 +16,7 @@ export function RecipientInput({value,disabled,onChange}:{value:string[];disable
   function remove(email:string){onChange(value.filter(item=>item!==email));setError("");}
   return <div className="emailRecipientControl">
     <div className="emailRecipientChips">
-      {value.map(email=><span className="emailRecipientChip" key={email}>{email}<button type="button" aria-label={`Remover ${email}`} disabled={disabled} onClick={()=>remove(email)}><X size={13}/></button></span>)}
+      {value.map(email=><span className="emailRecipientChip" key={email}>{email}<Tooltip content={`Remover ${email}`}><button type="button" aria-label={`Remover ${email}`} disabled={disabled} onClick={()=>remove(email)}><X size={13}/></button></Tooltip></span>)}
       <input type="email" value={input} disabled={disabled} placeholder={value.length?"Adicionar destinatário":"nome@exemplo.com"} onChange={event=>{setInput(event.target.value);setError("");}} onBlur={()=>void commit()} onKeyDown={event=>{if(event.key==="Enter"||event.key===","||event.key===";"){event.preventDefault();commit();}}}/>
     </div>
     {error&&<p className="emailComposeFieldError" role="alert">{error}</p>}
