@@ -7,6 +7,28 @@ export function defaultApprovalPresentation(toolName: string, input: Record<stri
   const affectedCount = Array.isArray(input.messageIds) ? input.messageIds.length : 1;
   const expiresInMs = risk === "CRITICAL" ? 5 * 60_000 : 10 * 60_000;
 
+  if (toolName === "write_text_file") {
+    const target = typeof input.path === "string" ? input.path.trim() : "";
+    const details = filesystemTargetDetails(target);
+    const content = typeof input.content === "string" ? input.content : "";
+    return {
+      title: `Alterar arquivo ${details.name || "(sem nome)"}`,
+      metadata: {
+        domain: "filesystem",
+        actionType: "update",
+        affectedCount: 1,
+        preview: [
+          `Nome: ${details.name || "(não informado)"}`,
+          details.parent ? `Local: ${details.parent}` : undefined,
+          target ? `Caminho: ${target}` : undefined,
+          `Novo conteúdo:\n${content.length <= 1000 ? content : content.slice(0, 1000) + "\n…"}`
+        ].filter(Boolean).join("\n"),
+        consequence: "O conteúdo atual do arquivo será substituído pelo novo conteúdo informado.",
+        expiresInMs
+      }
+    };
+  }
+
   if (toolName === "create_text_file" || toolName === "create_folder") {
     const target = typeof input.path === "string" ? input.path.trim() : "";
     const details = filesystemTargetDetails(target);

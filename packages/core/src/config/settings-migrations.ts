@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 3;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 4;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -26,6 +26,15 @@ const migrations: SettingsMigration[] = [{
 }, {
   version: 3,
   migrate(settings) { return { ...settings, documentsEnabled: settings.documentsEnabled ?? true, semanticSearchEnabled: settings.semanticSearchEnabled ?? true, settingsSchemaVersion: 3 }; }
+}, {
+  version: 4,
+  migrate(settings) {
+    return { ...settings,
+      hybridIntentResolverEnabled: settings.hybridIntentResolverEnabled ?? true,
+      hybridIntentShadowMode: settings.hybridIntentShadowMode ?? false,
+      hybridIntentFilesystemEnabled: settings.hybridIntentFilesystemEnabled ?? true,
+      settingsSchemaVersion: 4 };
+  }
 }];
 
 export function migrateSettings(saved: Partial<NexoSettings>, defaults: NexoSettings): NexoSettings {

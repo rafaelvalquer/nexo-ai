@@ -1,0 +1,62 @@
+[
+  {
+    "input": "crie teste em downloads",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "faça teste nos downloads",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "gere teste no download",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "monte teste em downloads",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "criar teste dentro de downloads",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "como criar uma pasta no Windows?",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "como editar um arquivo de texto?",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "não crie uma pasta chamada teste",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "não altere teste.txt",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "não apague arquivo.txt",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "edite teste",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "altere o arquivo",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "crie uma coisa em downloads",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "mude isso",
+    "expectedStatus": "clarification_or_unknown"
+  },
+  {
+    "input": "faça um arquivo ou pasta teste em downloads",
+    "expectedStatus": "clarification_or_unknown"
+  }
+]

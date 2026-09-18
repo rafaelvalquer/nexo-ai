@@ -1,0 +1,162 @@
+[
+  {
+    "input": "crie a pasta teste dentro da pasta downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "crie uma pasta teste em downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "faz uma pasta chamada teste no download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "quero uma pasta teste dentro dos downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "cria uma pastinha chamada teste nos meus downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "pode criar uma pasta chamada teste no download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "gera uma pasta teste dentro de downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "criar diretório teste nos downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "faça uma pasta teste na pasta downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "monte uma pasta chamada teste em downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "crie a pasta teste no meu download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "cria diretório teste dentro do download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "quero criar a pasta teste em downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "pode fazer uma pasta teste nos downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "gere o diretório teste no download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "crie uma pasta com nome teste em downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "cria a pasta teste dentro de meus downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "faça o diretório teste na pasta download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "monte a pasta teste em meus downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  },
+  {
+    "input": "crie uma pasta teste dentro do download",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
+  }
+]

@@ -1,0 +1,102 @@
+[
+  {
+    "input": "alterar o conteudo do arquivo teste123.txt para teste modificação",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "editar o conteudo do arquivo teste123.txt para teste123 123",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "troque o conteúdo do teste123.txt por abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "mude o conteúdo de teste123.txt para abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "edite teste123.txt e coloque abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "substitua o texto do arquivo teste123.txt por abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "altere teste123.txt para conter abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "modifique o arquivo teste123.txt para abc",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "troque o texto de notas.txt por nova nota",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "edite o conteúdo de dados.txt para 123",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "altere o conteúdo do arquivo vazio.txt para preenchido",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "mude teste.txt para o conteúdo teste novo",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "edite notas.md e coloque título novo",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "substitua o conteúdo de exemplo.txt por exemplo atualizado",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "modifique teste123.txt para teste modificação",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "troque o conteúdo do arquivo log.txt por ok",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "altere arquivo.txt para novo conteúdo",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "edite o texto de teste.txt para abc def",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "mude o conteúdo do teste.txt para valor 42",
+    "operation": "write_text_file",
+    "entities": {}
+  },
+  {
+    "input": "substitua o texto em teste123.txt por conteúdo final",
+    "operation": "write_text_file",
+    "entities": {}
+  }
+]

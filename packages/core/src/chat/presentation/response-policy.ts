@@ -15,7 +15,7 @@ const PRESENTATION_ONLY_TOOLS = new Set([
 ]);
 
 const DETERMINISTIC_READ_TOOLS = new Set(["memory_usage", "disk_usage", "system_info", "process_list", "macro_list"]);
-const DETERMINISTIC_MUTATION_TOOLS = new Set(["create_text_file", "create_folder"]);
+const DETERMINISTIC_MUTATION_TOOLS = new Set(["create_text_file", "create_folder", "write_text_file"]);
 
 export function responsePolicy(
   toolNames: string[],

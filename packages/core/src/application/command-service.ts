@@ -1,6 +1,8 @@
 import { responsePolicy } from "../chat/presentation/response-policy.js";
 import { ToolRegistry } from "../tools/registry.js";
-import type { AgentIntent, ApprovalPlanMetadata } from "../agent/orchestrator/intent-schema.js";
+import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "../agent/orchestrator/intent-schema.js";
+import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper } from "../intent/index.js";
+import type { LocalMetricsService } from "../observability/metrics.js";
 import type { ConversationActionContextState } from "../agent/context/conversation-action-context.js";
 import { deterministicFilesystemIntent } from "../agent/orchestrator/filesystem-intent-enricher.js";
 import { buildIntentPlan } from "../agent/orchestrator/plan-builder.js";
@@ -12,17 +14,26 @@ import type { ActionContextFile } from "../agent/context/conversation-action-con
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
 export type CommandRoute =
-  | { type: "tool"; tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string; responseMode?: "synthesize" | "deterministic" | "presentation"; intent?: AgentIntent }
+  | { type: "tool"; tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string; responseMode?: "synthesize" | "deterministic" | "presentation"; intent?: AgentIntent; deferredAction?: DeferredAction }
   | { type: "macro"; operation: string; input: Record<string, unknown>; explanation?: string }
   | { type: "chat"; response?: string; stream?: true }
   | { type:"clarification"; action:"open_file"|"analyze_file"; files:ActionContextFile[]; intent:AgentIntent }
   | { type: "unknown" };
 
 /** Routes deterministic work without invoking the semantic AgentPlanner. */
+export type HybridCommandOptions = {
+  resolver: HybridIntentResolver;
+  mapper: IntentToolMapper;
+  enabled: () => boolean;
+  shadowMode: () => boolean;
+  filesystemEnabled: () => boolean;
+  metrics?: LocalMetricsService;
+};
+
 export class CommandService {
   private readonly fastRouter = new DeterministicRouter();
   private readonly filesystemResolver = new FilesystemCommandResolver();
-  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => []) {}
+  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions) {}
 
   route(text: string, previous?: ConversationActionContextState): CommandRoute {
     const unsupportedSpreadsheet = this.filesystemResolver.unsupportedSpreadsheetCreation(text);
@@ -58,10 +69,44 @@ export class CommandService {
     return routed.response&&!isLikelyConversation(text)?{type:"unknown"}:routed;
   }
 
-  private fromToolStep(step: { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string }, intent?: AgentIntent): CommandRoute {
+  async routeHybrid(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!looksLikeFilesystemRequest(text))return{type:"unknown"};
+    const availableOperations=filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)));
+    const resolution=await this.hybrid.resolver.resolve({
+      text,
+      allowedDomains:["filesystem"],
+      availableOperations:[...availableOperations],
+      context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},
+      signal
+    });
+    if(resolution.status==="unknown")return{type:"unknown"};
+    if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
+    const mapped=this.hybrid.mapper.map(resolution.intent);
+    if(mapped.type==="unknown")return{type:"unknown"};
+    if(mapped.type==="clarification")return{type:"chat",response:mapped.question};
+    return this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation},mapped.intent,mapped.deferredAction,mapped.responseMode);
+  }
+
+  async evaluateShadow(text:string,deterministic:CommandRoute,previous?:ConversationActionContextState,signal?:AbortSignal){
+    if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!looksLikeFilesystemRequest(text))return;
+    const baseline=adaptDeterministicTool(deterministic.tool,deterministic.input);if(!baseline)return;
+    const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)))],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
+    if(resolution.status!=="resolved")return;
+    const same=resolution.intent.operation===baseline.operation;
+    this.hybrid.metrics?.record(same?"intent.shadow.same_operation":"intent.shadow.different_operation",1,{deterministic:baseline.operation,hybrid:resolution.intent.operation});
+    if(same){
+      const left=JSON.stringify(Object.fromEntries(Object.entries(baseline.entities).map(([key,value])=>[key,value.value])));
+      const right=JSON.stringify(Object.fromEntries(Object.entries(resolution.intent.entities).map(([key,value])=>[key,value.value])));
+      if(left!==right)this.hybrid.metrics?.record("intent.shadow.different_entities",1,{operation:baseline.operation});
+    }
+  }
+
+  hybridDiagnostics(){return this.hybrid?.resolver.diagnostics();}
+
+  private fromToolStep(step: { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string }, intent?: AgentIntent, deferredAction?:DeferredAction, responseModeOverride?:"synthesize"|"deterministic"|"presentation"): CommandRoute {
     if (step.tool.startsWith("macro_")) return { type: "macro", operation: step.tool.slice("macro_".length), input: step.input, explanation: step.explanation };
-    const responseMode = responsePolicy([step.tool], intent).mode;
-    return { type: "tool", tool: step.tool, input: step.input, explanation: step.explanation, approval: step.approval, executionId: step.executionId, responseMode, intent };
+    const responseMode = responseModeOverride??responsePolicy([step.tool], intent).mode;
+    return { type: "tool", tool: step.tool, input: step.input, explanation: step.explanation, approval: step.approval, executionId: step.executionId, responseMode, intent, deferredAction };
   }
 }
 
@@ -96,4 +141,8 @@ function isLikelyConversation(text: string): boolean {
   if (/\b(arquivos?|pastas?|navegador|aplicativo|programa|processo|disco|mem[oó]ria|downloads?|desktop|documentos?|documents?)\b|\.[a-z0-9]{2,8}\b|\b[a-z]:[\\/]|\\\\/i.test(normalized)) return false;
   if (/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized)) return false;
   return true;
+}
+
+function looksLikeFilesystemRequest(text:string){
+  return /\b(arquivos?|pastas?|pastinha|diret[oó]rios?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho|conte[uú]do\s+do\s+arquivo)\b|\.[a-z0-9]{1,12}\b|\b[A-Za-z]:[\\/]/i.test(text);
 }
