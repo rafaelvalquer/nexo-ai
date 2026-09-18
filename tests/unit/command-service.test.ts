@@ -18,8 +18,10 @@ describe("CommandService", () => {
     const registry = new ToolRegistry();
     const commands = new CommandService(registry);
     expect(commands.route("verifique uso da memória")).toMatchObject({ type: "tool", tool: "memory_usage" });
+    expect(commands.route("Busque arquivos Nexo e compare as datas.")).toMatchObject({ type: "tool", tool: "search_files", input: { query: "nexo" } });
+    expect(commands.route("Dos arquivos anteriores, qual deles é o segundo?", { updatedAt: new Date().toISOString(), files: [{ name: "manual.txt", path: "C:\\Downloads\\manual.txt" }, { name: "contrato.pdf", path: "C:\\Downloads\\contrato.pdf" }] })).toMatchObject({ type: "tool", tool: "file_info", input: { path: "C:\\Downloads\\contrato.pdf" } });
     expect(commands.route("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
-    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "unknown" });
+    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file" });
     const cases:[string,"tool"|"macro",string][]=[
       ["Abra o Chrome.","tool","open_application"],
       ["Liste os arquivos de Downloads.","tool","list_files"],
@@ -35,15 +37,28 @@ describe("CommandService", () => {
     directories.push(directory);
     const db = new NexoDatabase(directory); await db.ready();
     const streamDirectAnswer = vi.fn(async () => "resposta local");
+    const executeMemory = vi.fn(async () => ({ success: true, ok: true, summary: "Memória disponível", data: { usedPercent: 20 } }));
+    const memoryTool = registry.get("memory_usage");
+    if (!memoryTool) throw new Error("A ferramenta memory_usage deve estar registrada");
+    registry.register({ ...memoryTool, execute: executeMemory });
     const graphFactory = vi.fn(() => ({} as any));
+    const metrics = { record: vi.fn() };
     const plan = vi.fn(() => { throw new Error("AgentPlanner deve ficar fora do caminho determinístico"); });
-    const planner = { streamDirectAnswer:vi.fn(()=>{throw new Error("Chat simples não deve chamar AgentPlanner");}), plan } as any;
+    const observe = vi.fn(() => ({} as any));
+    const planner = { streamDirectAnswer:vi.fn(()=>{throw new Error("Chat simples não deve chamar AgentPlanner");}), plan, observe } as any;
     const directChat={stream:streamDirectAnswer} as any;
-    const engine = new AgentEngine(planner, registry, new PermissionEngine(() => ({ autonomy: "balanced", allowedRoots: [], memoryEnabled: false, memoryAskBeforeSave: false, privateMode: false } as any)), new ApprovalService(db), new AuditService(db), undefined, undefined, undefined, undefined, undefined, undefined, () => "legacy", undefined, graphFactory, undefined, undefined, commands,directChat);
+    const engine = new AgentEngine(planner, registry, new PermissionEngine(() => ({ autonomy: "balanced", allowedRoots: [], memoryEnabled: false, memoryAskBeforeSave: false, privateMode: false } as any)), new ApprovalService(db), new AuditService(db), undefined, undefined, undefined, metrics as any, undefined, undefined, () => "legacy", undefined, graphFactory, undefined, undefined, commands,directChat);
     await expect(engine.run("vamos conversar sobre javascript")).resolves.toMatchObject({ text: "resposta local", engine: "fast-path" });
     expect(streamDirectAnswer).toHaveBeenCalledOnce();
     expect(planner.streamDirectAnswer).not.toHaveBeenCalled();
     expect(graphFactory).not.toHaveBeenCalled();
     expect(plan).not.toHaveBeenCalled();
+    expect(metrics.record).toHaveBeenCalledWith("agent.route", 1, { route: "llm" });
+
+    await expect(engine.run("verifique uso da memória")).resolves.toMatchObject({ text: "Memória disponível", engine: "fast-path", toolsUsed: ["memory_usage"] });
+    expect(executeMemory).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledOnce();
+    expect(plan).not.toHaveBeenCalled();
+    expect(metrics.record).toHaveBeenCalledWith("agent.route", 1, { route: "deterministic" });
   });
 });

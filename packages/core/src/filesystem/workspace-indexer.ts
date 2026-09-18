@@ -31,7 +31,8 @@ export class WorkspaceIndexer {
             const stat=await fs.stat(filePath).catch(()=>undefined); if(!stat)continue;
             const previous=this.repository.findExact(entry.name,[root]).find(item=>item.path===filePath);
             if(previous&&previous.size===stat.size&&previous.modifiedAt===stat.mtime.toISOString())continue;
-            const file: WorkspaceFile={id:previous?.id??randomUUID(),root,path:filePath,parentPath:current.directory,name:entry.name,nameNormalized:normalizeFilename(entry.name),extension:path.extname(entry.name)||undefined,size:stat.size,modifiedAt:stat.mtime.toISOString(),indexedAt:new Date().toISOString()};
+            const extension=path.extname(entry.name)||undefined;
+            const file: WorkspaceFile={id:previous?.id??randomUUID(),root,path:filePath,parentPath:current.directory,name:entry.name,nameNormalized:normalizeFilename(entry.name),stemNormalized:normalizeFilename(path.parse(entry.name).name),extension,size:stat.size,modifiedAt:stat.mtime.toISOString(),indexedAt:new Date().toISOString()};
             this.repository.upsert(file);this.status.indexed++;
           }
           onProgress?.(this.getStatus());

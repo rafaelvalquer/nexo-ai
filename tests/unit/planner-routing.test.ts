@@ -48,7 +48,7 @@ describe("AgentPlanner routing", () => {
     expect(commands.route("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
     expect(commands.route("verifique uso da memória")).toMatchObject({ type: "tool", tool: "memory_usage" });
     expect(commands.route("execute uma ação avançada no meu ambiente")).toMatchObject({ type: "unknown" });
-    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "unknown" });
+    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file" });
     expect(commands.route("Crie stale.txt na pasta permitida")).toMatchObject({ type: "unknown" });
     expect(commands.route("Encontre contrato.pdf em Downloads, resuma e salve dynamic.md")).toMatchObject({ type: "unknown" });
   });

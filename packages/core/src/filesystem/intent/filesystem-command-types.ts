@@ -1,0 +1,9 @@
+export type FindFileCommand = { kind: "find_file"; name: string; matchMode: "full_name" | "stem"; folder?: string; confidence: number };
+export type CreateTextFileCommand = { kind: "create_text_file"; fileName: string; destination: string; content: string; confidence: number };
+export type CreateFolderCommand = { kind: "create_folder"; folderName: string; destination?: string; confidence: number };
+export type LargestFilesCommand = { kind: "largest_files"; folder: string; confidence: number };
+export type ListFilesCommand = { kind: "list_files"; folder: string; confidence: number };
+export type SearchFilesCommand = { kind: "search_files"; query: string; folder?: string; confidence: number };
+export type OpenFileCommand = { kind: "open_file"; path: string; confidence: number };
+export type AnalyzeFileCommand = { kind: "analyze_file"; path: string; confidence: number };
+export type FilesystemCommand = FindFileCommand | CreateTextFileCommand | CreateFolderCommand | LargestFilesCommand | ListFilesCommand | SearchFilesCommand | OpenFileCommand | AnalyzeFileCommand;

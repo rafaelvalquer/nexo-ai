@@ -35,26 +35,27 @@ export function filesystemTools(options: { roots?:()=>string[]; permissions?:Per
   return [
     ...textFileTools(),
     {
-      name:"find_file",description:"Localiza um arquivo pelo nome exato nas pastas atualmente autorizadas",domain:"filesystem",operation:"find_file",risk:"READ",permissions:["filesystem.read"],
-      inputSchema:z.object({fileName:z.string().trim().min(1).max(260),root:z.string().optional(),mode:z.enum(["exact","case_insensitive"]).default("case_insensitive"),maxResults:z.number().int().min(1).max(50).default(20)}),
-      async execute({fileName,root,mode,maxResults},context){
+      name:"find_file",description:"Localiza arquivos por nome completo ou por nome-base (sem extensão) nas pastas autorizadas",domain:"filesystem",operation:"find_file",risk:"READ",permissions:["filesystem.read"],
+      inputSchema:z.object({name:z.string().trim().min(1).max(260).optional(),fileName:z.string().trim().min(1).max(260).optional(),root:z.string().optional(),matchMode:z.enum(["full_name","stem"]).default("full_name"),mode:z.enum(["exact","case_insensitive"]).optional(),maxResults:z.number().int().min(1).max(50).default(20)}).refine(value=>Boolean(value.name??value.fileName),"name is required"),
+      async execute({name,fileName,root,matchMode,maxResults},context){
+        const queryName=name??fileName!;
         const roots=context?.filesystemRoots??options.roots?.()??[]; const candidates=root?[root]:roots;
         const assertPath=context?.assertFilesystemPath??(options.permissions?(candidate:string)=>options.permissions!.assertPath(candidate):undefined);
         if(root){if(!assertPath)throw new Error("A pasta precisa ser verificada pelo PermissionEngine.");assertPath(root);}
         if(!candidates.length)return{ok:false,summary:"Não há pastas autorizadas para pesquisar. Adicione uma pasta em Configurações → Segurança → Pastas permitidas."};
-        const normalized=normalizeFilename(fileName),started=Date.now(); let indexState="MISS";
+        const normalized=normalizeFilename(queryName),started=Date.now(); let indexState="MISS";
         if(index&&!root){
-          const cached=index.findExact(normalized,roots),valid=[] as Array<{name:string;path:string;root:string;size:number;modifiedAt:string}>;
+          const cached=matchMode==="stem"?index.findByStem(normalized,roots):index.findExact(normalized,roots),valid=[] as Array<{name:string;path:string;root:string;size:number;modifiedAt:string}>;
           for(const row of cached){context?.signal?.throwIfAborted();try{assertPath?.(row.path);const stat=await fs.stat(row.path);if(!stat.isFile()){index.delete(row.path);continue;}valid.push({name:row.name,path:row.path,root:row.root,size:stat.size,modifiedAt:stat.mtime.toISOString()});}catch{index.delete(row.path);}}
-          const selected=mode==="exact"?valid.filter(row=>row.name.normalize("NFKC")===fileName.normalize("NFKC")):valid;
+          const selected=matchMode==="full_name"?valid.filter(row=>normalizeFilename(row.name)===normalized):valid;
           if(selected.length){options.metric?.("filesystem.find.index_hit",1);options.metric?.("filesystem.find.duration_ms",Date.now()-started);return{ok:true,summary:`${selected.length} arquivo(s) encontrado(s) pelo índice.`,data:{source:"workspace_index",matches:selected.slice(0,maxResults),searchedRoots:roots,scannedEntries:0,elapsedMs:Date.now()-started,truncated:selected.length>maxResults}};}
           indexState="MISS";
         }
         options.metric?.("filesystem.find.index_miss",1);
-        const result=await physicalSearch.find({roots:candidates,query:fileName,mode:mode==="exact"?"exact":"case_insensitive",maxResults,onProgress:event=>options.onSearchProgress?.({query:fileName,...event})},context?.signal,candidate=>assertPath?.(candidate));
+        const result=await physicalSearch.find({roots:candidates,query:queryName,mode:matchMode==="stem"?"stem":"full_name",maxResults,onProgress:event=>options.onSearchProgress?.({query:queryName,...event})},context?.signal,candidate=>assertPath?.(candidate));
         for(const match of result.matches){assertPath?.(match.path);if(index){index.upsert({id:match.path,root:match.root,path:match.path,parentPath:path.dirname(match.path),name:match.name,nameNormalized:normalized,extension:path.extname(match.name)||undefined,size:match.size,modifiedAt:match.modifiedAt,indexedAt:new Date().toISOString()});}}
         const metricName=result.matches.length>1?"filesystem.find.multiple_matches":result.matches.length?"filesystem.find.physical_hit":"filesystem.find.not_found";options.metric?.(metricName,1);options.metric?.("filesystem.find.scanned_entries",result.scannedEntries);options.metric?.("filesystem.find.duration_ms",Date.now()-started);
-        const summary=result.matches.length?`${result.matches.length} arquivo(s) encontrado(s).${result.truncated?" A busca foi limitada; pode haver outros resultados.":""}`:`Não encontrei ${fileName}. Pesquisei em: ${candidates.join(", ")}. ${result.scannedEntries} itens verificados.${result.truncated?" A pesquisa foi limitada por segurança/tempo.":""}`;
+        const summary=result.matches.length?`${result.matches.length} arquivo(s) encontrado(s) para ${queryName}.${result.truncated?" A busca foi limitada; pode haver outros resultados.":""}`:`Não encontrei ${queryName}. Pesquisei em: ${candidates.join(", ")}. ${result.scannedEntries} itens verificados.${result.truncated?" A pesquisa foi limitada por segurança/tempo.":""}`;
         return{ok:true,summary,data:{source:"physical_search",matches:result.matches,searchedRoots:candidates,scannedEntries:result.scannedEntries,scannedDirectories:result.scannedDirectories,elapsedMs:result.elapsedMs,truncated:result.truncated,reason:result.reason,index:indexState}};
       }
     },

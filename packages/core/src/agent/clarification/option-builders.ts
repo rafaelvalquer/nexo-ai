@@ -1,4 +1,5 @@
 import type { ClarificationQuestion,ConnectionProvider } from "@nexo/shared";
+import path from "node:path";
 import type { AgentIntent } from "../orchestrator/intent-schema.js";
 import { getMailboxOptions } from "../../email/preferences/category-resolver.js";
 import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
@@ -18,6 +19,10 @@ export function buildEmailMailboxQuestion(provider: ConnectionProvider, selected
 }
 
 export function buildClarificationQuestion(field: string, intent: AgentIntent): ClarificationQuestion {
+  if(field==="fileMatch"){
+    const files=Array.isArray(intent.entities.files)?intent.entities.files as Array<{name?:unknown;path?:unknown;root?:unknown}>:[];
+    return{id:"fileMatch",field:"fileMatch",prompt:intent.question??"Qual arquivo você quer usar?",type:"single_choice",options:files.filter(file=>typeof file.name==="string"&&typeof file.path==="string").map((file,index)=>{const root=typeof file.root==="string"?file.root:path.dirname(file.path as string),relative=path.relative(root,file.path as string).replace(/[\\/]+/g," / ");return{id:`file-${index+1}`,label:`${path.basename(root)} / ${relative}`,value:file.path};}),required:true,submitLabel:"Continuar"};
+  }
   if(field==="to")return{id:"to",field:"to",prompt:"Qual é o endereço de e-mail do destinatário?",type:"email",allowCustomValue:true,customPlaceholder:"nome@exemplo.com",required:true,submitLabel:"Continuar"};
   if(field==="body")return{id:"body",field:"body",prompt:"Qual mensagem você quer enviar?",type:"textarea",allowCustomValue:true,customPlaceholder:"Digite a mensagem...",required:true,submitLabel:"Continuar"};
   if (field === "folder") {

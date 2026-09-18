@@ -3,7 +3,7 @@ import path from "node:path";
 import { normalizeFilename } from "./filename-normalizer.js";
 
 export type PhysicalFileMatch = { name: string; path: string; root: string; size: number; modifiedAt: string };
-export type PhysicalSearchOptions = { roots: string[]; query: string; mode?: "exact" | "case_insensitive" | "contains" | "extension"; maxDepth?: number; maxEntries?: number; maxResults?: number; concurrency?: number; maxDurationMs?: number; onProgress?: (event: { scannedEntries: number; scannedDirectories: number; matches: number; currentRoot: string }) => void };
+export type PhysicalSearchOptions = { roots: string[]; query: string; mode?: "exact" | "case_insensitive" | "full_name" | "stem" | "contains" | "extension"; maxDepth?: number; maxEntries?: number; maxResults?: number; concurrency?: number; maxDurationMs?: number; onProgress?: (event: { scannedEntries: number; scannedDirectories: number; matches: number; currentRoot: string }) => void };
 export type PhysicalSearchResult = { matches: PhysicalFileMatch[]; scannedEntries: number; scannedDirectories: number; elapsedMs: number; truncated: boolean; reason?: "max_entries" | "time_budget" | "max_results" };
 
 export class PhysicalFileSearch {
@@ -39,7 +39,7 @@ export class PhysicalFileSearch {
           if (entry.isDirectory()) { if (item.depth < maxDepth) queue.push({ directory: candidate, root: item.root, depth: item.depth + 1 }); continue; }
           if (!entry.isFile()) continue;
           const normalized = normalizeFilename(entry.name);
-          const matched = options.mode === "contains" ? normalized.includes(target) : options.mode === "extension" ? normalized.endsWith(target.startsWith(".") ? target : `.${target}`) : options.mode === "exact" ? entry.name.normalize("NFKC") === exactTarget : normalized === target;
+          const matched = options.mode === "contains" ? normalized.includes(target) : options.mode === "extension" ? normalized.endsWith(target.startsWith(".") ? target : `.${target}`) : options.mode === "stem" ? normalizeFilename(path.parse(entry.name).name) === target : options.mode === "exact" ? entry.name.normalize("NFKC") === exactTarget : options.mode === "full_name" ? normalized === target : normalized === target;
           if (!matched) continue;
           try { authorize(candidate); const stat = await fs.stat(candidate); if (!stat.isFile()) continue; matches.push({ name: entry.name, path: candidate, root: item.root, size: stat.size, modifiedAt: stat.mtime.toISOString() }); }
           catch { continue; }

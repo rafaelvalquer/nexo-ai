@@ -104,6 +104,16 @@ export class LocationRegistry {
       const location: ResolvedLocation = { id, label: item.label, path: item.root, source: "settings" };
       this.locations.set(id, location);
 
+      // If a user-authorized root is the canonical instance of a known folder, bind
+      // that folder's natural-language aliases to the authorized path. This is only
+      // path resolution; PermissionEngine/PathPolicy remains the access authority.
+      const matchingSystem = (Object.entries(DEFINITIONS) as Array<[SystemLocation, (typeof DEFINITIONS)[SystemLocation]]>)
+        .find(([id]) => normalizeLocationText(id) === item.normalizedLabel);
+      if (matchingSystem && labelCount.get(item.normalizedLabel) === 1) {
+        const [systemId, definition] = matchingSystem;
+        for (const alias of [systemId, ...definition.aliases]) this.registerAlias(alias, location, true);
+      }
+
       // Absolute paths always resolve without aliases. A basename alias is added only
       // when it is unambiguous and does not shadow a built-in/explicit alias. Drive/
       // filesystem roots intentionally have no natural-language basename alias.
