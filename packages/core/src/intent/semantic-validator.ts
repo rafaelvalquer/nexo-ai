@@ -44,7 +44,7 @@ export function validateIntentSemantics(intent:CanonicalIntent,userText:string):
     ambiguities.push({code:"resource_type",field:"name",message:"Não ficou claro se o recurso é arquivo ou pasta.",critical:true});
   }
 
-  for(const key of ["path","source","destination"]){
+  for(const key of ["path","source","destination","folder"]){
     const value=entityString(intent,key);
     if(!value||!isAbsolutePortable(value))continue;
     if(!containsLiteralPath(text,value))ambiguities.push({code:"invented_physical_path",field:key,message:"O caminho físico não aparece literalmente no pedido do usuário.",critical:true});
@@ -87,9 +87,12 @@ function isNegatedMutation(text:string){
 }
 function isResourceTypeAmbiguous(text:string){
   const mutation=/\b(?:crie|criar|cria|gere|gerar|faça|fazer|monte|montar)\b/i.test(text);
-  const explicitType=/\b(?:pastinha|pasta|diret[oó]rio|arquivo|documento)\b/i.test(text);
+  // A type word inside the destination ("na pasta downloads") does not tell us
+  // whether the resource being created is a file or directory. The type must
+  // qualify the object immediately after the creation verb.
+  const explicitObjectType=/\b(?:crie|criar|cria|gere|gerar|faça|fazer|monte|montar)\s+(?:(?:um|uma|o|a)\s+)?(?:pastinha|pasta|diret[oó]rio|arquivo|documento)\b/i.test(text);
   const extension=/\.[a-z0-9]{1,12}\b/i.test(text);
-  return mutation&&!explicitType&&!extension;
+  return mutation&&!explicitObjectType&&!extension;
 }
 function missingQuestion(operation:string,field:string){
   if(field==="content")return"Qual conteúdo deve ser gravado no arquivo?";

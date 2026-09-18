@@ -129,6 +129,11 @@ export class AgentEngine{
       this.metrics?.record("agent.route",1,{route:"hybrid-intent"});
       if(hybrid.type==="tool"||hybrid.type==="macro")return this.executeDeterministicRoute(resolvedUserText,hybrid,hooks,context);
       if(hybrid.type==="chat"&&hybrid.response){hooks.onReplaceText?.(hybrid.response);hooks.onStatus?.("Preciso de uma confirmação de intenção.");return{text:hybrid.response,engine:"fast-path"};}
+      if(hybrid.type==="chat"&&hybrid.stream){
+        hooks.onStatus?.("Pedido informacional identificado. A IA local está gerando a resposta…");hooks.onReplaceText?.("");
+        try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}
+        catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
+      }
     }
 
     this.metrics?.record("agent.route",1,{route:this.agentLoopMode()==="legacy"?"llm":"agent"});

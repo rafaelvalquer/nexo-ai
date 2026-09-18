@@ -43,6 +43,17 @@ describe("filesystem hybrid regression",()=>{
     await expect(service.routeHybrid(phrase)).resolves.toMatchObject({type:"tool",tool:"create_folder",input:{path:path.join(root,"teste")}});
   });
 
+  it("pede esclarecimento quando só a pasta de destino possui tipo explícito",async()=>{
+    const service=new CommandService(registry,()=>[root],{resolver:new HybridIntentResolver({parse:async()=>folderIntent}),mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true});
+    await expect(service.routeHybrid("crie a teste123 na pasta downloads")).resolves.toMatchObject({type:"chat",response:expect.stringContaining("pasta ou um arquivo")});
+  });
+
+  it("mantém perguntas e negações fora das Tools",async()=>{
+    const service=new CommandService(registry,()=>[root],{resolver:new HybridIntentResolver({parse:async()=>folderIntent}),mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true});
+    await expect(service.routeHybrid("como criar uma pasta no Windows?")).resolves.toMatchObject({type:"chat",stream:true});
+    await expect(service.routeHybrid("não crie uma pasta teste em downloads")).resolves.toMatchObject({type:"chat",response:expect.stringContaining("Nenhuma ação")});
+  });
+
   it("converte alteração de conteúdo em busca segura antes da escrita",async()=>{
     const service=new CommandService(registry,()=>[root],{resolver:new HybridIntentResolver({parse:async()=>writeIntent}),mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true});
     await expect(service.routeHybrid("alterar o conteudo do arquivo teste123.txt para teste modificação")).resolves.toMatchObject({type:"tool",tool:"find_file",deferredAction:{kind:"filesystem.write_text"}});
