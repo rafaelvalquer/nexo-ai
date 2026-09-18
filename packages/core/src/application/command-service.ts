@@ -79,7 +79,11 @@ export class CommandService {
       context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},
       signal
     });
-    if(resolution.status==="unknown")return{type:"unknown"};
+    if(resolution.status==="unknown"){
+      if(resolution.reason==="NEGATED_ACTION")return{type:"chat",response:"Nenhuma ação foi executada porque o pedido contém uma negação explícita."};
+      if(resolution.reason==="INFORMATIONAL_REQUEST")return{type:"chat",stream:true};
+      return{type:"unknown"};
+    }
     if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
     const mapped=this.hybrid.mapper.map(resolution.intent);
     if(mapped.type==="unknown")return{type:"unknown"};
