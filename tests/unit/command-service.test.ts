@@ -21,7 +21,7 @@ describe("CommandService", () => {
     expect(commands.route("Busque arquivos Nexo e compare as datas.")).toMatchObject({ type: "tool", tool: "search_files", input: { query: "nexo" } });
     expect(commands.route("Dos arquivos anteriores, qual deles é o segundo?", { updatedAt: new Date().toISOString(), files: [{ name: "manual.txt", path: "C:\\Downloads\\manual.txt" }, { name: "contrato.pdf", path: "C:\\Downloads\\contrato.pdf" }] })).toMatchObject({ type: "tool", tool: "file_info", input: { path: "C:\\Downloads\\contrato.pdf" } });
     expect(commands.route("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
-    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file" });
+    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file", responseMode: "deterministic" });
     const cases:[string,"tool"|"macro",string][]=[
       ["Abra o Chrome.","tool","open_application"],
       ["Liste os arquivos de Downloads.","tool","list_files"],
