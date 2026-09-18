@@ -20,6 +20,12 @@ describe("filesystem hybrid regression",()=>{
     if(routed.type==="tool")expect(String(routed.input.path)).not.toContain("teste dentro da pasta");
   });
 
+  it("não confunde a pasta do destino com o recurso a criar",()=>{
+    const service=new CommandService(registry,()=>[root]);
+    const routed=service.route("crie a teste123 na pasta downloads");
+    expect(routed).not.toMatchObject({type:"tool",tool:"create_folder",input:{path:root}});
+  });
+
   it("mantém o fast path existente como prioridade",()=>{
     const service=new CommandService(registry,()=>[root]);
     expect(service.route("crie teste.txt em Downloads")).toMatchObject({type:"tool",tool:"create_text_file"});
