@@ -7,6 +7,30 @@ export function defaultApprovalPresentation(toolName: string, input: Record<stri
   const affectedCount = Array.isArray(input.messageIds) ? input.messageIds.length : 1;
   const expiresInMs = risk === "CRITICAL" ? 5 * 60_000 : 10 * 60_000;
 
+  if (toolName === "create_text_file" || toolName === "create_folder") {
+    const target = typeof input.path === "string" ? input.path.trim() : "";
+    const details = filesystemTargetDetails(target);
+    const isFile = toolName === "create_text_file";
+    const resourceLabel = isFile ? "arquivo" : "pasta";
+    return {
+      title: `Criar ${resourceLabel} ${details.name || "(sem nome)"}`,
+      metadata: {
+        domain: "filesystem",
+        actionType: "create",
+        affectedCount: 1,
+        preview: [
+          `Nome: ${details.name || "(não informado)"}`,
+          details.parent ? `Local: ${details.parent}` : undefined,
+          target ? `Caminho: ${target}` : undefined
+        ].filter(Boolean).join("\n"),
+        consequence: isFile
+          ? "Um novo arquivo será criado. Arquivos existentes não serão sobrescritos."
+          : "Uma nova pasta será criada no caminho informado.",
+        expiresInMs
+      }
+    };
+  }
+
   if (toolName.startsWith("email_send")) {
     const message = isRecord(input.message) ? input.message : input;
     const recipients = Array.isArray(message.to) ? message.to.map(recipientLabel).filter(Boolean) : [];
@@ -80,4 +104,13 @@ function recipientLabel(value: unknown) {
   return "";
 }
 function humanizeToolName(name: string) { return name.replace(/_/g, " ").replace(/^./, value => value.toUpperCase()); }
+function filesystemTargetDetails(target: string) {
+  const normalized = target.replace(/[\\/]+$/, "");
+  if (!normalized) return { name: "", parent: "" };
+  const separator = Math.max(normalized.lastIndexOf("\\"), normalized.lastIndexOf("/"));
+  return {
+    name: separator >= 0 ? normalized.slice(separator + 1) : normalized,
+    parent: separator > 0 ? normalized.slice(0, separator) : separator === 0 ? normalized.slice(0, 1) : ""
+  };
+}
 function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
