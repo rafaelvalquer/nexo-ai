@@ -17,7 +17,10 @@ export class SecurityPolicyService {
   }
 
   requiresApproval(toolName: string, risk: RiskLevel) {
-    return this.settings().requireApprovalForEmail && /^(email_send|email_create_draft|email_(archive|trash|mark_|flag))/.test(toolName) || risk === "CRITICAL";
+    const alwaysConfirm = toolName === "create_text_file" || toolName === "create_folder";
+    return alwaysConfirm
+      || (this.settings().requireApprovalForEmail && /^(email_send|email_create_draft|email_(archive|trash|mark_|flag))/.test(toolName))
+      || risk === "CRITICAL";
   }
 
   assertRecipientDomains(recipients: Array<{ email?: string }> | undefined) {

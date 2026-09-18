@@ -56,7 +56,7 @@ test("About settings expose SemVer and reproducible build identifiers",async({pa
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
   await page.getByRole("button",{name:"Sobre",exact:true}).click();
   const about=page.locator(".settingsAbout");
-  await expect(about.getByText("0.7.0-beta.1",{exact:false})).toBeVisible();
+  await expect(about.locator("p").first()).toHaveText(/^Versão \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/);
   await expect(about.getByText(/Commit/)).toBeVisible();
   await expect(about.getByText(/Build/)).toBeVisible();
 });

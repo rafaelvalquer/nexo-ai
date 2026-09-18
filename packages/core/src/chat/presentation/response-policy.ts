@@ -15,6 +15,7 @@ const PRESENTATION_ONLY_TOOLS = new Set([
 ]);
 
 const DETERMINISTIC_READ_TOOLS = new Set(["memory_usage", "disk_usage", "system_info", "process_list", "macro_list"]);
+const DETERMINISTIC_MUTATION_TOOLS = new Set(["create_text_file", "create_folder"]);
 
 export function responsePolicy(
   toolNames: string[],
@@ -25,6 +26,7 @@ export function responsePolicy(
 } {
   if(intent?.intent==="summarize")return{mode:"synthesize",appendText:true};
   if(toolNames.length>0&&toolNames.every(name=>DETERMINISTIC_READ_TOOLS.has(name)))return{mode:"deterministic",appendText:true};
+  if(toolNames.length>0&&toolNames.every(name=>DETERMINISTIC_MUTATION_TOOLS.has(name)))return{mode:"deterministic",appendText:true};
   if (toolNames.length > 0 && toolNames.every(name => PRESENTATION_ONLY_TOOLS.has(name))) {
     return {
       mode: "presentation",

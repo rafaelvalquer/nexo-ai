@@ -1,7 +1,9 @@
 import type { ToolDefinition } from "../../tools/types.js";
 import type { BuiltPlanStep } from "./plan-builder.js";
+import { defaultApprovalPresentation } from "../../permissions/approval-presentation.js";
 
 export type ConfirmationMetadata = {
+  title?: string;
   domain?: string;
   actionType?: string;
   preview?: string;
@@ -11,6 +13,10 @@ export type ConfirmationMetadata = {
 };
 
 export function buildConfirmation(step: BuiltPlanStep, tool: ToolDefinition, input: Record<string, unknown>): ConfirmationMetadata {
+  if (tool.name === "create_text_file" || tool.name === "create_folder") {
+    const fallback = defaultApprovalPresentation(tool.name, input, tool.risk);
+    return { title: fallback.title, ...fallback.metadata, ...(step.approval ?? {}) };
+  }
   if (step.approval) return step.approval;
   const domain = tool.domain ?? domainFromName(tool.name);
   const actionType = tool.operation ?? tool.name;

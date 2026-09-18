@@ -24,6 +24,24 @@ describe("approval presentation", () => {
     expect(value.metadata.preview).toContain("m2");
   });
 
+  it("shows the exact filesystem target before creating files and folders", () => {
+    const file = defaultApprovalPresentation("create_text_file", {
+      path: "C:\\Users\\Rafael\\Downloads\\teste12.txt"
+    }, "WRITE");
+    expect(file.title).toBe("Criar arquivo teste12.txt");
+    expect(file.metadata.preview).toContain("Nome: teste12.txt");
+    expect(file.metadata.preview).toContain("Local: C:\\Users\\Rafael\\Downloads");
+    expect(file.metadata.preview).toContain("Caminho: C:\\Users\\Rafael\\Downloads\\teste12.txt");
+    expect(file.metadata.consequence).toContain("não serão sobrescritos");
+
+    const folder = defaultApprovalPresentation("create_folder", {
+      path: "C:\\Users\\Rafael\\Downloads\\NexoTeste"
+    }, "WRITE");
+    expect(folder.title).toBe("Criar pasta NexoTeste");
+    expect(folder.metadata.preview).toContain("Nome: NexoTeste");
+    expect(folder.metadata.preview).toContain("Caminho: C:\\Users\\Rafael\\Downloads\\NexoTeste");
+  });
+
   it("recognizes the old generic V2 reason", () => {
     expect(isGenericApprovalReason("A ação proposta pelo agente altera estado e requer sua confirmação.")).toBe(true);
   });
