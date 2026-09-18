@@ -14,14 +14,14 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "pnpm build:renderer && pnpm build:electron",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "package:win": "pnpm build && electron-builder --win nsis --publish never"
+    "package:win": "pnpm build && electron-builder --win --dir && electron-builder --win nsis --publish never --prepackaged ../../release/win-unpacked",
+    "package:win:publish": "pnpm build && electron-builder --win --dir && electron-builder --win nsis --publish always --prepackaged ../../release/win-unpacked",
+    "publish:win:verified": "electron-builder --win nsis --publish always --prepackaged ../../release/win-unpacked"
   },
   "dependencies": {
     "@nexo/browser-agent": "workspace:*",
     "@nexo/core": "workspace:*",
     "@nexo/shared": "workspace:*",
-    "@react-three/drei": "^9.122.0",
-    "@react-three/fiber": "^8.18.0",
     "docx-preview": "^0.4.0",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.468.0",
@@ -31,7 +31,6 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "three": "^0.186.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

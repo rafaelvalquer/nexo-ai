@@ -41,10 +41,9 @@ jobs:
             throw "Configure NEXO_MODEL_EVAL_URL para executar o gate de modelo. O smoke não pode ser ignorado silenciosamente."
           }
           pnpm eval:agent:model
-      - run: pnpm --filter @nexo/shared build
-      - run: pnpm --filter @nexo/browser-agent build
-      - run: pnpm --filter @nexo/core build
-      - run: pnpm --filter @nexo/desktop exec electron-builder --win nsis --publish always
+      - run: pnpm package:win
       - run: node scripts/verify-installer.mjs
       - shell: powershell
         run: ./scripts/smoke-installer.ps1
+      - name: Publish verified Windows installer
+        run: pnpm --filter @nexo/desktop publish:win:verified
