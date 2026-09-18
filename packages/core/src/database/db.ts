@@ -242,6 +242,16 @@ export class NexoDatabase {
   }
   all<T=Record<string,unknown>>(sql:string,params:unknown[]=[]):T[]{const stmt=this.db.prepare(sql);stmt.bind(params as any[]);const rows:T[]=[];while(stmt.step())rows.push(stmt.getAsObject() as T);stmt.free();return rows;}
   get<T=Record<string,unknown>>(sql:string,params:unknown[]=[]):T|undefined{return this.all<T>(sql,params)[0];}
-  private persist(){if(!this.db)return;const data=this.db.export();fs.writeFileSync(this.filePath,Buffer.from(data));}
+  private persist(){
+    if(!this.db)return;
+    const data=this.db.export(),temporaryPath=`${this.filePath}.${process.pid}.tmp`;
+    try{
+      fs.writeFileSync(temporaryPath,Buffer.from(data));
+      fs.renameSync(temporaryPath,this.filePath);
+    }catch(error){
+      try{fs.rmSync(temporaryPath,{force:true});}catch{/* Keep the persistence error as the primary failure. */}
+      throw error;
+    }
+  }
   backup(){const backupDir=path.join(path.dirname(this.filePath),"backups");fs.mkdirSync(backupDir,{recursive:true});const stamp=new Date().toISOString().slice(0,10),dest=path.join(backupDir,`${stamp}.db`);fs.copyFileSync(this.filePath,dest);return dest;}
 }

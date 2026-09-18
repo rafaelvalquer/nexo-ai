@@ -6,6 +6,7 @@ import { NexoCore, startCoreServer } from "@nexo/core";
 import { registerIpc } from "../ipc/register.js";
 import { registerClarificationIpc } from "../ipc/clarification.js";
 import { registerAutomationV2Ipc } from "../ipc/automation-v2.js";
+import { registerMacroIpc } from "../ipc/macros.js";
 import { registerEmailDraftIpc } from "../ipc/email-draft.js";
 import { registerBrowserAgentIpc } from "../browser-agent-ipc.js";
 import { ElectronSecretStore } from "../oauth/secret-store.js";
@@ -45,6 +46,27 @@ async function createWindow(){
   if(dev)await win.loadURL(dev);else await win.loadFile(path.join(__dirname,"../../dist/index.html"));
 }
 
+async function runInstallerSmokeChecks(){
+  core.updateSettings({ollamaUrl:"http://127.0.0.1:1",connectionsEnabled:false,browserAutomationEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
+  let plannerCalls=0,llmCalls=0;
+  const planner=core.planner as any,llm=core.llm as any;
+  const originalPlan=planner.plan.bind(planner),originalChat=llm.chat.bind(llm);
+  planner.plan=async()=>{plannerCalls++;throw new Error("A rota determinística tentou chamar o AgentPlanner.");};
+  llm.chat=async()=>{llmCalls++;throw new Error("A rota determinística tentou chamar o Ollama.");};
+  const checks:Array<{command:string;tool:string}> = [];
+  try{
+    for(const [command,tool] of [["Mostre o uso da memória","memory_usage"],["Quais são minhas macros?","macro_list"],["Liste arquivos de Downloads","list_files"]] as const){
+      const reply=await core.chat(command) as {engine?:string;toolsUsed?:string[];result?:{ok?:boolean};results?:Array<{ok?:boolean}>};
+      if(reply.engine!=="fast-path"||!reply.toolsUsed?.includes(tool)||reply.result?.ok===false||reply.results?.some(result=>result.ok===false))throw new Error(`Comando offline não concluiu pela rota determinística: ${command}.`);
+      checks.push({command,tool});
+    }
+    const chrome=core.commandService.route("Abra o Chrome");
+    if(chrome.type!=="tool"||chrome.tool!=="open_application")throw new Error("O comando para abrir o Chrome não foi reconhecido pelo roteador determinístico.");
+    if(plannerCalls||llmCalls)throw new Error(`Os comandos offline chamaram serviços de IA (planner=${plannerCalls}, llm=${llmCalls}).`);
+    return {ollamaOffline:true,checks,recognizedWithoutLaunching:[{command:"Abra o Chrome",tool:chrome.tool}],plannerCalls,llmCalls};
+  }finally{planner.plan=originalPlan;llm.chat=originalChat;}
+}
+
 function reportStartupFailure(error:unknown){
   const detail=error instanceof Error?error.stack??error.message:String(error);
   try{fs.mkdirSync(storage.logs,{recursive:true});fs.appendFileSync(path.join(storage.logs,"startup-errors.log"),`[${new Date().toISOString()}] ${detail}\n`);}catch{}
@@ -74,13 +96,14 @@ app.whenReady().then(async()=>{
   registerClarificationIpc(core);
   registerEmailDraftIpc(core);
   registerAutomationV2Ipc(core);
+  registerMacroIpc(core);
   browserAgentRuntime=await registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")}).catch(error=>{console.warn("Browser Agent module unavailable; continuing without it.",error);return undefined;});
   smokeProgress("ipc-registered");
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   smokeProgress("core-server-started");
   await createWindow();createTray();
   smokeProgress("window-created");
-  if(process.env.NEXO_SMOKE_READY_FILE){const readyFile=path.resolve(process.env.NEXO_SMOKE_READY_FILE);fs.mkdirSync(path.dirname(readyFile),{recursive:true});fs.writeFileSync(readyFile,JSON.stringify({readyAt:new Date().toISOString(),dataDir:storage.root,database:storage.database,windowLoaded:Boolean(win&&!win.isDestroyed())}));}
+  if(process.env.NEXO_SMOKE_READY_FILE){const functionalChecks=await runInstallerSmokeChecks();const readyFile=path.resolve(process.env.NEXO_SMOKE_READY_FILE);fs.mkdirSync(path.dirname(readyFile),{recursive:true});fs.writeFileSync(readyFile,JSON.stringify({readyAt:new Date().toISOString(),dataDir:storage.root,database:storage.database,windowLoaded:Boolean(win&&!win.isDestroyed()),functionalChecks}));const exitFile=process.env.NEXO_SMOKE_EXIT_FILE&&path.resolve(process.env.NEXO_SMOKE_EXIT_FILE);if(exitFile){const timer=setInterval(()=>{if(!fs.existsSync(exitFile))return;clearInterval(timer);try{fs.unlinkSync(exitFile);}catch{}quitting=true;app.quit();},250);timer.unref?.();}}
   if(core.getSettings().connectionsEnabled)setTimeout(()=>{void core.ensureConnections().then(connections=>Promise.all(connections.list().filter(item=>item.status==="connected").map(account=>connections.test(account.id).catch(()=>undefined))));},1500).unref?.();
   if(app.isPackaged)void import("../updater/index.js").then(({configureUpdater})=>configureUpdater(true));
   app.on("activate",()=>{if(BrowserWindow.getAllWindows().length===0)void createWindow();else win?.show();});

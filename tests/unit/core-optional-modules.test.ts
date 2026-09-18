@@ -16,6 +16,16 @@ async function coreWithSettings(overrides:Record<string,unknown>){
 }
 
 describe("NexoCore optional modules",()=>{
+  it("keeps optional connections out of the default first-start Core",async()=>{
+    const root=fs.mkdtempSync(path.join(os.tmpdir(),"nexo-default-modules-"));roots.push(root);
+    const core=new NexoCore({dataDir:root});cores.push(core);await core.ready();
+    expect(core.getSettings().connectionsEnabled).toBe(false);
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"connections",status:"disabled"},{id:"documents",status:"disabled"},{id:"rag",status:"disabled"}
+    ]));
+    expect(core.tools.list().some(tool=>tool.name.startsWith("email_")||tool.name.startsWith("calendar_")||tool.name.startsWith("document_"))).toBe(false);
+  });
+
   it("starts the basic Core without instantiating disabled connections, documents, or RAG",async()=>{
     const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
     expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([

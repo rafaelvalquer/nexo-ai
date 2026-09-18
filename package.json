@@ -12,6 +12,7 @@
     "test:security": "vitest run tests/security",
     "test:e2e": "playwright test",
     "analyze:renderer": "pnpm --filter @nexo/desktop build:renderer && node scripts/analyze-renderer-bundle.mjs",
+    "optimize:pixel-office-assets": "node scripts/optimize-pixel-office-png.mjs --write",
     "test:watch": "vitest",
     "diagnose:browser-model": "node scripts/diagnose-browser-tool-calling.mjs",
     "browser:doctor": "node scripts/browser-doctor.mjs",
