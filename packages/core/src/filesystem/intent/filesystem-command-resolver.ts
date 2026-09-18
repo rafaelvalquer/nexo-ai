@@ -65,6 +65,11 @@ export class FilesystemCommandResolver {
     const named = text.match(/\b(?:pasta|diret[oó]rio)(?:\s+(?:chamad[oa]|com\s+nome))?\s+["“']?([\p{L}\p{N}_ .-]+?)["”']?(?:\s+(?:em|no|na|para|dentro\s+de)\s+(.+?))?[.!?]*$/iu);
     if (!named?.[1]) return undefined;
     const name = named[1].trim();
+    // The deterministic resolver must only accept high-confidence parses. If a
+    // destination phrase leaked into the captured name (for example
+    // "teste dentro da pasta downloads"), stop here and let the semantic
+    // fallback interpret the request instead of creating a relative path.
+    if (!named[2] && /\b(?:dentro\s+(?:da|do|das|dos)|(?:em|no|na|nos|nas|para)\s+(?:a\s+)?(?:pasta|diret[oó]rio))\b/iu.test(name)) return undefined;
     const destination = named[2] ? this.resolveFolder(cleanFolder(named[2]), roots, locations) : undefined;
     if (named[2] && !destination) return undefined;
     return { kind: "create_folder" as const, folderName: name, ...(destination ? { destination } : {}), confidence: 1 };
