@@ -23,6 +23,11 @@ export class HybridIntentResolver{
       return this.finish(input,"unknown",started,{status:"unknown",reason:"LLM_INTENT_PARSE_FAILED"});
     }
 
+    const preliminary=validateIntentSemantics(intent,input.text);
+    if(preliminary.reason==="INFORMATIONAL_REQUEST"||preliminary.reason==="NEGATED_ACTION"){
+      return this.finish(input,"unknown",started,{status:"unknown",reason:preliminary.reason,intent});
+    }
+
     const structural=validateCanonicalIntent(intent,input.availableOperations);
     if(!structural.valid){
       this.registerFailure();
