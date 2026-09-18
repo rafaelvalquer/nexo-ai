@@ -62,7 +62,7 @@ export class FilesystemCommandResolver {
   private resolveCreateFolder(text: string, roots: string[], locations?: LocationRegistry) {
     if(CREATE.test(text))return undefined;
     if (!/\b(?:crie|criar)\b/i.test(text) || !/\b(?:pasta|diret[oó]rio)\b/i.test(text)) return undefined;
-    const named = text.match(/\b(?:pasta|diret[oó]rio)(?:\s+(?:chamad[oa]|com\s+nome))?\s+["“']?([\p{L}\p{N}_ .-]+?)["”']?(?:\s+(?:em|no|na|para|dentro\s+de)\s+(.+?))?[.!?]*$/iu);
+    const named = text.match(/\b(?:crie|criar)\s+(?:(?:uma|a)\s+)?(?:pasta|diret[oó]rio)(?:\s+(?:chamad[oa]|com\s+nome))?\s+["“']?([\p{L}\p{N}_ .-]+?)["”']?(?:\s+(?:em|no|na|para|dentro\s+de)\s+(.+?))?[.!?]*$/iu);
     if (!named?.[1]) return undefined;
     const name = named[1].trim();
     // The deterministic resolver must only accept high-confidence parses. If a
