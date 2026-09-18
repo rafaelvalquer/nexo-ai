@@ -54,6 +54,16 @@ describe("filesystem hybrid regression",()=>{
     await expect(service.routeHybrid("não crie uma pasta teste em downloads")).resolves.toMatchObject({type:"chat",response:expect.stringContaining("Nenhuma ação")});
   });
 
+  it("não chama o Hybrid para caminhos físicos explícitos já tratados pelo Agent V2",async()=>{
+    let parserCalls=0;
+    const service=new CommandService(registry,()=>[root],{
+      resolver:new HybridIntentResolver({parse:async()=>{parserCalls++;return folderIntent;}}),
+      mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true
+    });
+    await expect(service.routeHybrid("Crie C:\\Projetos\\teste.txt com o conteúdo abc")).resolves.toMatchObject({type:"unknown"});
+    expect(parserCalls).toBe(0);
+  });
+
   it("converte alteração de conteúdo em busca segura antes da escrita",async()=>{
     const service=new CommandService(registry,()=>[root],{resolver:new HybridIntentResolver({parse:async()=>writeIntent}),mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true});
     await expect(service.routeHybrid("alterar o conteudo do arquivo teste123.txt para teste modificação")).resolves.toMatchObject({type:"tool",tool:"find_file",deferredAction:{kind:"filesystem.write_text"}});

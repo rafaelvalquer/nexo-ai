@@ -70,7 +70,7 @@ export class CommandService {
   }
 
   async routeHybrid(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
-    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!looksLikeFilesystemRequest(text))return{type:"unknown"};
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!looksLikeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return{type:"unknown"};
     const availableOperations=filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)));
     const resolution=await this.hybrid.resolver.resolve({
       text,
@@ -92,7 +92,7 @@ export class CommandService {
   }
 
   async evaluateShadow(text:string,deterministic:CommandRoute,previous?:ConversationActionContextState,signal?:AbortSignal){
-    if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!looksLikeFilesystemRequest(text))return;
+    if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!looksLikeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return;
     const baseline=adaptDeterministicTool(deterministic.tool,deterministic.input);if(!baseline)return;
     const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)))],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
     if(resolution.status!=="resolved")return;
@@ -149,4 +149,7 @@ function isLikelyConversation(text: string): boolean {
 
 function looksLikeFilesystemRequest(text:string){
   return /\b(arquivos?|pastas?|pastinha|diret[oó]rios?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho|conte[uú]do\s+do\s+arquivo)\b|\.[a-z0-9]{1,12}\b|\b[A-Za-z]:[\\/]/i.test(text);
+}
+function hasExplicitPhysicalPath(text:string){
+  return /\b[A-Za-z]:[\\/]/.test(text)||/(?:^|\s)\\\\[^\s]+/.test(text)||/(?:^|\s)\/(?:[^\s/]+\/)*[^\s]*/.test(text);
 }
