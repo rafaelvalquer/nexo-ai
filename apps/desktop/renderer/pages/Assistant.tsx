@@ -13,6 +13,7 @@ import { ChatTabs } from "../components/chat/ChatTabs";
 import { useAssistant } from "../hooks/useAssistant";
 import { useChatAutoScroll } from "../hooks/useChatAutoScroll";
 import { NexoDrawer } from "../components/ui/NexoDrawer";
+import { Tooltip } from "../components/ui/Tooltip";
 import { useAgentEvents } from "../pixel-office/hooks/useAgentEvents";
 export function Assistant() {
   useAgentEvents();
@@ -47,7 +48,7 @@ export function Assistant() {
         onCreate={() => void assistant.createSession()} onSelect={assistant.selectSession}
         onClose={id => void assistant.closeSession(id)} />
       <div className="assistantSessionPanel">
-        <button type="button" className="mobileChatsTrigger" aria-label="Abrir conversas" onClick={() => setChatsOpen(true)}><PanelLeft size={17}/></button>
+        <Tooltip className="mobileChatsTooltip" content="Abrir conversas"><button type="button" className="mobileChatsTrigger" aria-label="Abrir conversas" onClick={() => setChatsOpen(true)}><PanelLeft size={17}/></button></Tooltip>
         <AssistantHeader model={assistant.model} busy={assistant.isStreaming} elapsed={assistant.elapsed} onExecution={() => setDrawerOpen(true)} />
         {session && <div className="activeChatIdentity">
           <span>{session.agentId ? session.agentId.replace("agent-", "Polvo ") : "Agente livre"}</span>

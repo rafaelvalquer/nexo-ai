@@ -1,14 +1,13 @@
 import { BrowserWindow, ipcMain, MessageChannelMain, shell, utilityProcess, type MessagePortMain, type WebContents } from "electron";
 import type { NexoCore } from "@nexo/core";
 import { BrowserAgentService, type BrowserWorkerFactory } from "@nexo/core/browser-agent";
-import { browserAgentTools } from "@nexo/core/tools/browser-agent";
 import type { BrowserAgentControl, BrowserFrame } from "@nexo/shared/browser-agent";
 
 export type BrowserAgentDesktopOptions = { dataDir:string; workerEntry:string };
 
 type FrameSubscription = { webContents:WebContents; port:MessagePortMain };
 
-export function registerBrowserAgentIpc(core:NexoCore, options:BrowserAgentDesktopOptions) {
+export async function registerBrowserAgentIpc(core:NexoCore, options:BrowserAgentDesktopOptions) {
   assertSupportedNode();
   const service = new BrowserAgentService({
     dataDir:options.dataDir,
@@ -18,7 +17,7 @@ export function registerBrowserAgentIpc(core:NexoCore, options:BrowserAgentDeskt
     settings:() => core.getSettings(),
     workerFactory:createUtilityWorkerFactory(options.workerEntry)
   });
-  core.tools.register(...browserAgentTools(service));
+  await core.registerBrowserAgentModule(service);
 
   const frameSubscriptions = new Map<string,FrameSubscription>();
   const keyFor = (contents:WebContents, runId:string) => `${contents.id}:${runId}`;

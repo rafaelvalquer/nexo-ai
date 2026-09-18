@@ -25,7 +25,7 @@ let quitting=false;
 const core=new NexoCore({dataDir:storage.root,secretStore:new ElectronSecretStore(storage.secrets),oauthHost:new DesktopOAuthHost(),notify:(title,body)=>{if(Notification.isSupported())new Notification({title,body}).show();}});
 smokeProgress("core-constructed");
 let httpServer:any=null;
-let browserAgentRuntime:ReturnType<typeof registerBrowserAgentIpc>|undefined;
+let browserAgentRuntime:Awaited<ReturnType<typeof registerBrowserAgentIpc>>|undefined;
 
 function configureSystemLocations(){
   process.env.NEXO_SYSTEM_HOME??=app.getPath("home");
@@ -74,7 +74,7 @@ app.whenReady().then(async()=>{
   registerClarificationIpc(core);
   registerEmailDraftIpc(core);
   registerAutomationV2Ipc(core);
-  browserAgentRuntime=registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")});
+  browserAgentRuntime=await registerBrowserAgentIpc(core,{dataDir:storage.root,workerEntry:path.join(__dirname,"../browser-agent-worker.js")}).catch(error=>{console.warn("Browser Agent module unavailable; continuing without it.",error);return undefined;});
   smokeProgress("ipc-registered");
   httpServer=await startCoreServer(Number(process.env.NEXO_CORE_PORT??47321));
   smokeProgress("core-server-started");

@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { CalendarDays, CloudSun, Cpu, FileClock, Gauge, Globe2, Landmark, ListTodo, Mail, Plus, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import type { DashboardGadgetId, GadgetDefinition, DashboardGadgetInstance } from "@nexo/shared";
 import { NexoDrawer } from "../ui/NexoDrawer";
+import { useDeveloperDiagnosticsEnabled } from "../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../utils/user-facing-error";
 import "./gadgets/gadget-catalog-drawer.css";
 
 const icons: Record<DashboardGadgetId, typeof Sparkles> = {
@@ -19,6 +21,7 @@ type Props = {
 };
 
 export function GadgetCatalog({ catalog, close, add, initial, save }: Props) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const initialDefinition = initial ? catalog.find(item => item.id === initial.gadgetId) : undefined;
   const initialConfig = initial?.configuration ?? {};
   const [query, setQuery] = useState("");
@@ -50,7 +53,7 @@ export function GadgetCatalog({ catalog, close, add, initial, save }: Props) {
       else await add(choice.id, configuration);
       close();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Não foi possível adicionar o gadget.");
+      setError(userFacingError(cause,"Não foi possível salvar esse gadget. Confira os dados e tente novamente.",diagnostics));
     } finally {
       setBusy(false);
     }

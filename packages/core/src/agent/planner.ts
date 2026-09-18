@@ -3,7 +3,7 @@ import type { LLMMessage,LLMProvider } from "../llm/provider.js";
 import { AGENT_SYSTEM_PROMPT,stripCodeFence } from "../security/prompt.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { responsePolicy } from "../chat/presentation/response-policy.js";
-import { FastIntentRouter } from "./intent-router.js";
+import { FastIntentRouter } from "../router/fast-intent-router.js";
 import type { ConversationActionContextState } from "./context/conversation-action-context.js";
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
 import { materializeDeferredAction } from "./orchestrator/action-preflight.js";

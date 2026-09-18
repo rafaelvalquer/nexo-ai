@@ -9,29 +9,33 @@ import { FileCard } from "./filesystem/FileCard";
 import { FolderCard } from "./filesystem/FolderCard";
 import { CalendarCard } from "./calendar/CalendarCard";
 import { GenericResourceCard } from "./generic/GenericResourceCard";
+import { useDeveloperDiagnosticsEnabled } from "../../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../../utils/user-facing-error";
 
 const BULK_EMAIL_ACTION_IDS=new Set(["email.trash","email.archive","email.mark_read","email.mark_unread"]);
 type Reference={conversationId:string;messageId:string;blockId:string};
 export function ResourceCollection({block,conversationId,messageId}:{block:ResourceCollectionBlock;conversationId?:string;messageId?:string}) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const [selected,setSelected]=useState<string[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState("");
   const execute=useAssistantStore(store=>store.executeResourceAction),loadMore=useAssistantStore(store=>store.loadMoreBlock),limit=useAssistantStore(store=>store.blockLimits[block.id]??8);
   const reference=conversationId&&messageId?{conversationId,messageId,blockId:block.id}:undefined;
   const chosen=block.items.filter(item=>selected.includes(item.id));
   const common=chosen[0]?.actions.filter(action=>BULK_EMAIL_ACTION_IDS.has(action.id)&&chosen.every(item=>item.actions.some(other=>other.id===action.id&&!other.disabled)&&!item.pendingApprovalId))??[];
-  async function bulk(action:ResourceAction){if(!reference||!chosen.length)return;setLoading(true);setError("");try{await execute({...reference,itemId:chosen[0].id,itemIds:chosen.map(item=>item.id),actionId:action.id});setSelected([]);}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setLoading(false);}}
+  async function bulk(action:ResourceAction){if(!reference||!chosen.length)return;setLoading(true);setError("");try{await execute({...reference,itemId:chosen[0].id,itemIds:chosen.map(item=>item.id),actionId:action.id});setSelected([]);}catch(error){setError(userFacingError(error,"Não foi possível aplicar esta ação aos itens selecionados. Tente novamente.",diagnostics));}finally{setLoading(false);}}
   return <section className="resourceCollection" aria-label={block.title}>
     <header className="resourceCollectionHeading"><div><h3>{block.title}</h3>{block.subtitle&&<p>{block.subtitle}</p>}</div><span>{Math.min(limit,block.items.length)} exibidos{block.total!==undefined?` de ${Math.max(block.total,block.items.length)}`:""}</span></header>
     {chosen.length>0&&<div className="resourceBulkBar" role="group" aria-label="Ações dos e-mails selecionados"><span>{chosen.length} selecionados</span>{common.map(action=><button type="button" key={action.id} disabled={loading} onClick={()=>void bulk(action)}>{action.label}</button>)}<button type="button" onClick={()=>setSelected([])}>Limpar seleção</button></div>}
     {block.items.slice(0,limit).map(item=><ResourceEntry key={item.id} item={item} reference={reference} selected={selected.includes(item.id)} onSelect={value=>setSelected(ids=>value?[...ids,item.id]:ids.filter(id=>id!==item.id))}/>)}
     {!block.items.length&&<p className="resourceEmpty">Nenhum item encontrado.</p>}
-    {(block.items.length>limit||block.pagination?.hasMore)&&reference&&<button className="resourceLoadMore" disabled={loading} onClick={async()=>{setLoading(true);setError("");try{await loadMore(reference.conversationId,reference.messageId,block.id);}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setLoading(false);}}}>{loading?"Carregando…":"Mostrar mais"}</button>}
+    {(block.items.length>limit||block.pagination?.hasMore)&&reference&&<button className="resourceLoadMore" disabled={loading} onClick={async()=>{setLoading(true);setError("");try{await loadMore(reference.conversationId,reference.messageId,block.id);}catch(error){setError(userFacingError(error,"Não foi possível carregar mais resultados. Tente novamente.",diagnostics));}finally{setLoading(false);}}}>{loading?"Carregando…":"Mostrar mais"}</button>}
     {error&&<p className="chatError" role="alert">{error}</p>}
   </section>;
 }
 function ResourceEntry({item,reference,selected,onSelect}:{item:ResourceItem;reference?:Reference;selected:boolean;onSelect:(value:boolean)=>void}) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const execute=useAssistantStore(store=>store.executeResourceAction),[form,setForm]=useState<string>(),[expanded,setExpanded]=useState(false),[preview,setPreview]=useState<ChatActionOutcome["preview"]>(),[error,setError]=useState("");
   const resource=item.resource;
-  async function run(actionId:string,values?:ChatActionRequest["values"]){if(!reference)return;setError("");try{const result=await execute({...reference,itemId:item.id,actionId,values});if(result.preview)setPreview(result.preview);if(actionId==="email.expand")setExpanded(true);setForm(undefined);}catch(error){setError(error instanceof Error?error.message:String(error));throw error;}}
+  async function run(actionId:string,values?:ChatActionRequest["values"]){if(!reference)return;setError("");try{const result=await execute({...reference,itemId:item.id,actionId,values});if(result.preview)setPreview(result.preview);if(actionId==="email.expand")setExpanded(true);setForm(undefined);}catch(error){setError(userFacingError(error,"Não foi possível concluir essa ação. Tente novamente.",diagnostics));throw error;}}
   function action(action:ResourceAction){if(["email.reply","file.rename","file.move","folder.search","calendar.edit","calendar.rsvp"].includes(action.id)){setForm(action.id);return;}if(action.id==="email.expand"&&expanded){setExpanded(false);return;}void run(action.id).catch(()=>{});}
   const children=<>{reference&&<ResourceActions item={item} onAction={action}/>}
     {expanded&&resource.kind==="email"&&<div className="resourceDetails" onKeyDown={event=>{if(event.key==="Escape")setExpanded(false);}}><p>{resource.bodyText||"Esta mensagem não contém corpo em texto."}</p>{Boolean(resource.attachments?.length)&&<ul aria-label="Anexos">{resource.attachments!.map(attachment=><li key={attachment.id}>{attachment.name}{attachment.size===undefined?"":` · ${attachment.size} B`}</li>)}</ul>}<button type="button" onClick={()=>setExpanded(false)}>Recolher mensagem</button></div>}

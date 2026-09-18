@@ -4,6 +4,7 @@
 .nexoDialogPanel{display:flex;flex-direction:column;width:min(560px,94vw);max-height:94vh;overflow:hidden;background:var(--nexo-surface-popover);border:1px solid var(--nexo-border-strong);border-radius:var(--nexo-r-lg);box-shadow:var(--nexo-shadow-lg);outline:none}
 .nexoDialogHeader{display:flex;flex:none;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;border-bottom:1px solid var(--nexo-border)}
 .nexoDialogHeader h2{margin:0;color:var(--nexo-text);font-size:16px;font-weight:550}
+.nexoDialogHeader small{display:block;margin-bottom:5px;color:var(--nexo-violet);font:700 10px/1.3 ui-monospace,monospace;letter-spacing:.13em}
 .nexoDialogHeader button{display:grid;place-items:center;flex:none;width:34px;height:34px;padding:0;color:var(--nexo-text-secondary);background:var(--nexo-surface-2);border:1px solid var(--nexo-border);border-radius:9px;cursor:pointer}
 .nexoDialogContent{min-height:0;overflow:auto;padding:18px 20px;overscroll-behavior:contain}
 .nexoDrawerOverlay:has(.nexoDrawerPanel-left){justify-content:flex-start}
@@ -151,8 +152,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .composerSuggestMenu button small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; color:var(--nexo-muted); }
 .composerSuggestEmpty { padding:12px 10px; color:var(--nexo-muted); font-size:12px; }
 .sidebarToggle { display:grid; place-items:center; min-width:32px; min-height:32px; margin-left:auto; color:var(--nexo-muted); background:transparent; border:1px solid transparent; border-radius:8px; }
+.sidebarToggleTooltip { margin-left:auto; }
 .sidebarToggle:hover { color:var(--nexo-text); background:rgba(255,255,255,.05); }
 .sidebarCollapsed .sidebarToggle { margin-left:0; }
+.sidebarCollapsed .sidebarToggleTooltip { margin-left:0; }
 .topbar { position:relative; z-index:7; }
 .topbarPage { min-width:160px; display:grid; gap:3px; }
 .topbarEyebrow { color:var(--nexo-muted); font-size:10px; }
@@ -240,6 +243,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @media(max-width:959px){.settingsNavLinks{display:none}.settingsNavSelectLabel{display:grid;flex:1;gap:5px;min-width:0;color:var(--nexo-muted);font-size:11px}.settingsNavSelectLabel select{width:100%;min-width:0;min-height:38px;padding:0 10px;color:var(--nexo-text);background:var(--nexo-surface-2);border:1px solid var(--nexo-border-strong);border-radius:8px}}
 @media(max-width:600px){.settings label:not(.check){grid-template-columns:minmax(0,1fr);gap:6px}.settings input,.settings select{min-width:0;width:100%}.settings .folder{align-items:flex-start;flex-direction:column;gap:6px}.settings .folder code{max-width:100%;overflow-wrap:anywhere;white-space:normal}}
 .mobileChatsTrigger{display:none}
+.mobileChatsTooltip{position:absolute;z-index:8;top:9px;left:8px}
+.mobileChatsTooltip .mobileChatsTrigger{position:relative;top:auto;left:auto}
 @media(max-width:900px){.assistantMultiLayout{grid-template-columns:minmax(0,1fr)}.assistantMultiLayout>.chatTabs{display:none}.assistantSessionPanel{grid-column:1}.mobileChatsTrigger{position:absolute;z-index:8;top:9px;left:8px;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:1px solid var(--nexo-border);border-radius:9px;background:var(--nexo-surface-2);color:var(--nexo-text-secondary)}.assistantSessionPanel>.assistantHeader{padding-left:50px}.mobileChatDrawer .nexoDrawerContent{padding:0}.mobileChatDrawer .chatTabs{display:flex;width:100%;height:100%;min-height:0;padding:12px;border:0;background:transparent}.mobileChatDrawer .chatTab{grid-template-columns:10px minmax(0,1fr) 24px;min-height:52px;padding:8px}.mobileChatDrawer .chatTabClose{display:grid}.mobileChatDrawer .chatTabText small,.mobileChatDrawer .chatTabsLimit{display:block}}
 .settingsNav{position:sticky;top:66px;z-index:6;display:flex;gap:6px;max-width:980px;margin:0 0 14px;padding:8px;overflow-x:auto;background:rgba(10,16,24,.94);border:1px solid var(--nexo-border);border-radius:12px;backdrop-filter:blur(16px);scrollbar-width:thin;overscroll-behavior-x:contain}
 .settingsNav button{flex:0 0 auto;min-height:34px;padding:0 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--nexo-muted);font-size:12px;white-space:nowrap;cursor:pointer}

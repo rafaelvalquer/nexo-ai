@@ -4,8 +4,11 @@ import type { ApprovalBlock as ApprovalModel,EmailComposeReviewBlock as EmailCom
 import { useAssistantStore } from "../../../stores/assistant";
 import { EmailComposeReviewBlock } from "./email/EmailComposeReviewBlock";
 import { editableEmailReviewInitialStatus } from "./email/approval-review-state";
+import { useDeveloperDiagnosticsEnabled } from "../../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../../utils/user-facing-error";
 
 export function ApprovalBlock({block,conversationId,messageId}:{block:ApprovalModel;conversationId?:string;messageId?:string}) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const resolve=useAssistantStore(store=>store.resolveInlineApproval),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const expired=block.status==="expired" || block.status==="pending" && Boolean(block.expiresAt&&Date.parse(block.expiresAt)<=Date.now());
   const pending=block.status==="pending"&&!expired;
@@ -25,6 +28,6 @@ export function ApprovalBlock({block,conversationId,messageId}:{block:ApprovalMo
     return <EmailComposeReviewBlock block={review}/>;
   }
 
-  async function decide(approved:boolean){if(busy)return;setBusy(true);setError("");try{if(conversationId&&messageId)await resolve(conversationId,messageId,block.approvalId,approved);else await window.nexo.resolveApproval(block.approvalId,approved);}catch(error){setError(error instanceof Error?error.message:String(error));}finally{setBusy(false);}}
+  async function decide(approved:boolean){if(busy)return;setBusy(true);setError("");try{if(conversationId&&messageId)await resolve(conversationId,messageId,block.approvalId,approved);else await window.nexo.resolveApproval(block.approvalId,approved);}catch(error){setError(userFacingError(error,"Não consegui registrar sua decisão. Tente novamente.",diagnostics));}finally{setBusy(false);}}
   return <section className="inlineApproval" data-approval-id={block.approvalId} tabIndex={-1} aria-label="Confirmação da ação"><h3><ShieldCheck size={17}/>{block.title}</h3>{block.preview&&<p className="approvalPreview">{block.preview}</p>}{block.consequence&&<p>{block.consequence}</p>}{pending?<div className="inlineFormActions"><button type="button" disabled={busy} onClick={()=>void decide(false)}>Cancelar</button><button type="button" disabled={busy} onClick={()=>void decide(true)}>{busy?"Processando…":"Confirmar"}</button></div>:<p role="status">{expired?"Aprovação expirada. Gere uma nova prévia.":block.status==="approved"?"Aprovação concedida":"Ação cancelada"}</p>}{error&&<p className="chatError" role="alert">{error}</p>}</section>;
 }

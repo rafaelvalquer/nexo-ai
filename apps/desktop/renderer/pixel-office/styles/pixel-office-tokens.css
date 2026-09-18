@@ -116,6 +116,12 @@
 .officeDetails { background: var(--nexo-surface-2); border-color: var(--nexo-border-strong); }
 .officeDetails .stationActivity { background: var(--nexo-surface-3); color: var(--nexo-text-secondary); }
 .officeDetails dd { color: var(--nexo-text); }
+.officeTaskStatus { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border: 1px solid var(--nexo-border); border-radius: 999px; background: var(--nexo-surface-3); color: var(--nexo-text-secondary); font-size: 11px; }
+.officeTaskStatus.active { border-color: color-mix(in srgb,var(--nexo-cyan) 32%,transparent); background: var(--nexo-cyan-soft); color: var(--nexo-cyan); }
+.officeTaskStatus.success { background: color-mix(in srgb,var(--nexo-success) 12%,var(--nexo-surface-2)); color: var(--nexo-success); }
+.officeTaskStatus.error { background: color-mix(in srgb,var(--nexo-danger) 12%,var(--nexo-surface-2)); color: var(--nexo-danger); }
+.officeTaskProgress { margin: 14px 0 18px; }
+.officeTaskTechnicalId { display: block; margin: 12px 0; color: var(--nexo-text-muted); overflow-wrap: anywhere; }
 .officeFlowDrawer { background: color-mix(in srgb,var(--nexo-surface-1) 94%,transparent); }
 .officeFlowDrawerHeader { border-bottom-color: var(--nexo-border); }
 .agentFlowView { border-color: var(--nexo-border); background: color-mix(in srgb,var(--nexo-surface-2) 84%,transparent); }

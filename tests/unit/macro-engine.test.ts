@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NexoDatabase } from "../../packages/core/src/database/db.js";
-import { AutomationEngine } from "../../packages/core/src/automation/engine.js";
 import { MacroEngine } from "../../packages/core/src/macros/macro-engine.js";
 
 let root: string;
@@ -13,8 +12,7 @@ afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
 describe("MacroEngine facade", () => {
   it("exposes macro operations and returns the persisted run record", async () => {
-    const legacy = new AutomationEngine(db, async () => undefined);
-    const macros = new MacroEngine(legacy);
+    const macros = new MacroEngine({db,executeCommand:async()=>undefined});
     const macro = macros.create({
       name: "Abrir projeto", enabled: true, trigger: { type: "manual" }, conditions: [], conditionOperator: "AND",
       actions: [{ id: "command", type: "nexo.command", config: { command: "abra chrome" } }], output: { type: "notification" },

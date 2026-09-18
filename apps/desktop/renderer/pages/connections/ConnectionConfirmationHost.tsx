@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { NexoDrawer } from "../../components/ui/NexoDrawer";
 import { useToastStore } from "../../stores/toast";
+import { developerDiagnosticsEnabled } from "../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../utils/user-facing-error";
 
 type ConnectionConfirmation = { title: string; description: string; confirmLabel: string; run: () => Promise<unknown> };
 
@@ -22,7 +24,7 @@ export function ConnectionConfirmationHost() {
       setRequest(null);
       useToastStore.getState().show({ title: "Ação concluída", description: "A alteração de conexão foi aplicada.", tone: "success" });
     } catch (error) {
-      useToastStore.getState().show({ title: "Não foi possível concluir", description: error instanceof Error ? error.message : "Ocorreu um erro inesperado.", tone: "error" });
+      useToastStore.getState().show({ title: "Não foi possível concluir", description: userFacingError(error,"Não foi possível concluir essa alteração de conexão. Tente novamente.",developerDiagnosticsEnabled()), tone: "error" });
     } finally {
       setBusy(false);
     }

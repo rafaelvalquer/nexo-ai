@@ -53,4 +53,28 @@ describe("NexoCore optional modules",()=>{
     expect(core.moduleSnapshot().find(module=>module.id==="connections")?.status).toBe("ready");
     expect(core.tools.list().some(tool=>tool.name.startsWith("email_")||tool.name.startsWith("calendar_"))).toBe(true);
   });
+
+  it("unregisters optional tools and stops dependent RAG when Documents are disabled",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:true,semanticSearchEnabled:true});
+    await core.ensureDocuments();
+    expect(core.tools.list().some(tool=>tool.name==="document_get")).toBe(true);
+    await core.modules.disable("documents");
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"documents",status:"disabled"},{id:"rag",status:"disabled"}
+    ]));
+    expect(core.tools.list().some(tool=>tool.name.startsWith("document_"))).toBe(false);
+  });
+
+  it("keeps Browser Agent tools out until enabled and unregisters them when disabled",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false,browserAutomationEnabled:false});
+    const service={shutdown:async()=>{}} as any;
+    await core.registerBrowserAgentModule(service);
+    expect(core.moduleSnapshot().find(module=>module.id==="browser")?.status).toBe("disabled");
+    expect(core.tools.list().some(tool=>tool.name==="browser_agent_run")).toBe(false);
+    core.updateSettings({browserAutomationEnabled:true});
+    await core.modules.enable("browser");
+    expect(core.tools.list().some(tool=>tool.name==="browser_agent_run")).toBe(true);
+    await core.modules.disable("browser");
+    expect(core.tools.list().some(tool=>tool.name==="browser_agent_run")).toBe(false);
+  });
 });

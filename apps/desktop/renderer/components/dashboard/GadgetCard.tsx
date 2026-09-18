@@ -1,18 +1,24 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, LoaderCircle, RefreshCw, Settings2, Sparkles, Trash2 } from "lucide-react";
 import type { DashboardGadgetId, DashboardGadgetInstance, GadgetDefinition, GadgetSize } from "@nexo/shared";
 import { useAppStore } from "../../stores/app";
 import { EmailGadget } from "./gadgets/EmailGadget";
 import { AgendaGadget } from "./gadgets/AgendaGadget";
-type Data={data:any;fetchedAt:string;stale:boolean;error?:string};
+import { GadgetLoadingState } from "./gadgets/GadgetLoadingState";
+import { useDeveloperDiagnosticsEnabled } from "../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../utils/user-facing-error";
+import { Tooltip } from "../ui/Tooltip";
+import "./dashboard-states.css";
+type Data={data:any;fetchedAt:string;stale:boolean;error?:string;loading?:boolean};
 export function GadgetCard({item,definition,result,editing,onResize,onRemove,onMove,onRefresh,onConfigure}:{item:DashboardGadgetInstance;definition:GadgetDefinition;result?:Data;editing:boolean;onResize:(size:GadgetSize)=>void;onRemove:()=>void;onMove:(direction:-1|1)=>void;onRefresh:()=>void;onConfigure:()=>void}){
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const [busy,setBusy]=useState(false),Icon=({"ai-status":"◈",tasks:"◷",approvals:"✓",automations:"⌘",activity:"⌁",documents:"▤",system:"⌬",weather:"☼",currency:"↗",holidays:"✳","business-days":"◫",earthquakes:"◎",email:"✉",agenda:"◫"} as Record<DashboardGadgetId,string>)[item.gadgetId];
   const reload=async()=>{setBusy(true);try{await onRefresh();}finally{setBusy(false);}};
   return <article className={`gadgetCard gadgetSize${item.size}`} draggable={editing} onDragStart={event=>{event.dataTransfer.setData("text/plain",item.instanceId);event.dataTransfer.effectAllowed="move";}} onDragOver={event=>{if(editing)event.preventDefault();}} onDrop={event=>{if(editing){event.preventDefault();const from=event.dataTransfer.getData("text/plain");if(from&&from!==item.instanceId)(window as any).dispatchEvent(new CustomEvent("nexo:dashboard:move",{detail:{from,to:item.instanceId}}));}}}>
-    <header className="gadgetHeader"><span className="gadgetIcon" aria-hidden="true">{Icon}</span><div><h3>{definition.title}</h3><small>{definition.provider==="http"?"INFORMAÇÃO ONLINE":"NEXO · LOCAL"}</small></div><button className="gadgetRefresh" onClick={()=>void reload()} aria-label={`Atualizar ${definition.title}`} disabled={busy}>{busy?<LoaderCircle size={14} className="spin"/>:<RefreshCw size={14}/>}</button>{editing&&<button className="gadgetRefresh" onClick={onConfigure} aria-label={`Configurar ${definition.title}`}><Settings2 size={15}/></button>}{editing&&<button className="gadgetRefresh dangerIcon" onClick={onRemove} aria-label={`Remover ${definition.title}`}><Trash2 size={15}/></button>}</header>
+    <header className="gadgetHeader"><span className="gadgetIcon" aria-hidden="true">{Icon}</span><div><h3>{definition.title}</h3><small>{definition.provider==="http"?"INFORMAÇÃO ONLINE":"NEXO · LOCAL"}</small></div><Tooltip content={`Atualizar ${definition.title}`}><button type="button" className="gadgetRefresh" onClick={()=>void reload()} aria-label={`Atualizar ${definition.title}`} disabled={busy}>{busy?<LoaderCircle size={14} className="spin"/>:<RefreshCw size={14}/>}</button></Tooltip>{editing&&<Tooltip content={`Configurar ${definition.title}`}><button type="button" className="gadgetRefresh" onClick={onConfigure} aria-label={`Configurar ${definition.title}`}><Settings2 size={15}/></button></Tooltip>}{editing&&<Tooltip content={`Remover ${definition.title}`}><button type="button" className="gadgetRefresh dangerIcon" onClick={onRemove} aria-label={`Remover ${definition.title}`}><Trash2 size={15}/></button></Tooltip>}</header>
     {editing&&<div className="gadgetEditControls"><label>Tamanho<select value={item.size} onChange={event=>onResize(event.target.value as GadgetSize)}>{definition.sizes.map(size=><option key={size} value={size}>{size}</option>)}</select></label><button onClick={()=>onMove(-1)} aria-label={`Mover ${definition.title} para cima`}><ArrowUp size={14}/></button><button onClick={()=>onMove(1)} aria-label={`Mover ${definition.title} para baixo`}><ArrowDown size={14}/></button></div>}
-    {result?.error&&<div className={`gadgetConnection ${result.stale?"stale":"error"}`} role="status"><span>{result.stale?"Exibindo último dado salvo":"Não foi possível carregar os dados"}</span>{result.error&&<small>{result.error}</small>}</div>}
-    <GadgetBody id={item.gadgetId} data={result?.data} />
+    {result?.error&&<div className={`gadgetConnection ${result.stale?"stale":"error"}`} role="status"><span>{result.stale?"Exibindo último dado salvo":"Não foi possível carregar os dados"}</span><small>{userFacingError(result.error,"Confira sua conexão e tente atualizar este gadget.",diagnostics)}</small></div>}
+    {result?.loading&&!result.fetchedAt?<GadgetLoadingState icon={Sparkles} label={definition.title}/>:result?.error&&!result.fetchedAt?<div className="gadgetLoadError" role="status">Os dados deste gadget estão indisponíveis. Use Atualizar para tentar novamente.</div>:<><GadgetBody id={item.gadgetId} data={result?.data} />{result?.loading&&<div className="gadgetRefreshing" role="status">Atualizando dados…</div>}</>}
     <footer className="gadgetFooter">{result?.fetchedAt&&<span>{result.stale?"Última atualização":"Atualizado"} {timeAgo(result.fetchedAt)}</span>}{result?.stale&&<span className="staleBadge">Offline</span>}{definition.attribution&&<span className="gadgetAttribution">{definition.attribution}</span>}</footer>
   </article>;
 }

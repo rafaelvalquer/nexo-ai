@@ -42,9 +42,10 @@ test("documents expose friendly retry and stale-data states", async ({ page }) =
   await expect(page.getByText("Plano local.pdf")).toBeVisible();
   await page.evaluate(() => (window as any).__setDocumentReadFailure(true));
   await page.getByRole("button", { name: "Importar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Exibindo os dados carregados anteriormente.");
+  const staleNotice=page.locator(".documentsStaleNotice");
+  await expect(staleNotice).toContainText("Exibindo os dados carregados anteriormente.");
   await expect(page.getByText("Plano local.pdf")).toBeVisible();
-  await expect(page.getByRole("status")).not.toContainText("ECONNRESET");
+  await expect(staleNotice).not.toContainText("ECONNRESET");
   expect(await page.evaluate(() => (window as any).__documentReadAttempts())).toBeGreaterThan(2);
 });
 

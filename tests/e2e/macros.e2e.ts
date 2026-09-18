@@ -24,7 +24,7 @@ test("macro library distinguishes empty, unavailable, and stale data states",asy
   await page.screenshot({path:info.outputPath("macro-list.png")});
   await page.evaluate(()=> (window as any).__setMacroLoadFailure(true));
   await page.getByRole("button",{name:"Atualizar macros"}).click();
-  await expect(page.getByRole("status")).toContainText("Exibindo a lista carregada anteriormente.");
+  await expect(page.locator(".automationStale")).toContainText("Exibindo a lista carregada anteriormente.");
   await expect(page.getByText("Resumo local",{exact:true})).toBeVisible();
 });
 
@@ -98,6 +98,28 @@ test("macro details exposes a dry-run test and opens its execution steps",async(
   await expect(details.getByRole("button",{name:"Executar agora"})).toBeVisible();
 });
 
+test("macro loading skeleton previews card structure and reveals loaded data",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto(url);
+  await page.evaluate(()=>{
+    const api=(window as any).nexo;
+    let resolve!: (value:unknown[])=>void;
+    api.listAutomations=()=>new Promise((done)=>{resolve=done;});
+    (window as any).__resolveMacroList=()=>resolve([{id:"macro-loaded",name:"Rotina carregada",description:"Conferir arquivos",prompt:"Conferir arquivos",enabled:true,status:"active",trigger:{type:"manual"},actions:[{}],output:{type:"notification"},policy:{},consecutiveFailures:0}]);
+  });
+  await page.getByRole("button",{name:"Macros",exact:true}).click();
+  const loading=page.getByRole("status",{name:"Carregando macros"});
+  await expect(loading).toHaveAttribute("aria-busy","true");
+  await expect(loading.locator(".macroSkeletonTitle")).toHaveCount(3);
+  await expect(loading.locator(".macroSkeletonAction")).toHaveCount(3);
+  const animationDuration=await loading.locator(".automationSkeleton").first().evaluate(element=>getComputedStyle(element.querySelector(".macroSkeletonTitle")!).animationDuration);
+  const durationSeconds=animationDuration.split(",").map(value=>{const duration=value.trim();return duration.endsWith("ms")?Number.parseFloat(duration)/1000:Number.parseFloat(duration);});
+  expect(durationSeconds.every(value=>value<=0.001)).toBe(true);
+  await page.evaluate(()=> (window as any).__resolveMacroList());
+  await expect(page.getByText("Rotina carregada",{exact:true})).toBeVisible();
+  await expect(page.getByRole("status",{name:"Carregando macros"})).toHaveCount(0);
+});
+
 test("macro execution exposes accessible step progress in the detail drawer",async({page},info)=>{
   await page.goto(url);
   await page.waitForFunction(()=>Boolean((window as any).nexo));
@@ -139,6 +161,7 @@ test("macro editor supports keyboard reordering and deletion uses an accessible 
   await page.getByRole("button",{name:"Adicionar etapa",exact:true}).click();
   const firstHandle=page.getByRole("button",{name:/Arrastar etapa 1/});
   await firstHandle.focus();
+  await expect(page.getByRole("tooltip")).toHaveText("Reordenar etapa 1 (Alt + ↑ / ↓)");
   await page.keyboard.press("Alt+ArrowDown");
   await expect(page.locator(".macroStepHeading b").first()).toContainText("Abrir navegador");
   await expect(page.locator(".reorderAnnouncement")).toContainText("posição 2 de 2");

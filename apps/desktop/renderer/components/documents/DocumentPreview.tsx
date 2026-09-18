@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { renderAsync } from "docx-preview";
 import { NexoDrawer } from "../ui/NexoDrawer";
+import { useDeveloperDiagnosticsEnabled } from "../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../utils/user-facing-error";
 
 type DocumentVersion = { id: string; version: number; changeSummary?: string; createdAt: string };
 
 export function DocumentPreview({ id, name, onClose }: { id: string; name: string; onClose: () => void }) {
+  const diagnostics = useDeveloperDiagnosticsEnabled();
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string>();
   const [pdf, setPdf] = useState<string>();
@@ -40,7 +43,7 @@ export function DocumentPreview({ id, name, onClose }: { id: string; name: strin
         throw new Error("A pré-visualização interna está disponível para PDF e DOCX.");
       })
       .catch(reason => {
-        if (active) setError(reason instanceof Error ? reason.message : "Não foi possível carregar a pré-visualização.");
+        if (active) setError(userFacingError(reason,"Não consegui abrir a prévia deste documento. Tente novamente.",diagnostics));
       })
       .finally(() => { if (active) setLoading(false); });
     return () => {
@@ -68,7 +71,7 @@ export function DocumentPreview({ id, name, onClose }: { id: string; name: strin
         setNotice("A alteração foi colocada em processamento.");
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível criar uma nova versão.");
+      setError(userFacingError(reason,"Não consegui criar uma nova versão deste documento. Tente novamente.",diagnostics));
     } finally {
       setSaving(false);
     }

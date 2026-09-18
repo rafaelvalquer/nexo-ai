@@ -4,6 +4,9 @@ import type { AutomationViewModel, DocumentRecord, NexoSettings } from "@nexo/sh
 import type { AssistantAttachment } from "../../../stores/assistant";
 import { useAutoGrowTextarea } from "../../../hooks/useAutoGrowTextarea";
 import { useChatKeyboard } from "../../../hooks/useChatKeyboard";
+import { Tooltip } from "../../ui/Tooltip";
+import { fuzzyScore } from "../../../utils/fuzzy-score";
+import "./composer-tooltips.css";
 import { AttachmentTray } from "./AttachmentTray";
 
 const slashCommands = [
@@ -72,8 +75,11 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
   const commandQuery = text.startsWith("/") && !text.includes(" ") ? text.toLowerCase() : null;
   const commandSuggestions = commandQuery === null ? [] : slashCommands.filter(item => item.command.startsWith(commandQuery));
   const mentionSuggestions = useMemo(() => mentionContext === null ? [] : mentionChoices
-    .filter(item => `${item.label} ${item.detail} ${item.group}`.toLocaleLowerCase().includes(mentionContext.query.toLocaleLowerCase()))
-    .slice(0, 8), [mentionChoices, mentionContext]);
+    .map((item, index) => ({ item, index, score: fuzzyScore(`${item.label} ${item.detail} ${item.group}`, mentionContext.query) }))
+    .filter(result => result.score >= 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 8)
+    .map(result => result.item), [mentionChoices, mentionContext]);
   const mentionMenuOpen = mentionContext !== null;
   const activeCount = mentionMenuOpen ? mentionSuggestions.length : commandSuggestions.length;
 
@@ -132,6 +138,6 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
       {mentionSuggestions.length ? mentionSuggestions.map((choice, index) => { const Icon = choice.icon; return <button id={`mention-option-${index}`} key={choice.id} type="button" role="option" aria-selected={selected === index} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSelected(index)} onClick={() => useMention(choice)}><Icon size={15}/><span><b>{choice.label}</b><small>{choice.group} · {choice.detail}</small></span></button>; }) : <div className="composerSuggestEmpty" role="status">{mentionsLoading ? "Carregando referências locais…" : "Nenhum contexto local encontrado."}</div>}
     </div>}
     {commandSuggestions.length > 0 && !mentionMenuOpen && <div id="slash-menu" className="composerSuggestMenu slashMenu" role="listbox" aria-label="Comandos rápidos">{commandSuggestions.map(({ command, label, icon: Icon }, index) => <button id={`slash-option-${index}`} key={command} type="button" role="option" aria-selected={selected === index} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSelected(index)} onClick={() => useCommand(command)}><Icon size={15}/><span><b>{command}</b><small>{label}</small></span></button>)}</div>}
-    <div className="composerToolbar"><button className="iconButton" onClick={onAttach} aria-label="Anexar documentos"><Paperclip size={18}/><span>Documento</span></button><span className="contextIndicator"><i className="dot"/>Local</span>{busy ? <button className="stopButton" onClick={onStop} aria-label="Parar geração"><Square size={15}/></button> : <button className="sendButton" onClick={() => void send()} disabled={!text.trim() || pending} aria-label="Enviar mensagem"><Send size={17}/></button>}</div>
+    <div className="composerToolbar"><button className="iconButton" onClick={onAttach} aria-label="Anexar documentos"><Paperclip size={18}/><span>Documento</span></button><span className="contextIndicator"><i className="dot"/>Local</span>{busy ? <Tooltip content="Parar geração"><button type="button" className="stopButton" onClick={onStop} aria-label="Parar geração"><Square size={15}/></button></Tooltip> : <Tooltip content="Enviar mensagem"><button type="button" className="sendButton" onClick={() => void send()} disabled={!text.trim() || pending} aria-label="Enviar mensagem"><Send size={17}/></button></Tooltip>}</div>
   </div><small className="composerHint">Enter para enviar · Shift + Enter para nova linha · digite @ para contexto local</small></div></footer>;
 }

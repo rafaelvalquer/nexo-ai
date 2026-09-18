@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderOpen, Globe2, Monitor, Search, ShieldCheck, Wrench } from "lucide-react";
 import { useAppStore } from "../stores/app";
+import { useDeveloperDiagnosticsEnabled } from "../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../utils/user-facing-error";
 
 type ToolRow = { name: string; description: string; risk: string; permissions?: string[]; domain?: string; mutatesState?: boolean; enabled?:boolean };
 const groups: Record<string, { label: string; icon: typeof Wrench }> = {
@@ -11,9 +13,10 @@ const groups: Record<string, { label: string; icon: typeof Wrench }> = {
 const riskLabel = (tool:ToolRow) => tool.risk === "CRITICAL" ? "Confirmação obrigatória" : tool.mutatesState || tool.risk !== "READ" ? "Pode pedir confirmação" : "Leitura";
 
 export function Tools({ embedded = false }: { embedded?: boolean } = {}) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const [rows, setRows] = useState<ToolRow[]>([]), [query, setQuery] = useState(""), [error, setError] = useState("");
   const setPage = useAppStore(s => s.setPage);
-  useEffect(() => { let alive = true; void window.nexo.status().then((status: any) => { if (alive) setRows(status.tools ?? []); }).catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : "Não foi possível carregar as ferramentas."); }); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; void window.nexo.status().then((status: any) => { if (alive) setRows(status.tools ?? []); }).catch((e: unknown) => { if (alive) setError(userFacingError(e,"Não consegui carregar as ferramentas. Tente novamente.",diagnostics)); }); return () => { alive = false; }; }, [diagnostics]);
   const grouped = useMemo(() => {
     const filtered = rows.filter(tool => `${tool.name} ${tool.description} ${tool.domain ?? ""}`.toLowerCase().includes(query.toLowerCase()));
     const domains = [...new Set(filtered.map(tool => tool.domain ?? tool.name.split("_")[0]))];

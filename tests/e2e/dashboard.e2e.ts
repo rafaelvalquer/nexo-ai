@@ -13,6 +13,18 @@ test("Dashboard usa fallback neural sem átomo e mostra cinco atalhos",async({pa
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
 });
 
+test("dashboard refresh tooltip appears on keyboard focus and hover",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const refresh=page.getByRole("button",{name:"Atualizar dashboard"});
+  await refresh.focus();
+  await expect(page.getByRole("tooltip").getByText("Atualizar dashboard")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await refresh.hover();
+  await expect(page.getByRole("tooltip").getByText("Atualizar dashboard")).toBeVisible();
+});
+
 test("Dashboard mantém ações e conteúdo sem overflow nos breakpoints desktop",async({page},testInfo)=>{
   await page.goto(url);
   await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
@@ -23,6 +35,51 @@ test("Dashboard mantém ações e conteúdo sem overflow nos breakpoints desktop
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Dashboard overflow at ${viewport.width}px`).toBe(true);
     await page.screenshot({path:testInfo.outputPath(`dashboard-responsive-${viewport.width}.png`)});
   }
+});
+
+test("gadget mantém o último dado durante refresh e oculta detalhes técnicos fora do modo desenvolvedor",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{
+    const api=(window as any).nexo.dashboard;
+    api.getLayout=async()=>[{instanceId:"stale-task-card",gadgetId:"tasks",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:[{id:"task-preserved",title:"Tarefa preservada",status:"running"}],fetchedAt:new Date().toISOString(),stale:false});
+    api.refreshGadget=async()=>new Promise((_resolve,reject)=>{(window as any).__failGadgetRefresh=()=>reject(new Error("SQLITE_BUSY: private database detail"));});
+    const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:false}});
+  });
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const gadget=page.locator(".gadgetCard").filter({hasText:"Tarefa preservada"});
+  await expect(gadget).toBeVisible();
+  await gadget.getByRole("button",{name:"Atualizar Tarefas em andamento"}).click();
+  await expect(gadget.getByText("Atualizando dados…")).toBeVisible();
+  await expect(gadget.getByText("Tarefa preservada")).toBeVisible();
+  await page.evaluate(()=>{(window as any).__failGadgetRefresh();});
+  await expect(gadget.getByText("Exibindo último dado salvo")).toBeVisible();
+  await expect(gadget.getByText("Tarefa preservada")).toBeVisible();
+  await expect(gadget).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(async()=>{const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:true}});});
+  await gadget.getByRole("button",{name:"Atualizar Tarefas em andamento"}).click();
+  await page.evaluate(()=>{(window as any).__failGadgetRefresh();});
+  await expect(gadget).toContainText("SQLITE_BUSY: private database detail");
+});
+
+test("falha inicial do dashboard oferece retry e só vira estado vazio após recuperação",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{
+    const api=(window as any).nexo.dashboard;
+    api.getLayout=async()=>{throw new Error("SQLITE_BUSY: private dashboard detail");};
+    const {useDashboardStore}=await import("/stores/dashboard.ts");
+    useDashboardStore.setState({layout:[],data:{},loading:false,error:undefined});
+    const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:false}});
+  });
+  await page.getByRole("button",{name:"Atualizar dashboard"}).click();
+  const failure=page.getByRole("alert");
+  await expect(failure).toContainText("Não foi possível carregar o dashboard");
+  await expect(failure).toContainText("Tente novamente para carregar suas informações.");
+  await expect(failure).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(()=>{(window as any).nexo.dashboard.getLayout=async()=>[];});
+  await failure.getByRole("button",{name:"Tentar novamente"}).click();
+  await expect(page.getByRole("heading",{name:"Monte um dashboard que seja seu"})).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("catálogo de gadgets usa NexoDrawer e restaura foco ao fechar com Escape",async({page},testInfo)=>{

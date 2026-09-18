@@ -13,6 +13,8 @@ export class CoreModuleManager {
     this.entries.set(module.id, { module, status: "disabled" });
   }
 
+  has(id:string):boolean{return this.entries.has(id);}
+
   enable(id: string): Promise<void> { return this.serialize(() => this.start(id, [])); }
 
   async ensure<T extends CoreModule = CoreModule>(id: string): Promise<T> {

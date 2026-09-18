@@ -7,13 +7,14 @@ import { motionTokens } from "../../design/motion";
 type NexoDialogProps = {
   open: boolean;
   title: string;
+  eyebrow?: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
   closeLabel?: string;
 };
 
-export function NexoDialog({ open, title, onClose, children, className = "", closeLabel = "Fechar diálogo" }: NexoDialogProps) {
+export function NexoDialog({ open, title, eyebrow, onClose, children, className = "", closeLabel = "Fechar diálogo" }: NexoDialogProps) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -62,7 +63,7 @@ export function NexoDialog({ open, title, onClose, children, className = "", clo
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -2, scale: motionTokens.scale.popover }}
         transition={reducedMotion ? { duration: 0 } : motionTokens.spring.normal}>
-        <header className="nexoDialogHeader"><h2 id={titleId}>{title}</h2><button ref={closeRef} type="button" onClick={() => closeHandler.current()} aria-label={closeLabel}><X size={18} aria-hidden="true" /></button></header>
+        <header className="nexoDialogHeader"><div>{eyebrow && <small>{eyebrow}</small>}<h2 id={titleId}>{title}</h2></div><button ref={closeRef} type="button" onClick={() => closeHandler.current()} aria-label={closeLabel}><X size={18} aria-hidden="true" /></button></header>
         <div className="nexoDialogContent">{children}</div>
       </motion.section>
     </motion.div>}

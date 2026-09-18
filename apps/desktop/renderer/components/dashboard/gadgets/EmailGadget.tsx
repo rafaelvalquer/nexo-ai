@@ -3,6 +3,8 @@ import { Mail, Paperclip, Reply } from "lucide-react";
 import { useAppStore } from "../../../stores/app";
 import { NexoDrawer } from "../../ui/NexoDrawer";
 import { GadgetLoadingState } from "./GadgetLoadingState";
+import { useDeveloperDiagnosticsEnabled } from "../../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../../utils/user-facing-error";
 import type {DashboardEmailData} from "@nexo/shared";
 import "./gadgets.css";
 import "./availability.css";
@@ -20,6 +22,7 @@ type Message = {
 };
 
 export function EmailGadget({ data }: { data?: DashboardEmailData }) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const setPage = useAppStore(state => state.setPage);
   const [selected, setSelected] = useState<Message>();
   const [full, setFull] = useState<any>();
@@ -39,7 +42,7 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
     try {
       setFull(await window.nexo.dashboard.getEmailMessage(data.connectionId, message.id));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível carregar o e-mail.");
+      setError(userFacingError(reason,"Não consegui abrir esse e-mail. Tente novamente.",diagnostics));
     }
   }
 
@@ -70,7 +73,7 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
       setFull(undefined);
       setApprovalId(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível enviar a resposta.");
+      setError(userFacingError(reason,"Não foi possível enviar a resposta. Confira o conteúdo e tente novamente.",diagnostics));
     } finally {
       setBusy(false);
     }

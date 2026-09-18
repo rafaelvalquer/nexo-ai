@@ -12,9 +12,13 @@ test("the simplified navigation exposes developer tool logs only when enabled",a
   await expect(page.locator(".sidebar nav button")).toHaveCount(5);
   await page.evaluate(async()=>{const api=(window as any).nexo;api.intentLearningCount=async()=>0;api.getBrowserPersonalProfileEnabled=async()=>false;api.setBrowserPersonalProfileEnabled=async(value:boolean)=>value;api.listAudit=async()=>[{id:"audit-1",action:"open_file",risk:"READ",status:"SUCCEEDED",createdAt:"2026-09-16T12:00:00.000Z",details:{durationMs:42}}];const current=await api.getSettings();api.updateSettings=async(patch:any)=>Object.assign({},current,patch);});
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
+  const developerSwitch=page.getByRole("switch",{name:"Modo desenvolvedor: mostrar logs técnicos"});
+  await expect(developerSwitch).toBeVisible();
+  await expect(developerSwitch).toHaveCSS("display","flex");
   await expect(page.getByLabel("Modo desenvolvedor: mostrar logs técnicos")).not.toBeChecked();
   await expect(page.getByText("Modo do Agent")).toHaveCount(0);
   await page.getByLabel("Modo desenvolvedor: mostrar logs técnicos").check();
+  await expect(developerSwitch).toBeChecked();
   await expect(page.getByText("Execuções recentes")).toBeVisible();
   await page.getByText("Execuções recentes").click();
   await expect(page.getByText("open_file",{exact:true})).toBeVisible();
@@ -32,6 +36,17 @@ test("settings bootstrap exposes a retry state after a temporary local read fail
   await expect(page.getByRole("heading",{name:"Configurações",exact:true})).toBeVisible();
   await expect(page.getByLabel("URL do Ollama")).toBeVisible();
   expect(await page.evaluate(()=>(window as any).__settingsReadAttempts())).toBeGreaterThan(1);
+});
+
+test("About settings expose SemVer and reproducible build identifiers",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(()=>{const api=(window as any).nexo;api.intentLearningCount=async()=>0;api.getBrowserPersonalProfileEnabled=async()=>false;api.setBrowserPersonalProfileEnabled=async(value:boolean)=>value;});
+  await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
+  await page.getByRole("button",{name:"Sobre",exact:true}).click();
+  const about=page.locator(".settingsAbout");
+  await expect(about.getByText("0.7.0-beta.1",{exact:false})).toBeVisible();
+  await expect(about.getByText(/Commit/)).toBeVisible();
+  await expect(about.getByText(/Build/)).toBeVisible();
 });
 
 test("local AI settings can test Ollama and report the connection result",async({page})=>{
@@ -98,11 +113,14 @@ test("settings use side navigation on desktop and a destination selector on comp
   await page.locator(".sidebar").getByRole("button",{name:"Configurações",exact:true}).click();
   const navigation=page.locator(".settingsNav");
   await expect(navigation).toBeVisible();
+  await expect(page.getByLabel("Navegar pelas configurações")).toHaveClass(/uiSelect/);
   expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("column");
   await expect(page.getByLabel("Navegar pelas configurações")).toBeHidden();
   await expect(page.locator('.settingsNavLinks button[aria-current="location"]')).toHaveText("IA local");
+  await expect(page.locator('.settingsNavLinks button[aria-current="location"]')).toHaveCount(1);
   await page.getByRole("button",{name:"Memória",exact:true}).click();
   await expect(page.locator('.settingsNavLinks button[aria-current="location"]')).toHaveText("Memória");
+  await expect(page.locator('.settingsNavLinks button[aria-current="location"]')).toHaveCount(1);
   await page.screenshot({path:testInfo.outputPath("settings-desktop-navigation.png")});
   await page.setViewportSize({width:390,height:844});
   expect(await navigation.evaluate(node=>getComputedStyle(node).flexDirection)).toBe("row");

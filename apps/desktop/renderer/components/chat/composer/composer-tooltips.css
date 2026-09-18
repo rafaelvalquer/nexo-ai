@@ -1,0 +1,8 @@
+.composerToolbar > .tooltipWrap {
+  height: 36px;
+}
+
+.composerToolbar > .tooltipWrap > button {
+  height: 36px;
+  padding: 8px !important;
+}

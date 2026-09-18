@@ -15,6 +15,31 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await server?.close(); });
 
 const primaryNavigation = ["Dashboard", "Assistente", "Macros", "Escritório", "Configurações"];
+test("atalho de teclado pula a navegação e leva o foco ao conteúdo principal",async({page})=>{
+  await page.goto(url);
+  const skipLink=page.getByRole("link",{name:"Pular para o conteúdo da página"});
+  await expect.poll(()=>skipLink.evaluate(element=>element.getBoundingClientRect().bottom)).toBeLessThan(0);
+  await page.keyboard.press("Tab");
+  await expect(skipLink).toBeFocused();
+  await expect(skipLink).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#page-content")).toBeFocused();
+});
+
+test("tooltips do shell aparecem ao focar e fecham com Escape sem remover o nome acessível",async({page})=>{
+  await page.goto(url);
+  const notifications=page.getByRole("button",{name:"Notificações"});
+  await notifications.focus();
+  await expect(page.getByRole("tooltip")).toHaveText("Notificações");
+  await expect(notifications).toHaveAttribute("aria-describedby",/.+/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(notifications).toHaveAccessibleName("Notificações");
+  const collapse=page.getByRole("button",{name:"Recolher menu"});
+  await collapse.focus();
+  await expect(page.getByRole("tooltip")).toHaveText("Recolher menu");
+});
+
 test("menu principal apresenta as áreas principais do produto", async ({ page }, testInfo) => {
   await page.goto(url);
   await page.getByRole("button", { name: "Assistente", exact: true }).click();
@@ -62,13 +87,18 @@ test("a execução ativa mostra timeline operacional e tool chips no chat e no d
   await page.screenshot({path:testInfo.outputPath("assistant-running-drawer.png")});
   await page.evaluate(async()=>{const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setPage("Dashboard");});
   await page.evaluate(async()=>{const {useAssistantStore}=await import("/stores/assistant.ts");await useAssistantStore.getState().syncSession("preview-1");});
+  await page.evaluate(async()=>{const {useNotificationsStore}=await import("/stores/notifications.ts");useNotificationsStore.getState().push({title:"Notificação de teste",detail:"Ainda não lida",tone:"info"});});
+  const unreadBadge=page.getByRole("button",{name:"1 notificação não lida"});
+  await expect(unreadBadge).toBeVisible();
   await page.getByRole("button",{name:"1 execução ativa"}).click();
   const notifications=page.getByRole("dialog",{name:"Notificações"});
+  await expect(unreadBadge).toBeVisible();
   const activeNotification=notifications.getByRole("button",{name:/Abrir tarefa: resuma um arquivo/});
   await expect(activeNotification).toBeVisible();
   await expect(activeNotification).toContainText("resuma um arquivo");
   await page.waitForTimeout(420);
   await page.screenshot({path:testInfo.outputPath("notification-center-drawer.png")});
+  await expect(notifications.getByText("Notificação de teste")).toBeVisible();
   await notifications.getByRole("button",{name:/Abrir tarefa: resuma um arquivo/}).click();
   await expect(page.locator(".assistantPage")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("textbox",{name:"Mensagem para o Nexo"})).toBeVisible();
@@ -83,6 +113,7 @@ test("navegação mantém controles visíveis e sem overflow nos breakpoints do 
   for (const viewport of [{width:760,height:700},{width:800,height:700},{width:900,height:760},{width:1024,height:768},{width:1280,height:800},{width:1440,height:900},{width:1920,height:1080}]) {
     await page.setViewportSize(viewport);
     for (const label of primaryNavigation) await expect(page.getByRole("button", { name: label, exact: true })).toBeVisible();
+    if(viewport.width>720&&viewport.width<=1050) await expect(page.locator(".sidebar .brandMark")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `horizontal overflow at ${viewport.width}px`).toBe(true);
     if(viewport.width<=800){await page.getByRole("button",{name:"Abrir conversas"}).click();const drawer=page.getByRole("dialog",{name:"Conversas"});await expect(drawer).toBeVisible();await expect(drawer.locator(".chatTabsList")).toBeVisible();await page.screenshot({path:testInfo.outputPath(`assistant-compact-chat-sheet-${viewport.width}.png`)});await drawer.getByRole("button",{name:"Fechar painel"}).click();await expect(drawer).not.toBeVisible();}
     await page.screenshot({path:testInfo.outputPath(`responsive-${viewport.width}.png`)});
@@ -95,8 +126,17 @@ test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page },te
   await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
   await page.reload();
   await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
+  await page.evaluate(() => localStorage.setItem("nexo.command.recent", JSON.stringify(["Abrir Escritório"])));
+  const paletteTrigger=page.getByRole("button",{name:"Abrir busca e comandos"});
+  await paletteTrigger.focus();
   await page.keyboard.press("Control+K");
   const palette=page.getByRole("dialog", { name: "Paleta de comandos" });
+  await expect(palette).toBeVisible();
+  await expect(page.getByRole("option",{name:/Abrir Escritório.*Recente/})).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(palette).not.toBeVisible();
+  await expect(paletteTrigger).toBeFocused();
+  await page.keyboard.press("Control+K");
   await expect(palette).toBeVisible();
   await page.screenshot({path:testInfo.outputPath("command-palette.png")});
   await page.getByPlaceholder("O que deseja fazer?").fill("escritório");
@@ -113,8 +153,9 @@ test("navigation icon rail exposes the hovered and keyboard-focused label",async
   const dashboard=page.locator(".sidebar nav button").first();
   await dashboard.hover();
   await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
+  await dashboard.focus();
   await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
   await expect(page.locator(".sidebar nav button:focus-visible")).toHaveAttribute("aria-label","Dashboard");
   await expect.poll(()=>dashboard.evaluate(element=>getComputedStyle(element,"::after").content)).toContain("Dashboard");
   await page.setViewportSize({width:1440,height:900});
@@ -178,6 +219,22 @@ test("a palette expõe todas as rotas e mostra erro de comando como toast",async
   await page.screenshot({path:testInfo.outputPath("command-palette-error-toast.png")});
 });
 
+test("erros técnicos de comandos só aparecem quando o modo desenvolvedor está ativo",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{const api=(window as any).nexo,current=await api.getSettings();current.developerDiagnosticsEnabled=false;api.getSettings=async()=>current;api.updateSettings=async()=>{throw new Error("Error invoking remote method: ECONNREFUSED 127.0.0.1:11434");};const{useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:current});});
+  await page.keyboard.press("Control+K");
+  await page.getByPlaceholder("O que deseja fazer?").fill("Ativar/desativar modo privado");
+  await page.getByRole("option",{name:/Ativar\/desativar modo privado/}).click();
+  const toast=page.getByRole("alert").filter({hasText:"O comando não pôde ser concluído."});
+  await expect(toast).toBeVisible();
+  await expect(toast).not.toContainText("ECONNREFUSED");
+  await toast.getByRole("button",{name:"Dispensar notificação"}).click();
+  await page.evaluate(async()=>{const api=(window as any).nexo,current=await api.getSettings();current.developerDiagnosticsEnabled=true;const{useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:current});});
+  await page.getByPlaceholder("O que deseja fazer?").fill("Ativar/desativar modo privado");
+  await page.getByRole("option",{name:/Ativar\/desativar modo privado/}).click();
+  await expect(page.getByRole("alert").filter({hasText:"ECONNREFUSED 127.0.0.1:11434"})).toBeVisible();
+});
+
 test("composer resolves folder, imported-document and macro mentions as actionable context",async({page})=>{
   await page.goto(url);
   await page.evaluate(async()=>{
@@ -199,7 +256,7 @@ test("composer resolves folder, imported-document and macro mentions as actionab
   await composer.press("Enter");
   await expect(page.locator(".attachmentItem.ready")).toContainText("Relatorio.pdf");
   await composer.press("End");
-  await composer.pressSequentially(" e execute @Relat");
+  await composer.pressSequentially(" e execute @relatorio");
   await expect(page.getByRole("option",{name:/Relatório diário/})).toBeVisible();
   await page.getByRole("option",{name:/Relatório diário/}).click();
   await page.getByRole("button",{name:"Enviar mensagem"}).click();

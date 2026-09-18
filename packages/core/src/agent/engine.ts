@@ -1,6 +1,7 @@
 import type { ToolResult,VisualExecutionContext,ClarificationResolutionRequest,ChatPresentation,ConnectionProvider,EmailComposeDraftPatch } from "@nexo/shared";
 import { AgentPlanner,type PlanStep,type Plan } from "./planner.js";
-import { CommandService, type CommandRoute } from "../router/command-service.js";
+import { CommandService, type CommandRoute } from "../application/command-service.js";
+import type { ChatService } from "../application/chat-service.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { PermissionEngine } from "../permissions/policy.js";
 import { ApprovalService } from "../permissions/approvals.js";
@@ -47,9 +48,10 @@ export class AgentEngine{
   private readonly clarifications?:ClarificationService;
   private readonly actionExecutor:ActionExecutor;
   private readonly commandService:CommandService;
+  private readonly directChat?:ChatService;
   private readonly agentGraphFactory?:()=>AgentGraph;
   private agentGraphInstance?:AgentGraph;
-  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager,records?:ExecutionRecordRepository,private readonly agentLoopMode:()=>"legacy"|"read_only"|"shadow"|"full"=()=>"legacy",private readonly approvalCoordinator?:ApprovalCoordinator,agentGraph?:AgentGraph|(()=>AgentGraph),private readonly legacyFallbackEnabled:()=>boolean=()=>false,private readonly reconciliation?:AgentReconciliationCoordinator,commandService?:CommandService){this.commandService=commandService??new CommandService(registry,()=>permissions.allowedRoots());if(typeof agentGraph==="function")this.agentGraphFactory=agentGraph;else this.agentGraphInstance=agentGraph;this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections,name=>this.security?.isToolEnabled(name)??true);this.actionExecutor=new ActionExecutor(registry,permissions,audit,{security,metrics,resources,records,connections});if(runtime)this.clarifications=new ClarificationService(new ClarificationRepository(runtime),new ClarificationResolver(permissions));}
+  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager,records?:ExecutionRecordRepository,private readonly agentLoopMode:()=>"legacy"|"read_only"|"shadow"|"full"=()=>"legacy",private readonly approvalCoordinator?:ApprovalCoordinator,agentGraph?:AgentGraph|(()=>AgentGraph),private readonly legacyFallbackEnabled:()=>boolean=()=>false,private readonly reconciliation?:AgentReconciliationCoordinator,commandService?:CommandService,directChat?:ChatService){this.commandService=commandService??new CommandService(registry,()=>permissions.allowedRoots());this.directChat=directChat;if(typeof agentGraph==="function")this.agentGraphFactory=agentGraph;else this.agentGraphInstance=agentGraph;this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections,name=>this.security?.isToolEnabled(name)??true);this.actionExecutor=new ActionExecutor(registry,permissions,audit,{security,metrics,resources,records,connections});if(runtime)this.clarifications=new ClarificationService(new ClarificationRepository(runtime),new ClarificationResolver(permissions));}
   setConnections(connections?:ConnectionService){this.connections=connections;this.toolCatalog.setConnections(connections);this.actionExecutor.setConnections(connections);}
 
   async run(userText:string,hooks:AgentRunHooks={},context:LLMMessage[]=[]):Promise<AgentReply>{
@@ -109,12 +111,14 @@ export class AgentEngine{
     // LLM plan. Mutations still go through executePlan and the regular policy.
     const deterministic=this.commandService.route(resolvedUserText,previous);
     if(deterministic.type!=="unknown"){
+      this.metrics?.record("agent.route",1,{route:deterministic.type==="tool"||deterministic.type==="macro"?"deterministic":"llm"});
       this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.type});
       if(deterministic.type==="tool"||deterministic.type==="macro")return this.executePlan(resolvedUserText,commandRoutePlan(deterministic),hooks,context);
       if(deterministic.response){hooks.onReplaceText?.(deterministic.response);hooks.onStatus?.("Resposta concluída.");return{text:deterministic.response,engine:"fast-path"};}
-      if(deterministic.stream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.planner.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
+      if(deterministic.stream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
     }
 
+    this.metrics?.record("agent.route",1,{route:this.agentLoopMode()==="legacy"?"llm":"agent"});
     if(this.agentLoopMode()==="read_only")return this.runAgentLoop(resolvedUserText,hooks,context,"read_only");
     if(this.agentLoopMode()==="full"){try{return await this.runAgentLoop(resolvedUserText,hooks,context,"full");}catch(error){const runId=(error as any)?.runId as string|undefined,safety=executionSafetyState(runId?this.runtime?.loadLoopState(runId):undefined),reason=error instanceof Error?error.message:String(error);if(!this.legacyFallbackEnabled()||!canFallbackToLegacy(safety)){this.metrics?.record("agent.v2_controlled_failure",1,{safety});const text="O Agent V2 não conseguiu concluir este pedido com segurança. Nenhuma ação será repetida automaticamente.";return{text,engine:"v2-full",fallbackReason:reason};}this.metrics?.record("agent.legacy_fallback",1,{reason,safety});hooks.onStatus?.("Agent V2 indisponível; usando o modo de compatibilidade seguro.");}}
     let plan:Plan;
@@ -124,7 +128,7 @@ export class AgentEngine{
     if(plan.intent?.status==="needs_clarification"&&conversationId&&this.clarifications){const pending=this.clarifications.create(conversationId,userText,plan.intent);return this.clarificationReply(pending,hooks);}
     const mailboxReply=this.prepareEmailMailboxPlan(userText,plan,conversationId,hooks);if(mailboxReply)return mailboxReply;
     const composeReply=this.prepareEmailComposeReview(plan,conversationId,hooks);if(composeReply)return composeReply;
-    if(plan.directStream){hooks.onStatus?.("Conversa identificada. Preparando a IA local…");hooks.onReplaceText?.("");try{hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.planner.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:plan.origin==="fast"?"fast-path":"legacy"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:plan.origin==="fast"?"fast-path":"legacy"};}}
+    if(plan.directStream){hooks.onStatus?.("Conversa identificada. Preparando a IA local…");hooks.onReplaceText?.("");try{hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:plan.origin==="fast"?"fast-path":"legacy"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:plan.origin==="fast"?"fast-path":"legacy"};}}
     if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);hooks.onStatus?.("Resposta concluída.");return{text:plan.direct,engine:plan.origin==="fast"?"fast-path":"legacy"};}
     return this.executePlan(userText, plan, hooks, context);
   }
@@ -305,6 +309,7 @@ export class AgentEngine{
   private needsApproval(tool:ToolDefinition,memory=false){const mutates=tool.mutatesState??tool.risk!=="READ";return this.permissions.requiresApproval(tool.risk,mutates)||Boolean(this.security?.requiresApproval(tool.name,tool.risk))||memory;}
   private executionContext(hooks:AgentRunHooks):ToolExecutionContext{return{runId:hooks.visualContext?.visualRunId,taskId:hooks.visualContext?.taskId,conversationId:hooks.visualContext?.conversationId,agentId:hooks.visualContext?.agentId,signal:hooks.signal};}
   private getAgentGraph(){return this.agentGraphInstance??=(this.agentGraphFactory?.()??new AgentGraph());}
+  private streamDirectAnswer(text:string,onToken:(token:string)=>void,context:LLMMessage[]=[],signal?:AbortSignal){return this.directChat?this.directChat.stream(text,onToken,context,signal):this.planner.streamDirectAnswer(text,onToken,context,signal);}
   private assertNotAborted(signal?:AbortSignal){if(signal?.aborted)throw signal.reason??new DOMException("Cancelada pelo usuário.","AbortError");}
   private formatOllamaError(error:unknown,action:string){if(error instanceof OllamaTimeoutError)return`O modelo local ${error.model} demorou mais que o esperado para ${action}. Etapa: ${error.phase}. Limite: ${error.timeoutSeconds} segundos.`;if(error instanceof OllamaConnectionError)return"Não consegui conectar ao Ollama. Verifique se o serviço local está em execução.";if(error instanceof OllamaModelNotFoundError)return error.message;if(error instanceof OllamaInvalidResponseError)return`O Ollama respondeu, mas a resposta não pôde ser interpretada: ${error.message}`;if(error instanceof OllamaUnavailableError)return`A IA local está indisponível: ${error.message}`;return`Não consegui ${action}: ${error instanceof Error?error.message:String(error)}`;}
   private formatResults(done:{step:PlanStep;result:ToolResult}[]){if(!done.length)return"Nenhum resultado.";return done.map(item=>item.result.summary).join("\n");}

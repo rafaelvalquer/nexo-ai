@@ -33,7 +33,7 @@
 .assistantToolCopy { display: grid; min-width: 0; line-height: 1.25; }
 .assistantToolCopy b { color: var(--nexo-text); font-size: 11px; font-weight: 600; }
 .assistantToolCopy small { overflow: hidden; color: var(--nexo-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.assistantToolChip.isActive .assistantToolIcon svg { animation: assistantToolPulse 1.4s ease-in-out infinite; }
+.assistantToolChip.isActive .assistantToolIcon svg { animation: assistantToolPulse var(--nexo-motion-shimmer) var(--nexo-ease-in-out) infinite; }
 
 @keyframes assistantToolPulse { 50% { opacity: .45; } }
 

@@ -4,6 +4,7 @@ import type { AutomationConditionOperator, AutomationRunViewModel } from "@nexo/
 import { motion, useReducedMotion } from "motion/react";
 import { motionTokens } from "../design/motion";
 import { NexoDrawer } from "../components/ui/NexoDrawer";
+import { Tooltip } from "../components/ui/Tooltip";
 
 type MacroField = { key: string; label: string; type: "text" | "number" | "select" | "path" | "boolean"; required?: boolean; options?: Array<{ value: string; label: string }>; placeholder?: string };
 type MacroAction = { id: string; title: string; description: string; category: string; fields: MacroField[]; risk: string };
@@ -114,13 +115,13 @@ export function MacroForm({ close, done, fail }: Props) {
             onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null); }}
             onDrop={event => { event.preventDefault(); if (draggedStep) reorderStep(draggedStep, index); setDraggedStep(null); setDropTarget(null); }}>
             <div className="macroStepHeading"><b>{index + 1}. {definition?.title ?? step.type}</b><span>
-              <button type="button" className="macroDragHandle ghost" draggable aria-label={`Arrastar etapa ${index + 1}; use Alt+setas para reordenar`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+              <Tooltip content={`Reordenar etapa ${index + 1} (Alt + ↑ / ↓)`}><button type="button" className="macroDragHandle ghost" draggable aria-label={`Arrastar etapa ${index + 1}; use Alt+setas para reordenar`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                 onPointerDown={event => { if (event.button === 0) setDraggedStep(step.id); }} onPointerCancel={() => { setDraggedStep(null); setDropTarget(null); }}
                 onDragStart={event => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", step.id); setDraggedStep(step.id); }}
                 onDragEnd={() => { setDraggedStep(null); setDropTarget(null); }}
-                onKeyDown={event => { if (event.altKey && event.key === "ArrowUp") { event.preventDefault(); moveStep(index, -1); } if (event.altKey && event.key === "ArrowDown") { event.preventDefault(); moveStep(index, 1); } }}><GripVertical size={14} /></button>
-              <button aria-label="Mover etapa para cima" disabled={index === 0} className="ghost" onClick={() => moveStep(index, -1)}><ChevronUp size={14} /></button>
-              <button aria-label="Mover etapa para baixo" disabled={index === steps.length - 1} className="ghost" onClick={() => moveStep(index, 1)}><ChevronDown size={14} /></button>
+                onKeyDown={event => { if (event.altKey && event.key === "ArrowUp") { event.preventDefault(); moveStep(index, -1); } if (event.altKey && event.key === "ArrowDown") { event.preventDefault(); moveStep(index, 1); } }}><GripVertical size={14} /></button></Tooltip>
+              <Tooltip content={`Mover etapa ${index + 1} para cima`}><button aria-label="Mover etapa para cima" disabled={index === 0} className="ghost" onClick={() => moveStep(index, -1)}><ChevronUp size={14} /></button></Tooltip>
+              <Tooltip content={`Mover etapa ${index + 1} para baixo`}><button aria-label="Mover etapa para baixo" disabled={index === steps.length - 1} className="ghost" onClick={() => moveStep(index, 1)}><ChevronDown size={14} /></button></Tooltip>
               <button className="ghost" onClick={() => setSteps(current => current.filter(item => item.id !== step.id))}>Remover</button>
             </span></div>
             <label className="check"><input type="checkbox" checked={Boolean(step.condition)} onChange={event => toggleCondition(step.id, event.target.checked)} />Executar somente quando a condição for atendida</label>
