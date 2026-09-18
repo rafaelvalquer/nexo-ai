@@ -1,12 +1,12 @@
 export type ParsedTextFileIntent = {
   fileName: string;
   destination: string;
-  content: string;
+  content?: string;
 };
 
 const FILE_REQUEST = /\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma|o|a)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["']?([\wÀ-ÿ ._-]+\.(?:txt|md))["']?/i;
 const DESTINATION_PREFIX = /^\s+(?:(?:especificamente|exatamente|diretamente|somente|apenas)\s+)*(?:em|no|na|nos|nas|para|dentro\s+de)\s+/i;
-const CONTENT_MARKER = /\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo)\b\s*:?\s*/i;
+const CONTENT_MARKER = /\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+escreva)\b\s*:?\s*/i;
 
 export function parseTextFileIntent(text: string): ParsedTextFileIntent | undefined {
   const request = text.match(FILE_REQUEST);
@@ -18,12 +18,10 @@ export function parseTextFileIntent(text: string): ParsedTextFileIntent | undefi
 
   const remainder = tail.slice(destinationPrefix[0].length);
   const contentMarker = remainder.match(CONTENT_MARKER);
-  if (!contentMarker || contentMarker.index === undefined) return undefined;
-
-  const destination = cleanDestination(remainder.slice(0, contentMarker.index));
-  const content = remainder.slice(contentMarker.index + contentMarker[0].length).trim();
+  const destination = cleanDestination(contentMarker?.index === undefined ? remainder : remainder.slice(0, contentMarker.index));
+  const content = contentMarker?.index === undefined ? "" : remainder.slice(contentMarker.index + contentMarker[0].length).trim();
   const fileName = request[1]?.trim();
-  if (!fileName || !destination || !content) return undefined;
+  if (!fileName || !destination) return undefined;
 
   return { fileName, destination, content };
 }

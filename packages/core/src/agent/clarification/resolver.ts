@@ -32,9 +32,19 @@ export class ClarificationResolver {
     }
 
     if (!raw) return { resolved: false, suggestedOptionId: question.suggestedOptionId };
+    if (question.field === "fileMatch") return this.resolveFileMatch(question, raw, source);
     if (question.field === "folder") return this.resolveFolder(raw, source);
     if (question.field === "to") return this.resolveRecipients(raw,source);
     return { resolved: true, value: raw, source };
+  }
+
+  private resolveFileMatch(question:ClarificationQuestion,raw:string,source:"button"|"custom_input"|"chat_text"):ClarificationAnswer{
+    const normalized=normalize(raw),options=question.options??[];
+    const ordinal=normalized.match(/\b(?:o\s+)?(primeiro|primeira|segundo|segunda|terceiro|terceira|quarto|quarta)\b/);
+    if(ordinal){const index=({primeiro:0,primeira:0,segundo:1,segunda:1,terceiro:2,terceira:2,quarto:3,quarta:3} as Record<string,number>)[ordinal[1]];const option=options[index];return option?{resolved:true,value:option.value,source}:{resolved:false,message:"Não há um arquivo nessa posição."};}
+    const matches=options.filter(option=>matchesOption(raw,option.id,option.label,option.value));
+    if(matches.length===1)return{resolved:true,value:matches[0].value,source};
+    return{resolved:false,message:matches.length?"Essa referência corresponde a mais de um arquivo. Escolha uma opção da lista.":"Selecione um dos arquivos encontrados."};
   }
 
   private resolveRecipients(raw:string,source:"button"|"custom_input"|"chat_text"):ClarificationAnswer{

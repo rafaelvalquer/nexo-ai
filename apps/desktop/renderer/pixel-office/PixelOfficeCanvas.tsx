@@ -1,11 +1,115 @@
-import { useCallback,useEffect,useRef,useState } from "react";
-import type { AgentVisualEvent,OfficeStationId } from "@nexo/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgentVisualEvent, OfficeStationId } from "@nexo/shared";
 import { OfficeEngine } from "./engine/OfficeEngine";
-import { loadPixiRuntime } from "./pixi-runtime";
 import { useOfficeStore } from "./state/office-store";
 import { useOfficePerformance } from "./hooks/useOfficePerformance";
 import { AgentFlowView } from "./ui/AgentFlowView";
 import { useAssistantStore } from "../stores/assistant";
-function enrich(event:AgentVisualEvent){const title=event.conversationId?useAssistantStore.getState().sessions.find(session=>session.id===event.conversationId)?.title:undefined;return title?{...event,metadata:{...event.metadata,chatTitle:title}}:event;}
-export function PixelOfficeCanvas({onAgent,onStation}:{onAgent:(agentId:string,conversationId?:string)=>void;onStation:(station:OfficeStationId)=>void}){const host=useRef<HTMLDivElement>(null),engine=useRef<OfficeEngine|undefined>(undefined),event=useOfficeStore(state=>state.event),runEvents=useOfficeStore(state=>state.runEvents),zoom=useOfficeStore(state=>state.zoom),reduced=useOfficeStore(state=>state.reducedMotion),developer=useOfficeStore(state=>state.developerMode),autoFocus=useOfficeStore(state=>state.autoFocus);const[error,setError]=useState<string>(),[debug,setDebug]=useState<Record<string,unknown>>({});useEffect(()=>{let active=true;void loadPixiRuntime().then(async()=>{if(!active||!host.current)return;const instance=new OfficeEngine();engine.current=instance;await instance.mount(host.current,onAgent,onStation);if(active){instance.setAutoFocus(useOfficeStore.getState().autoFocus);instance.restore(Object.values(useOfficeStore.getState().runEvents).map(enrich));}}).catch(reason=>{console.error("Falha ao iniciar o Pixel Office",reason);if(active)setError(reason instanceof Error?reason.message:String(reason));});return()=>{active=false;engine.current?.destroy();engine.current=undefined;};},[onAgent,onStation]);useEffect(()=>{if(event)engine.current?.consume(enrich(event));},[event?.eventId]);useEffect(()=>{engine.current?.restore(Object.values(runEvents).map(enrich));},[runEvents]);useEffect(()=>engine.current?.setReducedMotion(reduced),[reduced]);useEffect(()=>engine.current?.setDeveloperMode(developer),[developer]);useEffect(()=>engine.current?.setAutoFocus(autoFocus),[autoFocus]);useEffect(()=>{if(host.current)engine.current?.setZoom(host.current,zoom);},[zoom]);const visibility=useCallback((visible:boolean)=>engine.current?.setVisible(visible),[]);useOfficePerformance(visibility);useEffect(()=>{if(!developer)return;const timer=window.setInterval(()=>setDebug(engine.current?.debug()??{}),500);return()=>window.clearInterval(timer);},[developer]);useEffect(()=>{const timer=window.setInterval(()=>{const metrics=engine.current?.debug() as Record<string,unknown>|undefined;if(!metrics)return;const rows:[string,unknown][]=[["pixel_office.fps",metrics.fps],["pixel_office.queue_size",metrics.queue],["pixel_office.navigation_ms",metrics.navigationMs],["pixel_office.navigation_failures",metrics.navigationFailures],["pixel_office.active_agents",metrics.activeAgents],["pixel_office.agent_distance",metrics.agentDistance]];for(const[name,value]of rows)if(typeof value==="number")void window.nexo.recordMetric(name,value);},5000);return()=>window.clearInterval(timer);},[]);useEffect(()=>{const exportGrid=()=>{const data=engine.current?.exportGrid();if(!data)return;const url=URL.createObjectURL(new Blob([data],{type:"application/json"})),anchor=document.createElement("a");anchor.href=url;anchor.download="navigation-grid.json";anchor.click();URL.revokeObjectURL(url);};window.addEventListener("nexo:office:export-grid",exportGrid);return()=>window.removeEventListener("nexo:office:export-grid",exportGrid);},[]);if(error)return<div className="officeFallback" role="alert"><h2>A visualização Pixel Office não está disponível.</h2><p>O modo gráfico não pôde iniciar. Verifique os detalhes abaixo e tente novamente.</p><small>{error}</small><AgentFlowView/><button onClick={()=>location.reload()}>Tentar novamente</button></div>;return<div className="officeCanvas" ref={host} role="img" aria-label={`Escritório virtual do Nexo. ${Object.keys(runEvents).length} agente(s) ativo(s).`}>{developer&&<pre className="developerOverlay">{Object.entries(debug).map(([key,value])=>`${key}: ${typeof value==="object"?JSON.stringify(value):value}`).join("\n")}</pre>}</div>;}
+import { userFacingError } from "../utils/user-facing-error";
 
+function enrich(event: AgentVisualEvent) {
+  const title = event.conversationId
+    ? useAssistantStore.getState().sessions.find(session => session.id === event.conversationId)?.title
+    : undefined;
+  return title ? { ...event, metadata: { ...event.metadata, chatTitle: title } } : event;
+}
+
+export function PixelOfficeCanvas({
+  onAgent,
+  onStation
+}: {
+  onAgent: (agentId: string, conversationId?: string) => void;
+  onStation: (station: OfficeStationId) => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const engine = useRef<OfficeEngine | undefined>(undefined);
+  const event = useOfficeStore(state => state.event);
+  const runEvents = useOfficeStore(state => state.runEvents);
+  const zoom = useOfficeStore(state => state.zoom);
+  const reduced = useOfficeStore(state => state.reducedMotion);
+  const developer = useOfficeStore(state => state.developerMode);
+  const autoFocus = useOfficeStore(state => state.autoFocus);
+  const [error, setError] = useState<string>();
+  const [debug, setDebug] = useState<Record<string, unknown>>({});
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      if (!active || !host.current) return;
+      const instance = new OfficeEngine();
+      engine.current = instance;
+      await instance.mount(host.current, onAgent, onStation);
+      if (!active) return;
+      instance.setAutoFocus(useOfficeStore.getState().autoFocus);
+      instance.restore(Object.values(useOfficeStore.getState().runEvents).map(enrich));
+    })().catch(reason => {
+      console.error("Falha ao iniciar o Pixel Office", reason);
+      if (active) setError(userFacingError(reason, "O modo gráfico não pôde iniciar. Você ainda pode acompanhar as atividades na visualização em lista.", developer));
+    });
+    return () => {
+      active = false;
+      engine.current?.destroy();
+      engine.current = undefined;
+    };
+  }, [onAgent, onStation, developer]);
+
+  useEffect(() => { if (event) engine.current?.consume(enrich(event)); }, [event?.eventId]);
+  useEffect(() => { engine.current?.restore(Object.values(runEvents).map(enrich)); }, [runEvents]);
+  useEffect(() => { engine.current?.setReducedMotion(reduced); }, [reduced]);
+  useEffect(() => { engine.current?.setDeveloperMode(developer); }, [developer]);
+  useEffect(() => { engine.current?.setAutoFocus(autoFocus); }, [autoFocus]);
+  useEffect(() => { if (host.current) engine.current?.setZoom(host.current, zoom); }, [zoom]);
+
+  const visibility = useCallback((visible: boolean) => engine.current?.setVisible(visible), []);
+  useOfficePerformance(visibility);
+
+  useEffect(() => {
+    if (!developer) return;
+    const timer = window.setInterval(() => setDebug(engine.current?.debug() ?? {}), 500);
+    return () => window.clearInterval(timer);
+  }, [developer]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const metrics = engine.current?.debug() as Record<string, unknown> | undefined;
+      if (!metrics) return;
+      const rows: [string, unknown][] = [
+        ["pixel_office.fps", metrics.fps],
+        ["pixel_office.queue_size", metrics.queue],
+        ["pixel_office.navigation_ms", metrics.navigationMs],
+        ["pixel_office.navigation_failures", metrics.navigationFailures],
+        ["pixel_office.active_agents", metrics.activeAgents],
+        ["pixel_office.agent_distance", metrics.agentDistance]
+      ];
+      for (const [name, value] of rows) if (typeof value === "number") void window.nexo.recordMetric(name, value);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const exportGrid = () => {
+      const data = engine.current?.exportGrid();
+      if (!data) return;
+      const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "navigation-grid.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    };
+    window.addEventListener("nexo:office:export-grid", exportGrid);
+    return () => window.removeEventListener("nexo:office:export-grid", exportGrid);
+  }, []);
+
+  if (error) return <div className="officeFallback" role="alert">
+    <h2>A visualização Pixel Office não está disponível.</h2>
+    <p>{error}</p>
+    {developer && <small>{error}</small>}
+    <AgentFlowView />
+    <button onClick={() => location.reload()}>Tentar novamente</button>
+  </div>;
+
+  return <div className="officeCanvas" ref={host} role="img" aria-label={`Escritório virtual do Nexo. ${Object.keys(runEvents).length} agente(s) ativo(s).`}>
+    {developer && <pre className="developerOverlay">{Object.entries(debug).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join("\n")}</pre>}
+  </div>;
+}

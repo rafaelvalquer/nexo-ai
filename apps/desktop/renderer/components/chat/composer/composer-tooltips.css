@@ -1,0 +1,33 @@
+.composerToolbar > .tooltipWrap {
+  height: 36px;
+}
+
+.composerToolbar > .tooltipWrap > button {
+  height: 36px;
+  padding: 8px !important;
+}
+
+.composer.isReceivingFiles {
+  position: relative;
+  border-color: var(--nexo-violet) !important;
+  box-shadow: 0 0 0 3px var(--nexo-violet-soft), var(--nexo-shadow-sm);
+}
+
+.composerDropOverlay {
+  position: absolute;
+  z-index: 8;
+  inset: 4px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  border: 1px dashed var(--nexo-violet);
+  border-radius: 13px;
+  color: var(--nexo-text);
+  background: color-mix(in srgb, var(--nexo-surface-3) 94%, transparent);
+  pointer-events: none;
+}
+
+.composerDropOverlay svg { color: var(--nexo-violet); }
+.composerDropOverlay strong { font-size: 12px; }
+.composerDropOverlay span { color: var(--nexo-text-secondary); font-size: 10px; }

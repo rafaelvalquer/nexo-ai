@@ -1,19 +1,25 @@
-# Migração dos testes E2E
+# E2E migration inventory
 
-Inventário da suíte após a simplificação da navegação e reintegração do Escritório. Os testes de produto devem seguir a interface atual; cobertura histórica de fluxos ainda válidos permanece, mesmo quando usa cenários Electron mais longos.
+Inventory of the current `tests/e2e` suite after the navigation and architecture simplification. `CURRENT` means the scenario describes a supported surface; `REWRITE` means the test was updated to follow the supported route or behavior; `LEGACY` means it asserts a removed product surface and should be deleted; `DELETE` means the old coverage is intentionally removed because the feature no longer exists.
 
-| Arquivo | Situação | Ação |
+| Test file | Status | Action / coverage |
 |---|---|---|
-| `assistant.e2e.ts` | Current | Substitui `nexo-nucleus.e2e.ts`; cobre navegação atual, sidebar responsiva/persistente e paleta. |
-| `chat-history.e2e.ts` | Current | Manter; cobre paginação e sincronização do histórico. |
-| `chat-resources.e2e.ts` | Current | Manter; cobre cartões de recursos no chat, teclado e confirmação inline. |
-| `chat-resources-electron.e2e.ts` | Current | Manter; cobre anexos reais e aprovação de renomeação no Electron. |
-| `macros.e2e.ts` | Current | Manter; cobre editor, validação, simulação e execução. |
-| `settings.e2e.ts` | Current | Manter; cobre Configurações e diagnóstico condicionado. |
-| `connections.e2e.ts` | Rewrite | Abrir Configurações > Contas e integrações antes de verificar Google/Microsoft. |
-| `pixel-office.e2e.ts` | Rewrite | Entrar pela navegação Escritório e validar eventos reais; não navegar por tela Hoje. |
-| `pixel-office-scene.e2e.ts` | Current | Manter; cobre estados e movimento dos sprites. |
-| `agent-v2-location-filesystem.e2e.ts` | Current | Manter; cobre resolução de caminhos e correção antes de aprovação. |
-| `agent-v2-multistep-electron.e2e.ts` | Current | Manter; cobre aprovação, política de escrita e recuperação de execução. |
+| `agent-v2-location-filesystem.e2e.ts` | CURRENT | Deterministic file routing and allowed-root behavior. |
+| `agent-v2-multistep-electron.e2e.ts` | CURRENT | Electron execution, document resources, approvals, and recovery. |
+| `assistant.e2e.ts` | CURRENT | Main navigation, command palette, accessibility, and chat. |
+| `chat-history.e2e.ts` | CURRENT | Recent-message paging, retry, tabs, and scroll anchoring. |
+| `chat-layout.e2e.ts` | CURRENT | Responsive chat layout. |
+| `chat-resources-electron.e2e.ts` | CURRENT | Real Electron file cards and approval. |
+| `chat-resources.e2e.ts` | CURRENT | Resource cards, accessible review, and keyboard flows. |
+| `connections.e2e.ts` | REWRITE | Uses Settings > Integrations and verifies recoverable account state. |
+| `dashboard.e2e.ts` | CURRENT | Retained dashboard and lazy-route behavior. |
+| `documents.e2e.ts` | CURRENT | Optional document-library retry and preview behavior. |
+| `macros.e2e.ts` | CURRENT | Canonical MacroEngine UI, authoring, testing, and execution. |
+| `pixel-office-scene.e2e.ts` | CURRENT | Pixel Office scene behavior independent of navigation. |
+| `pixel-office.e2e.ts` | REWRITE | Enters through the Office sidebar and observes real execution events. |
+| `settings.e2e.ts` | CURRENT | Settings, local AI, diagnostics, version, and accessibility. |
+| `tools.e2e.ts` | REWRITE | Tool catalog is exercised within Settings, not as a primary page. |
 
-Os cenários de arquivos, aprovações e recuperação ainda estão agrupados nos arquivos Electron existentes. A extração para suítes menores só será feita quando evitar duplicar setup caro e mantiver os mesmos asserts de segurança.
+No current E2E file targets the removed `Hoje`, `NucleusCanvas`, or `NucleusSurface` screens. No file is classified `LEGACY` or `DELETE`; their stale tests were already removed from the current suite. The existing tests cover the plan's intent under the current filenames: assistant/chat history and resources cover chat and files, macros cover authoring and recovery flows, settings cover configuration, and the Electron tests cover approvals and real execution.
+
+Run the full inventory with `pnpm test:e2e`; the release workflow treats any failed test as a gate failure.

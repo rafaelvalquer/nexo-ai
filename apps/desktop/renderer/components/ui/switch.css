@@ -1,0 +1,77 @@
+.uiSwitchField {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  width: fit-content;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The Settings form's legacy label grid is intentionally overridden here. */
+.settings .uiSwitchField {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  grid-template-columns: none;
+  width: 100%;
+  margin: 8px 0;
+  gap: 14px;
+  text-align: left;
+}
+
+.uiSwitchInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.uiSwitchTrack {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  padding: 3px;
+  border: 1px solid var(--nexo-border-strong);
+  border-radius: 999px;
+  background: var(--nexo-surface-3);
+  transition: background-color var(--nexo-motion-fast) var(--nexo-ease-out), border-color var(--nexo-motion-fast) var(--nexo-ease-out), box-shadow var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.uiSwitchThumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--nexo-text-secondary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+  transform: translateX(0);
+  transition: transform var(--nexo-motion-fast) var(--nexo-ease-out), background-color var(--nexo-motion-fast) var(--nexo-ease-out);
+}
+
+.uiSwitchInput:checked + .uiSwitchTrack {
+  border-color: var(--nexo-violet);
+  background: var(--nexo-violet);
+}
+
+.uiSwitchInput:checked + .uiSwitchTrack .uiSwitchThumb {
+  background: var(--nexo-text-on-violet);
+  transform: translateX(16px);
+}
+
+.uiSwitchInput:focus-visible + .uiSwitchTrack {
+  outline: 2px solid var(--nexo-violet);
+  outline-offset: 3px;
+}
+
+.uiSwitchField:has(.uiSwitchInput:disabled) { cursor: not-allowed; opacity: .55; }
+.uiSwitchLabel { color: var(--nexo-text-secondary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .uiSwitchTrack, .uiSwitchThumb { transition: none; }
+}

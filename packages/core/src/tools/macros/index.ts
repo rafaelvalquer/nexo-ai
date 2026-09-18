@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { MacroEngine } from "../../macros/macro-engine.js";
 import type { ToolDefinition } from "../types.js";
-import type { CreateAutomationV2Input } from "@nexo/shared";
+import type { CreateMacroInput } from "@nexo/shared";
 
-export function macroTools(macros:MacroEngine,db:import("../../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../../automation/natural-draft.js").MacroDraft>):ToolDefinition[]{
+export function macroTools(macros:MacroEngine,db:import("../../database/db.js").NexoDatabase,draft:(description:string,name?:string)=>Promise<import("../../macros/macro-draft.js").GeneratedMacroDraft>):ToolDefinition[]{
   return [
     {name:"macro_create_draft",description:"Inicia ou continua a criação conversacional de uma macro. Se o usuário informou apenas o nome, pergunte o que ela deve fazer. Quando chegar a descrição, gere ações válidas usando apenas o catálogo e apresente todas as etapas; nunca salve antes de confirmação explícita.",domain:"macro",operation:"draft",risk:"READ",mutatesState:false,permissions:[],inputSchema:z.object({name:z.string().trim().min(1).max(160).optional(),description:z.string().trim().min(8).max(3000).optional()}),async execute({name,description},context){
       if(!context?.conversationId)throw new Error("Não foi possível associar o rascunho à conversa atual.");
@@ -17,7 +17,7 @@ export function macroTools(macros:MacroEngine,db:import("../../database/db.js").
       if(!context?.conversationId)throw new Error("Não foi possível localizar o rascunho desta conversa.");const key=`macro-draft:${context.conversationId}`;
       const result=db.transaction(()=>{const row=db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[key]);if(!row)throw new Error("Não há rascunho pendente nesta conversa.");if(!confirm){db.run("DELETE FROM application_state WHERE key=?",[key]);return{discarded:true as const};}
         const value=JSON.parse(row.value) as {name:string;description:string;actions:Array<{id:string;type:string;config:Record<string,unknown>}>};
-        const saved=macros.create({name:value.name,prompt:value.description,description:value.description,icon:"zap",enabled:true,trigger:{type:"manual"},conditions:[],conditionOperator:"AND",actions:value.actions,output:{type:"notification"},policy:{maxConcurrentRuns:1,retries:{enabled:true,count:2},onRepeatedFailure:"pause"}} as CreateAutomationV2Input);
+        const saved=macros.create({name:value.name,prompt:value.description,description:value.description,icon:"zap",enabled:true,trigger:{type:"manual"},conditions:[],conditionOperator:"AND",actions:value.actions,output:{type:"notification"},policy:{maxConcurrentRuns:1,retries:{enabled:true,count:2},onRepeatedFailure:"pause"}} as CreateMacroInput);
         db.run("DELETE FROM application_state WHERE key=?",[key]);return{id:saved.id,name:saved.name,enabled:saved.enabled};
       });
       return result.discarded?{ok:true,summary:"Rascunho descartado.",data:result}:{ok:true,summary:`Macro “${result.name}” criada e pronta para execução manual.`,data:result};

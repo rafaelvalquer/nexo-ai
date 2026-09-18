@@ -1,15 +1,18 @@
 {
   "name": "nexo-ai",
-  "version": "0.6.5",
+  "version": "0.7.0-rc.1",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && concurrently -k -n CORE,RENDERER,ELECTRON \"pnpm --filter @nexo/core dev\" \"pnpm --filter @nexo/desktop dev:renderer\" \"wait-on tcp:5173 && pnpm --filter @nexo/desktop dev:electron\"",
+    "dev": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && concurrently -k -n CORE,RENDERER,ELECTRON \"pnpm --filter @nexo/core dev\" \"pnpm --filter @nexo/desktop dev:renderer\" \"wait-on tcp:5173 && pnpm --filter @nexo/desktop dev:electron\"",
     "dev:browser": "pnpm --filter @nexo/browser-agent dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && pnpm -r typecheck",
     "test": "vitest run",
+    "test:security": "vitest run tests/security",
     "test:e2e": "playwright test",
+    "analyze:renderer": "pnpm --filter @nexo/desktop build:renderer && node scripts/analyze-renderer-bundle.mjs",
+    "optimize:pixel-office-assets": "node scripts/optimize-pixel-office-png.mjs --write",
     "test:watch": "vitest",
     "diagnose:browser-model": "node scripts/diagnose-browser-tool-calling.mjs",
     "browser:doctor": "node scripts/browser-doctor.mjs",
@@ -27,6 +30,7 @@
     "release:major": "node scripts/release.mjs major"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.10.2",
     "concurrently": "^9.1.2",

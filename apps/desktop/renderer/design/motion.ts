@@ -10,7 +10,8 @@ export const motionTokens = {
     navigation: { type: "spring" as const, stiffness: 420, damping: 34 }
   },
   distance: { subtle: 4, panel: 24, content: 8, toast: 8 },
-  scale: { pressed: 0.98, popover: 0.97 }
+  scale: { pressed: 0.98, popover: 0.97 },
+  blur: { toast: 4, backdrop: 8 }
 } as const;
 
 export type MotionTokens = typeof motionTokens;

@@ -1,0 +1,117 @@
+.dashboardCatalogLoading.nexoDrawerPanel {
+  width: min(560px, 96vw);
+  border-radius: 18px 0 0 18px;
+  background: var(--nexo-surface-2);
+}
+
+.dashboardCatalogLoading .nexoDrawerContent {
+  padding: 0;
+}
+
+.dashboardCatalogLoadingBody {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 100%;
+  padding: 17px 18px 20px;
+}
+
+.dashboardCatalogLoadingAnnouncement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.dashboardCatalogLoadingSearch {
+  height: 38px;
+  border: 1px solid var(--nexo-border);
+}
+
+.dashboardCatalogLoadingGroup {
+  display: grid;
+  gap: 0;
+}
+
+.dashboardCatalogLoadingLabel {
+  width: 132px;
+  height: 10px;
+  margin: 2px 0 9px 4px;
+}
+
+.dashboardCatalogLoadingRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 11px;
+  min-height: 60px;
+  border-top: 1px solid var(--nexo-border);
+}
+
+.dashboardCatalogLoadingIcon {
+  width: 31px;
+  height: 31px;
+  border-radius: 8px;
+}
+
+.dashboardCatalogLoadingRow > span {
+  display: grid;
+  gap: 7px;
+}
+
+.dashboardCatalogLoadingTitle {
+  width: min(38%, 140px);
+  height: 11px;
+}
+
+.dashboardCatalogLoadingDescription {
+  width: min(78%, 300px);
+  height: 9px;
+}
+
+.dashboardCatalogLoadingAction {
+  width: 14px;
+  height: 14px;
+}
+
+.dashboardCatalogLoadingSetup {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding-top: 3px;
+}
+
+.dashboardCatalogLoadingParagraph {
+  width: 90%;
+  height: 42px;
+}
+
+.dashboardCatalogLoadingField {
+  height: 39px;
+}
+
+.dashboardCatalogLoadingSetup > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 15px;
+  border-top: 1px solid var(--nexo-border);
+}
+
+.dashboardCatalogLoadingButton {
+  width: 94px;
+  height: 34px;
+}
+
+.dashboardCatalogLoadingButtonPrimary {
+  width: 148px;
+}
+
+@media (max-width: 600px) {
+  .dashboardCatalogLoading.nexoDrawerPanel {
+    width: 100vw;
+    border-radius: 0;
+  }
+}

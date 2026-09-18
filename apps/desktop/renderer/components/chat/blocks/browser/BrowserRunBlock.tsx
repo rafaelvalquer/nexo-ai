@@ -1,4 +1,5 @@
 import { useEffect,useMemo,useRef,useState } from "react";
+import { useReducedMotion } from "motion/react";
 import type { BrowserRun,BrowserRunBlock as BrowserRunBlockModel } from "@nexo/shared/browser-agent";
 import { BrowserApproval } from "./BrowserApproval";
 import { BrowserProgress } from "./BrowserProgress";
@@ -13,9 +14,10 @@ import "./browser-run.css";
 import "./browser-run-tokens.css";
 
 export function BrowserRunBlock({block,conversationId}:{block:BrowserRunBlockModel;conversationId?:string}){
+  const reduceMotion=useReducedMotion();
   const{run:loaded,liveEvents,history,approval}=useBrowserRun(block.runId),[expanded,setExpanded]=useState(false),[details,setDetails]=useState(false),rootRef=useRef<HTMLElement|null>(null),scrolledRef=useRef(false);
   const run=loaded??fallbackRun(block,conversationId);
-  useEffect(()=>{if(!scrolledRef.current&&rootRef.current){scrolledRef.current=true;rootRef.current.scrollIntoView({behavior:"smooth",block:"nearest"});}},[block.runId]);
+  useEffect(()=>{if(!scrolledRef.current&&rootRef.current){scrolledRef.current=true;rootRef.current.scrollIntoView({behavior:reduceMotion?"auto":"smooth",block:"nearest"});}},[block.runId,reduceMotion]);
   const host=useMemo(()=>{try{return run.currentUrl?new URL(run.currentUrl).hostname:"";}catch{return"";}},[run.currentUrl]);
   const elapsed=durationLabel(run);
   return <section ref={rootRef} className={`browserRunBlock ${run.status}`} data-browser-run={run.id}>

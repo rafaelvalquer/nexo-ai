@@ -6,8 +6,11 @@ import { CustomChoiceInput } from "./CustomChoiceInput";
 import { MultiChoiceQuestion } from "./MultiChoiceQuestion";
 import { ClarificationActions } from "./ClarificationActions";
 import "./clarification.css";
+import { useDeveloperDiagnosticsEnabled } from "../../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../../utils/user-facing-error";
 
 export function ClarificationBlock({ block, conversationId }: {block: ClarificationModel;conversationId?: string;}) {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const question = block.questions[0];
   const defaultSelection = useMemo(() => question?.suggestedOptionId, [question?.suggestedOptionId]);
   const defaultSelections = useMemo(() => question?.selectedOptionIds ?? [], [question?.selectedOptionIds]);
@@ -35,11 +38,11 @@ export function ClarificationBlock({ block, conversationId }: {block: Clarificat
     try {
       await window.nexo.resolveClarification({clarificationId:block.clarificationId,questionId:question.id,optionId:question.type === "multi_choice" || custom ? undefined : selectedId,optionIds:question.type === "multi_choice" ? selectedIds : undefined,customValue:custom || undefined,source:custom ? "custom_input" : "button"});
       await refresh();
-    } catch (caught) {setError(caught instanceof Error ? caught.message : String(caught));await refresh().catch(() => undefined);}
+    } catch (caught) {setError(userFacingError(caught,"Não consegui salvar sua resposta. Tente novamente.",diagnostics));await refresh().catch(() => undefined);}
     finally {setBusy(false);}
   }
 
-  async function cancel() {if (busy || !pending) return;setBusy(true);setError("");try {await window.nexo.cancelClarification(block.clarificationId);await refresh();} catch (caught) {setError(caught instanceof Error ? caught.message : String(caught));} finally {setBusy(false);}}
+  async function cancel() {if (busy || !pending) return;setBusy(true);setError("");try {await window.nexo.cancelClarification(block.clarificationId);await refresh();} catch (caught) {setError(userFacingError(caught,"Não consegui cancelar essa pergunta. Tente novamente.",diagnostics));} finally {setBusy(false);}}
 
   const resolved = block.values?.[question.field];
   const resolvedIds = question.type === "multi_choice" && Array.isArray(resolved)?(question.options ?? []).filter(option => resolved.includes(option.value)).map(option => option.id):[];

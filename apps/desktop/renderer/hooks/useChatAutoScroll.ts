@@ -1,4 +1,5 @@
 import { useCallback,useLayoutEffect,useRef,useState,type RefObject } from "react";
+import { useReducedMotion } from "motion/react";
 
 type ChatAutoScrollOptions={
   sessionId?:string;
@@ -19,6 +20,7 @@ function isNearBottom(node:HTMLDivElement){
 
 export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAutoScrollOptions){
   const{sessionId,messageCount,streaming,streamRevision=0,pendingApprovalId,newestMessageId,historyRevision=0,historyLoading=false}=options;
+  const reduceMotion=useReducedMotion();
   const[nearBottom,setNearBottom]=useState(true),[unread,setUnread]=useState(false);
   const followRef=useRef(true);
   const anchoringRef=useRef(false);
@@ -58,16 +60,17 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
   },[]);
 
   const scrollToBottom=useCallback((behavior:ScrollBehavior="smooth")=>{
+    const resolvedBehavior=reduceMotion?"auto":behavior;
     const node=ref.current;
     followRef.current=true;
     pendingInitialScrollRef.current=false;
     if(node){
-      markProgrammaticScroll(behavior);
-      node.scrollTo({top:node.scrollHeight,behavior});
+      markProgrammaticScroll(resolvedBehavior);
+      node.scrollTo({top:node.scrollHeight,behavior:resolvedBehavior});
     }
     setNearBottom(true);
     setUnread(false);
-  },[markProgrammaticScroll,ref]);
+  },[markProgrammaticScroll,ref,reduceMotion]);
 
   const scheduleBottom=useCallback((behavior:ScrollBehavior,settleLayout:boolean,respectFollow:boolean)=>{
     cancelScheduledScroll();
@@ -86,6 +89,7 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
   },[cancelScheduledScroll,scrollToBottom]);
 
   const anchorLatestUser=useCallback((behavior:ScrollBehavior="smooth")=>{
+    const resolvedBehavior=reduceMotion?"auto":behavior;
     const node=ref.current;
     if(!node)return;
     const messages=node.querySelectorAll<HTMLElement>(".chatMessage.user");
@@ -97,11 +101,11 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
     const viewport=node.getBoundingClientRect();
     const message=latest.getBoundingClientRect();
     const top=Math.max(0,node.scrollTop+(message.top-viewport.top)-14);
-    markProgrammaticScroll(behavior);
-    node.scrollTo({top,behavior});
+    markProgrammaticScroll(resolvedBehavior);
+    node.scrollTo({top,behavior:resolvedBehavior});
     setUnread(false);
-    window.setTimeout(()=>{anchoringRef.current=false;},behavior==="smooth"?400:0);
-  },[markProgrammaticScroll,ref]);
+    window.setTimeout(()=>{anchoringRef.current=false;},resolvedBehavior==="smooth"?400:0);
+  },[markProgrammaticScroll,ref,reduceMotion]);
 
   const prepareHistoryLoad=useCallback(()=>{
     cancelScheduledScroll();
@@ -195,7 +199,7 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
         if (approval) {
           followRef.current = true;
           pendingInitialScrollRef.current = false;
-          approval.scrollIntoView({ behavior: "smooth", block: "center" });
+          approval.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
           setNearBottom(true);
           setUnread(false);
           window.setTimeout(() => {
@@ -207,7 +211,7 @@ export function useChatAutoScroll(ref:RefObject<HTMLDivElement>,options:ChatAuto
         scrollToBottom("smooth");
       });
     });
-  }, [pendingApprovalId, ref, scrollToBottom]);
+  }, [pendingApprovalId, ref, scrollToBottom, reduceMotion]);
 
   useLayoutEffect(()=>()=>{
     cancelScheduledScroll();

@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { Progress } from "../ui/Progress";
+import { useDeveloperDiagnosticsEnabled } from "../../hooks/useDeveloperDiagnostics";
+import { userFacingError } from "../../utils/user-facing-error";
 
 declare global { interface Window { nexoOllama?: { pull(model: string): Promise<unknown>; onProgress(callback: (event: { status?: string; completed?: number; total?: number }) => void): () => void; }; } }
 
 export function OllamaModelInstaller() {
+  const diagnostics=useDeveloperDiagnosticsEnabled();
   const [model, setModel] = useState<string>(); const [progress, setProgress] = useState<{ status?: string; completed?: number; total?: number }>(); const [busy, setBusy] = useState(false); const [error,setError]=useState<string>();
   useEffect(() => { void window.nexo.status().then((status: any) => { if (status.llm?.ok && !(status.models ?? []).includes(status.settings?.model)) setModel(status.settings?.model); }); }, []);
   useEffect(() => window.nexoOllama?.onProgress(setProgress), []);
   if (!model || !window.nexoOllama) return null;
   const percent = progress?.total ? Math.min(100, Math.round((progress.completed ?? 0) / progress.total * 100)) : undefined;
-  const pull=async()=>{setBusy(true);setError(undefined);try{await window.nexoOllama!.pull(model);setModel(undefined);setProgress(undefined);}catch(reason){setError(reason instanceof Error?reason.message:String(reason));}finally{setBusy(false);}};
+  const pull=async()=>{setBusy(true);setError(undefined);try{await window.nexoOllama!.pull(model);setModel(undefined);setProgress(undefined);}catch(reason){setError(userFacingError(reason,"Não foi possível baixar o modelo local. Confira sua conexão e tente novamente.",diagnostics));}finally{setBusy(false);}};
   return <aside className="modelInstaller" role="status">
     <b>Modelo local necessário</b>
     <span>{busy ? `${progress?.status ?? "Baixando…"}${percent === undefined ? "" : ` · ${percent}%`}` : `${model} ainda não está instalado.`}</span>

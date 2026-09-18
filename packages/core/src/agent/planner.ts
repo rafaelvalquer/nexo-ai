@@ -3,7 +3,7 @@ import type { LLMMessage,LLMProvider } from "../llm/provider.js";
 import { AGENT_SYSTEM_PROMPT,stripCodeFence } from "../security/prompt.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { responsePolicy } from "../chat/presentation/response-policy.js";
-import { FastIntentRouter } from "./intent-router.js";
+import { LegacyIntentRouter } from "../router/legacy-intent-router.js";
 import type { ConversationActionContextState } from "./context/conversation-action-context.js";
 import { observeConversationActionContext } from "./context/conversation-action-context.js";
 import { materializeDeferredAction } from "./orchestrator/action-preflight.js";
@@ -25,7 +25,7 @@ export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:stri
 export type PlanOrigin="fast"|"llm";
 export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string;steps?:PlanStep[];direct?:string;directStream?:boolean;origin?:PlanOrigin;intent?:AgentIntent;deferredAction?:DeferredAction;responseMode?:"synthesize"|"deterministic"|"presentation";uiFlow?:"email_mailbox_preferences";emailDraft?:EmailComposePlanDraft};
 
-const fastRouter=new FastIntentRouter();
+const fastRouter=new LegacyIntentRouter();
 const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","find_file","memory_usage","disk_usage","system_info","process_list"]);
 const MUTATION_INTENTS=new Set<AgentIntent["intent"]>(["create","send","update","delete","move"]);
 let defaultIntentMemory:IntentMemoryStore|undefined;
@@ -70,7 +70,7 @@ export class AgentPlanner{
   }
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
-  observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Plan,step:PlanStep,result:ToolResult){
+  observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult){
     const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result),store=this.activeIntentMemory();
     if(result.ok&&plan.intent?.status==="ready"&&store&&this.isIntentLearningEnabled()){
       const tool=this.registry.get(step.tool),toolMutates=tool ? (tool.mutatesState ?? tool.risk!=="READ") : false,intentMutates=MUTATION_INTENTS.has(plan.intent.intent);

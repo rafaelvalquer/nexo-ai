@@ -83,6 +83,7 @@ export class ClarificationService {
   }
 
   private entityPatch(field: string, value: unknown): Record<string, unknown> {
+    if(field==="fileMatch"&&typeof value==="string")return{path:value};
     if (field === "folder" && typeof value === "string" && !KNOWN_FOLDERS.has(value)) return { path: value };
     if(["to","recipient","recipients","recipientEmail","recipientEmails","email"].includes(field))return{to:normalizeRecipients(value)};
     if(["body","message","text","content"].includes(field))return{body:String(value)};

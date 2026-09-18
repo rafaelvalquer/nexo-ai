@@ -1,9 +1,27 @@
 .automationStatus i { animation-duration: var(--nexo-motion-pulse); }
 .automationSkeleton { animation-duration: var(--nexo-motion-shimmer); }
-.automationCard,.automationPrimary,.automationFilters button,.automationBuilder button,.automationMenu button {
+.automationSkeleton > i,.macroSkeletonTop i,.macroSkeletonMeta i {
+  display: block;
+  border-radius: var(--nexo-r-sm);
+  background: linear-gradient(100deg,var(--nexo-surface-2) 25%,var(--nexo-surface-3) 45%,var(--nexo-surface-2) 65%);
+  background-size: 300% 100%;
+  animation: shimmer var(--nexo-motion-shimmer) ease-in-out infinite;
+}
+.automationSkeleton { display: flex; flex-direction: column; gap: 13px; }
+.macroSkeletonTop,.macroSkeletonMeta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.macroSkeletonTop i:first-child { width: 28px; height: 28px; border-radius: 9px; }
+.macroSkeletonTop i:last-child { width: 78px; height: 20px; border-radius: 999px; }
+.automationSkeleton .macroSkeletonTitle { width: 62%; height: 16px; margin-top: 2px; }
+.automationSkeleton .macroSkeletonDescription { width: 94%; height: 9px; }
+.automationSkeleton .macroSkeletonDescription.short { width: 70%; margin-top: -8px; }
+.macroSkeletonMeta { margin-top: auto; padding: 12px 0; border-top: 1px solid var(--nexo-border); }
+.macroSkeletonMeta i { width: 42%; height: 9px; }
+.automationSkeleton .macroSkeletonAction { width: 100%; height: 34px; margin-top: 1px; }
+.automationCard,.automationPrimary,.automationFilters button,.automationBuilder button,.automationMenu button,.macroStepList > li {
   transition-duration: var(--nexo-motion-fast);
   transition-timing-function: var(--nexo-ease-out);
 }
+.automationCard:hover { transform: translateY(-2px); }
 @media (prefers-reduced-motion: reduce) {
   .automationPage *, .automationPage *::before, .automationPage *::after,
   .automationBuilder *, .automationBuilder *::before, .automationBuilder *::after {

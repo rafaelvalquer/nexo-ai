@@ -19,6 +19,20 @@
   --nexo-success: #3bd89f;
   --nexo-warning: #f5b74f;
   --nexo-danger: #ff5d78;
+  --nexo-surface-overlay: #111a25;
+  --nexo-overlay-dim: rgba(3, 5, 11, .72);
+  --nexo-scrollbar-thumb: #283849;
+  --nexo-atmosphere: rgba(30, 100, 132, .13);
+  --nexo-focus-ring: rgba(118, 92, 255, .75);
+  --nexo-text-on-violet: #fff;
+  --nexo-text-on-cyan: #071117;
+  --nexo-cyan-border: rgba(73, 214, 255, .18);
+  --nexo-cyan-border-strong: rgba(73, 214, 255, .3);
+  --nexo-cyan-hover: rgba(73, 214, 255, .18);
+  --nexo-success-glow: rgba(107, 214, 164, .35);
+  --nexo-shadow-panel: 0 8px 28px rgba(0, 0, 0, .12);
+  --nexo-user-message: #142535;
+  --nexo-user-message-border: rgba(96, 155, 183, .16);
 
   /* Compatibility aliases keep existing screens on the same four surfaces. */
   --nexo-surface: var(--nexo-surface-1);
@@ -30,6 +44,8 @@
   --nexo-r-md: 12px;
   --nexo-r-lg: 16px;
   --nexo-r-xl: 24px;
+  --nexo-scale-pressed: .98;
+  --nexo-scale-popover: .97;
   --nexo-shadow-sm: 0 2px 8px rgba(0, 0, 0, .18);
   --nexo-shadow-md: 0 12px 32px rgba(0, 0, 0, .28);
   --nexo-shadow-lg: 0 24px 70px rgba(0, 0, 0, .42);
@@ -41,6 +57,8 @@
   --nexo-motion-normal: 220ms;
   --nexo-motion-slow: 360ms;
   --nexo-motion-page: 180ms;
+  --nexo-motion-delay-stagger: 150ms;
+  --nexo-motion-delay-double: 300ms;
   --nexo-motion-shimmer: 1400ms;
   --nexo-motion-spin: 900ms;
   --nexo-motion-pulse: 1200ms;
@@ -61,20 +79,20 @@
 
 html, body, #root { min-width: 0; }
 
-* { scrollbar-color: #283849 transparent; }
+* { scrollbar-color: var(--nexo-scrollbar-thumb) transparent; }
 html { background: var(--nexo-bg); }
 body {
   min-width: 0;
   color: var(--nexo-text);
   font-family: var(--nexo-font);
-  background: radial-gradient(ellipse at 74% -18%, rgba(30, 100, 132, .13), transparent 43%), var(--nexo-bg);
+  background: radial-gradient(ellipse at 74% -18%, var(--nexo-atmosphere), transparent 43%), var(--nexo-bg);
 }
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid rgba(118, 92, 255, .75);
+  outline: 2px solid var(--nexo-focus-ring);
   outline-offset: 2px;
 }
 

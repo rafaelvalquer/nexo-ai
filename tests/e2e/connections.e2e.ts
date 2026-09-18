@@ -25,7 +25,7 @@ test("connection setup distinguishes unavailable data and keeps stale state reco
   await expect(page.getByText("Configuração necessária").first()).toBeVisible();
   await page.evaluate(()=> (window as any).__setConnectionReadFailure(true));
   await page.getByRole("button",{name:"Atualizar conexões"}).click();
-  await expect(page.getByRole("status")).toContainText("dados exibidos podem estar desatualizados");
+  await expect(page.locator(".connectionsStale")).toContainText("dados exibidos podem estar desatualizados");
   await expect(page.locator(".providerCard")).toHaveCount(3);
 });
 

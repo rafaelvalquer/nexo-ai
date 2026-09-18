@@ -7,10 +7,51 @@ test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("app
 test.afterAll(async()=>{await server?.close();});
 
 test("Dashboard usa fallback neural sem átomo e mostra cinco atalhos",async({page})=>{
+  let orbSceneRequested=false;
+  page.on("request",request=>{if(request.url().includes("/components/ai/orb/OrbScene.tsx"))orbSceneRequested=true;});
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
-  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback, .nucleusCanvas").first()).toBeVisible();
+  const palette=await page.locator(".dashboardPage").evaluate(node=>({violet:getComputedStyle(node).getPropertyValue("--dash-violet").trim(),token:getComputedStyle(document.documentElement).getPropertyValue("--nexo-violet").trim(),hero:getComputedStyle(document.querySelector(".dashboardHero")!).backgroundImage}));
+  expect(palette.violet).toBe(palette.token);expect(palette.hero).toContain("radial-gradient");
+  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback")).toBeVisible();await expect(page.locator(".nucleusCanvas")).toHaveCount(0);expect(orbSceneRequested).toBe(false);
+  const orb=page.locator(".nexoNucleus");await expect(orb).toHaveCSS("--nucleus-core","#765cff");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
+  await expect(orb).toHaveCSS("--nucleus-core","#3bd89f");await expect(orb).toHaveCSS("--nucleus-ring","#8cfdca");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
   await page.getByRole("button",{name:"Explorar núcleo"}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
+});
+
+test("a troca para uma rota lazy mostra skeleton contextual e acessível",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  let releaseChunk!:()=>void;
+  let markChunkRequested!:()=>void;
+  const chunkGate=new Promise<void>(resolve=>{releaseChunk=resolve;});
+  const chunkRequested=new Promise<void>(resolve=>{markChunkRequested=resolve;});
+  await page.route("**/pages/Automations.tsx*",async route=>{markChunkRequested();await chunkGate;await route.continue();});
+  try{
+    await page.goto(url);
+    await page.locator(".sidebar").getByRole("button",{name:"Macros",exact:true}).click();
+    await chunkRequested;
+    const loading=page.getByRole("status",{name:"Carregando Macros"});
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveAttribute("aria-busy","true");
+    const skeletons=page.locator(".routeLoadingMacroGrid .routeLoadingMacroCard");
+    await expect(skeletons).toHaveCount(3);
+    await expect.poll(()=>skeletons.first().evaluate(element=>getComputedStyle(element).animationName)).toBe("none");
+  }finally{releaseChunk();}
+  await expect(page.getByRole("heading",{name:"Macros",exact:true})).toBeVisible();
+});
+
+test("dashboard refresh tooltip appears on keyboard focus and hover",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const refresh=page.getByRole("button",{name:"Atualizar dashboard"});
+  await refresh.focus();
+  await expect(page.getByRole("tooltip").getByText("Atualizar dashboard")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await refresh.hover();
+  await expect(page.getByRole("tooltip").getByText("Atualizar dashboard")).toBeVisible();
 });
 
 test("Dashboard mantém ações e conteúdo sem overflow nos breakpoints desktop",async({page},testInfo)=>{
@@ -25,13 +66,87 @@ test("Dashboard mantém ações e conteúdo sem overflow nos breakpoints desktop
   }
 });
 
+test("gadget mantém o último dado durante refresh e oculta detalhes técnicos fora do modo desenvolvedor",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{
+    const api=(window as any).nexo.dashboard;
+    api.getLayout=async()=>[{instanceId:"stale-task-card",gadgetId:"tasks",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:[{id:"task-preserved",title:"Tarefa preservada",status:"running"}],fetchedAt:new Date().toISOString(),stale:false});
+    api.refreshGadget=async()=>new Promise((_resolve,reject)=>{(window as any).__failGadgetRefresh=()=>reject(new Error("SQLITE_BUSY: private database detail"));});
+    const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:false}});
+  });
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const gadget=page.locator(".gadgetCard").filter({hasText:"Tarefa preservada"});
+  await expect(gadget).toBeVisible();
+  await gadget.getByRole("button",{name:"Atualizar Tarefas em andamento"}).click();
+  await expect(gadget.getByText("Atualizando dados…")).toBeVisible();
+  await expect(gadget.getByText("Tarefa preservada")).toBeVisible();
+  await page.evaluate(()=>{(window as any).__failGadgetRefresh();});
+  await expect(gadget.getByText("Exibindo último dado salvo")).toBeVisible();
+  await expect(gadget.getByText("Tarefa preservada")).toBeVisible();
+  await expect(gadget).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(async()=>{const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:true}});});
+  await gadget.getByRole("button",{name:"Atualizar Tarefas em andamento"}).click();
+  await page.evaluate(()=>{(window as any).__failGadgetRefresh();});
+  await expect(gadget).toContainText("SQLITE_BUSY: private database detail");
+});
+
+test("falha inicial do dashboard oferece retry e só vira estado vazio após recuperação",async({page})=>{
+  await page.goto(url);
+  await page.evaluate(async()=>{
+    const api=(window as any).nexo.dashboard;
+    api.getLayout=async()=>{throw new Error("SQLITE_BUSY: private dashboard detail");};
+    const {useDashboardStore}=await import("/stores/dashboard.ts");
+    useDashboardStore.setState({layout:[],data:{},loading:false,error:undefined});
+    const {useAppStore}=await import("/stores/app.ts");useAppStore.getState().setStatus({settings:{developerDiagnosticsEnabled:false}});
+  });
+  await page.getByRole("button",{name:"Atualizar dashboard"}).click();
+  const failure=page.getByRole("alert");
+  await expect(failure).toContainText("Não foi possível carregar o dashboard");
+  await expect(failure).toContainText("Tente novamente para carregar suas informações.");
+  await expect(failure).not.toContainText("SQLITE_BUSY");
+  await page.evaluate(()=>{(window as any).nexo.dashboard.getLayout=async()=>[];});
+  await failure.getByRole("button",{name:"Tentar novamente"}).click();
+  await expect(page.getByRole("heading",{name:"Monte um dashboard que seja seu"})).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 test("catálogo de gadgets usa NexoDrawer e restaura foco ao fechar com Escape",async({page},testInfo)=>{
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
   const opener=page.locator(".dashboardAddButton");await opener.click();
   const drawer=page.getByRole("dialog",{name:"Adicionar gadget"});await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole("button",{name:"Fechar painel"})).toBeFocused();
+  const firstFocusable=drawer.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").first();
+  const lastFocusable=drawer.locator("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])").last();
+  await expect(firstFocusable).toHaveAccessibleName("Fechar painel");
+  await expect(firstFocusable).toBeFocused();
   await page.screenshot({path:testInfo.outputPath("dashboard-gadget-drawer.png")});
+  await page.keyboard.press("Shift+Tab");await expect(lastFocusable).toBeFocused();
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
+  await page.locator("#page-content").evaluate(element=>(element as HTMLElement).focus());
+  await page.keyboard.press("Tab");await expect(firstFocusable).toBeFocused();
   await page.keyboard.press("Escape");await expect(drawer).not.toBeVisible();await expect(opener).toBeFocused();
+});
+
+test("catálogo lazy anuncia e mostra skeleton enquanto carrega",async({page})=>{
+  let releaseChunk!:()=>void;
+  let markChunkRequested!:()=>void;
+  const chunkGate=new Promise<void>(resolve=>{releaseChunk=resolve;});
+  const chunkRequested=new Promise<void>(resolve=>{markChunkRequested=resolve;});
+  await page.route("**/components/dashboard/GadgetCatalog.tsx*",async route=>{markChunkRequested();await chunkGate;await route.continue();});
+  try{
+    await page.goto(url);
+    await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+    await page.locator(".dashboardAddButton").click();
+    await chunkRequested;
+    const loading=page.getByRole("status",{name:"Carregando catálogo de gadgets"});
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveAttribute("aria-busy","true");
+    await expect(page.getByRole("dialog",{name:"Adicionar gadget"})).toBeVisible();
+    await expect(page.locator(".dashboardCatalogLoadingRow")).toHaveCount(5);
+  }finally{releaseChunk();}
+  await expect(page.getByRole("dialog",{name:"Adicionar gadget"})).toBeVisible();
+  await expect(page.locator(".gadgetCatalog")).toBeVisible();
+  await expect(page.locator(".dashboardCatalogLoading")).toHaveCount(0);
 });
 
 test("adiciona E-mail e Agenda pelo catálogo e restaura layout no reload",async({page})=>{

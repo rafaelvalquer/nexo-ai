@@ -1,5 +1,3 @@
-import type { AutomationPreset } from "@nexo/shared";
-export const browserPresets: AutomationPreset[] = [
-  { id:"open-page-daily",version:1,category:"browser",title:"Abrir página diariamente",description:"Abre uma página no horário escolhido.",icon:"globe",requiredCapabilities:[],automation:{name:"Abrir página diariamente",icon:"globe",trigger:{type:"schedule",mode:"daily",time:"09:00"},conditions:[],actions:[{id:"open",type:"browser.open",config:{url:""}}]} },
-  { id:"extract-page",version:1,category:"browser",title:"Extrair conteúdo de uma página",description:"Extrai e resume uma página periodicamente.",icon:"scan-text",requiredCapabilities:[],automation:{name:"Extrair página",icon:"scan-text",trigger:{type:"schedule",mode:"daily",time:"09:00"},conditions:[],actions:[{id:"extract",type:"browser.extract",config:{url:""}},{id:"summary",type:"ai.summarize",config:{source:"$actions.extract"}}]} }
-];
+/** @deprecated Use browserMacroPresets from macros/presets/browser. */
+export { browserMacroPresets as browserPresets } from "../../macros/presets/browser.js";
+export type { MacroPreset as AutomationPreset } from "@nexo/shared";

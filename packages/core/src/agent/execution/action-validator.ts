@@ -26,7 +26,7 @@ export class ActionValidator {
     private readonly permissions: PermissionEngine,
     private readonly security?: SecurityPolicyService,
     private connections?: ConnectionService,
-    private readonly locations: LocationRegistry = new LocationRegistry(),
+    private readonly locations?: LocationRegistry,
   ) {}
   setConnections(connections?:ConnectionService){this.connections=connections;}
 
@@ -42,8 +42,9 @@ export class ActionValidator {
     const evidence = Object.fromEntries(Object.entries(rawInput).filter(([key]) => key.startsWith("__nexo")));
     const candidate = Object.fromEntries(Object.entries(rawInput).filter(([key]) => !key.startsWith("__nexo")));
     try {
-      normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], this.locations);
-      bindGoalControlledArguments(tool.name, candidate, context.userRequest, this.locations);
+      const locations = this.locations ?? new LocationRegistry({}, [], this.permissions.allowedRoots());
+      normalizeKnownFolderPaths(candidate, tool.pathFields ?? [], locations);
+      bindGoalControlledArguments(tool.name, candidate, context.userRequest, locations);
     } catch (error) {
       return failure("PATH_DENIED", message(error));
     }

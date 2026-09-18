@@ -47,8 +47,7 @@
 .macroExecutionProgress b { color: var(--nexo-text); font-size: 12px; font-weight: 550; }
 .macroExecutionProgress small { color: var(--nexo-text-secondary); white-space: nowrap; }
 .automationPage :is(button,input,select,textarea):focus-visible { outline-color: var(--nexo-violet); }
-.automationCard,.automationStatus i,.automationSkeleton { animation-duration: var(--nexo-motion-pulse); }
-.automationCard { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out); }
+.automationCard { transition-property: transform,border-color,box-shadow; }
 .automationBuilder,.automationMenu { box-shadow: var(--nexo-shadow-lg); }
 @media (prefers-reduced-motion: reduce) {
   .automationPage *, .automationBuilder * { animation: none !important; transition: none !important; }

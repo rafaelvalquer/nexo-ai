@@ -1,0 +1,74 @@
+.gadgetLoadError {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--nexo-warning) 24%, transparent);
+  border-radius: 10px;
+  color: var(--nexo-text-secondary);
+  background: color-mix(in srgb, var(--nexo-warning) 6%, var(--nexo-surface-1));
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gadgetRefreshing {
+  margin-top: 8px;
+  color: var(--nexo-text-muted);
+  font-size: 10px;
+}
+
+.dashboardRefreshStatus,
+.dashboardStale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--nexo-border);
+  border-radius: 10px;
+  color: var(--nexo-text-secondary);
+  background: var(--nexo-surface-1);
+  font-size: 11px;
+}
+
+.dashboardStale {
+  border-color: color-mix(in srgb, var(--nexo-warning) 28%, var(--nexo-border));
+  color: var(--nexo-warning);
+}
+
+.dashboardRefreshStatus button,
+.dashboardStale button,
+.dashboardLoadError button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--nexo-border-strong);
+  border-radius: 8px;
+  color: var(--nexo-text);
+  background: var(--nexo-surface-2);
+  cursor: pointer;
+}
+
+.dashboardRefreshStatus button:hover,
+.dashboardStale button:hover,
+.dashboardLoadError button:hover { background: var(--nexo-surface-3); }
+
+.dashboardLoadError {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 18px;
+  border: 1px solid color-mix(in srgb, var(--nexo-danger) 24%, transparent);
+  border-radius: 14px;
+  color: var(--nexo-text-secondary);
+  background: color-mix(in srgb, var(--nexo-danger) 5%, var(--nexo-surface-1));
+  text-align: center;
+}
+
+.dashboardLoadError h3,
+.dashboardLoadError p { margin: 0; }
+.dashboardLoadError h3 { color: var(--nexo-text); font-size: 14px; font-weight: 550; }
+.dashboardLoadError p { max-width: 520px; font-size: 12px; line-height: 1.55; }
+
+@media (max-width: 520px) {
+  .dashboardRefreshStatus,
+  .dashboardStale { align-items: flex-start; flex-direction: column; }
+}

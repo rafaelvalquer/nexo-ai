@@ -8,6 +8,7 @@ $installDir = Join-Path $smokeRoot "NexoAI-Smoke-$version-$runId"
 $dataDir = Join-Path $smokeRoot "NexoAI-Smoke-Data-$runId"
 $appDataDir = Join-Path $smokeRoot "NexoAI-Smoke-AppData-$runId"
 $readyFile = Join-Path $smokeRoot "NexoAI-Smoke-Ready-$runId.json"
+$exitFile = Join-Path $smokeRoot "NexoAI-Smoke-Exit-$runId"
 $stageFile = Join-Path $smokeRoot "NexoAI-Smoke-Stages-$runId.log"
 $process = $null
 
@@ -42,8 +43,8 @@ try {
   $start.Environment["NEXO_DATA_DIR"] = $dataDir
   $start.Environment["NEXO_CORE_PORT"] = "0"
   $start.Environment["NEXO_SMOKE_READY_FILE"] = $readyFile
+  $start.Environment["NEXO_SMOKE_EXIT_FILE"] = $exitFile
   $start.Environment["NEXO_SMOKE_STAGE_FILE"] = $stageFile
-  $start.Environment["NODE_DEBUG"] = "module"
   $start.Environment["APPDATA"] = $appDataDir
   $process = [System.Diagnostics.Process]::Start($start)
   $stdoutTask = $process.StandardOutput.ReadToEndAsync()
@@ -74,8 +75,41 @@ try {
   if (-not $ready.windowLoaded) { throw "A janela do Nexo não terminou de carregar." }
   if ([System.IO.Path]::GetFullPath($ready.dataDir) -ne [System.IO.Path]::GetFullPath($dataDir)) { throw "O app não usou o diretório de dados isolado do smoke." }
   if (-not (Test-Path -LiteralPath $ready.database) -or (Get-Item -LiteralPath $ready.database).Length -eq 0) { throw "SQLite não foi inicializado no diretório isolado." }
+  if (-not $ready.functionalChecks.ollamaOffline -or $ready.functionalChecks.plannerCalls -ne 0 -or $ready.functionalChecks.llmCalls -ne 0) { throw "Os comandos funcionais não foram concluídos com Ollama offline sem chamar Planner/LLM." }
+  $tools = @($ready.functionalChecks.checks | ForEach-Object { $_.tool })
+  foreach ($requiredTool in @("memory_usage", "macro_list", "list_files")) { if ($tools -notcontains $requiredTool) { throw "Smoke funcional não executou a ferramenta $requiredTool." } }
+  if (@($ready.functionalChecks.recognizedWithoutLaunching | Where-Object { $_.command -eq "Abra o Chrome" -and $_.tool -eq "open_application" }).Count -ne 1) { throw "O smoke não reconheceu abrir Chrome pelo roteador determinístico." }
 
-  Write-Host "Smoke do instalador Nexo AI $version concluído: janela carregada e SQLite inicializado."
+  $databaseLength = (Get-Item -LiteralPath $ready.database).Length
+  Set-Content -LiteralPath $exitFile -Value "exit"
+  if (-not $process.WaitForExit(15000)) { Stop-ProcessTree $process.Id }
+  $process.Dispose()
+  $process = $null
+  Remove-Item -LiteralPath $readyFile -Force
+  $process = [System.Diagnostics.Process]::Start($start)
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
+  $deadline = [DateTime]::UtcNow.AddSeconds($startupTimeoutSeconds)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $process.Refresh()
+    if ($process.HasExited -or (Test-Path -LiteralPath $readyFile)) { break }
+    Start-Sleep -Milliseconds 250
+  }
+  if (-not (Test-Path -LiteralPath $readyFile)) {
+    $startupLog = Join-Path $dataDir "logs/startup-errors.log"
+    $diagnostic = if (Test-Path -LiteralPath $startupLog) { Get-Content -Raw -LiteralPath $startupLog } else { "Nenhum startup-errors.log foi criado." }
+    $stdout = if ($stdoutTask.IsCompleted) { $stdoutTask.Result } else { "stdout ainda aberto" }
+    $stderr = if ($stderrTask.IsCompleted) { $stderrTask.Result } else { "stderr ainda aberto" }
+    throw "O Nexo não reabriu com os mesmos dados. Diagnóstico: $diagnostic`nstdout: $stdout`nstderr: $stderr"
+  }
+  $reopened = Get-Content -Raw -LiteralPath $readyFile | ConvertFrom-Json
+  if (-not $reopened.windowLoaded -or [System.IO.Path]::GetFullPath($reopened.dataDir) -ne [System.IO.Path]::GetFullPath($dataDir)) { throw "A janela não reabriu com o diretório de dados isolado." }
+  if (-not (Test-Path -LiteralPath $reopened.database) -or (Get-Item -LiteralPath $reopened.database).Length -lt $databaseLength) { throw "O banco não persistiu ao fechar e reabrir o Nexo." }
+
+  Set-Content -LiteralPath $exitFile -Value "exit"
+  if (-not $process.WaitForExit(15000)) { Stop-ProcessTree $process.Id }
+
+  Write-Host "Smoke do instalador Nexo AI $version concluído: UI e SQLite carregados, comandos offline executados, Chrome reconhecido e reabertura validada."
 }
 finally {
   if ($process) {

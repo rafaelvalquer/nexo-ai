@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, FolderOpen, Globe2, Paperclip, Send, Sparkles, Square, Zap, type LucideIcon } from "lucide-react";
-import type { AutomationViewModel, DocumentRecord, NexoSettings } from "@nexo/shared";
+import { FileText, FolderOpen, Globe2, Paperclip, Send, Sparkles, Square, Upload, Zap, type LucideIcon } from "lucide-react";
+import type { MacroView, DocumentRecord, NexoSettings } from "@nexo/shared";
 import type { AssistantAttachment } from "../../../stores/assistant";
 import { useAutoGrowTextarea } from "../../../hooks/useAutoGrowTextarea";
 import { useChatKeyboard } from "../../../hooks/useChatKeyboard";
+import { Tooltip } from "../../ui/Tooltip";
+import { fuzzyScore } from "../../../utils/fuzzy-score";
+import "./composer-tooltips.css";
 import { AttachmentTray } from "./AttachmentTray";
 
 const slashCommands = [
@@ -23,7 +26,7 @@ function expandCommand(value: string) {
   return prefix[command.toLowerCase()] ? `${prefix[command.toLowerCase()]}${query ? `: ${query}` : ""}` : value;
 }
 
-export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemove, onSend, onStop }: {
+export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemove, onSend, onStop, onDropFiles }: {
   attachments: AssistantAttachment[];
   busy: boolean;
   onAttach: () => void;
@@ -31,13 +34,16 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
   onRemove: (id: string) => void;
   onSend: (value: string) => Promise<boolean>;
   onStop: () => void;
+  onDropFiles: (files: File[]) => Promise<void>;
 }) {
   const [text, setText] = useState("");
   const [mentionChoices, setMentionChoices] = useState<MentionChoice[]>([]);
   const [mentionsLoading, setMentionsLoading] = useState(true);
   const [mentionContext, setMentionContext] = useState<{ query: string; start: number } | null>(null);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [selected, setSelected] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const dragDepth = useRef(0);
   useAutoGrowTextarea(ref, text);
   const stop = useCallback(() => onStop(), [onStop]);
   useChatKeyboard(ref, stop);
@@ -49,7 +55,7 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
     void Promise.all([
       read<NexoSettings | null>(() => window.nexo.getSettings(), null),
       read<DocumentRecord[]>(() => window.nexo.listRecentDocuments?.() ?? Promise.resolve([]), []),
-      read<AutomationViewModel[]>(() => window.nexo.listAutomations?.() ?? Promise.resolve([]), [])
+      read<MacroView[]>(() => window.nexo.listMacros?.() ?? Promise.resolve([]), [])
     ]).then(([settings, documents, macros]) => {
       if (!active) return;
       const folders: MentionChoice[] = (settings?.allowedRoots ?? []).map(root => ({
@@ -72,8 +78,11 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
   const commandQuery = text.startsWith("/") && !text.includes(" ") ? text.toLowerCase() : null;
   const commandSuggestions = commandQuery === null ? [] : slashCommands.filter(item => item.command.startsWith(commandQuery));
   const mentionSuggestions = useMemo(() => mentionContext === null ? [] : mentionChoices
-    .filter(item => `${item.label} ${item.detail} ${item.group}`.toLocaleLowerCase().includes(mentionContext.query.toLocaleLowerCase()))
-    .slice(0, 8), [mentionChoices, mentionContext]);
+    .map((item, index) => ({ item, index, score: fuzzyScore(`${item.label} ${item.detail} ${item.group}`, mentionContext.query) }))
+    .filter(result => result.score >= 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 8)
+    .map(result => result.item), [mentionChoices, mentionContext]);
   const mentionMenuOpen = mentionContext !== null;
   const activeCount = mentionMenuOpen ? mentionSuggestions.length : commandSuggestions.length;
 
@@ -103,7 +112,12 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
     requestAnimationFrame(() => { ref.current?.focus(); ref.current?.setSelectionRange(nextCursor, nextCursor); });
   };
 
-  return <footer className="composerDock"><div className="chatColumn"><div className="composer">
+  return <footer className="composerDock"><div className="chatColumn"><div className={`composer${draggingFiles ? " isReceivingFiles" : ""}`}
+    onDragEnter={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); dragDepth.current += 1; setDraggingFiles(true); }}
+    onDragOver={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+    onDragLeave={event => { if (!Array.from(event.dataTransfer.types).includes("Files") || event.currentTarget.contains(event.relatedTarget as Node | null)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDraggingFiles(false); }}
+    onDrop={event => { if (!Array.from(event.dataTransfer.types).includes("Files")) return; event.preventDefault(); dragDepth.current = 0; setDraggingFiles(false); const files = Array.from(event.dataTransfer.files); if (files.length) void onDropFiles(files); }}>
+    {draggingFiles && <div className="composerDropOverlay" role="status"><Upload size={20}/><strong>Solte para anexar</strong><span>PDF, DOCX, TXT ou MD</span></div>}
     <AttachmentTray items={attachments} onRemove={onRemove}/>
     <textarea ref={ref} value={text} onChange={event => {
       const value = event.currentTarget.value;
@@ -132,6 +146,6 @@ export function Composer({ attachments, busy, onAttach, onAttachDocument, onRemo
       {mentionSuggestions.length ? mentionSuggestions.map((choice, index) => { const Icon = choice.icon; return <button id={`mention-option-${index}`} key={choice.id} type="button" role="option" aria-selected={selected === index} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSelected(index)} onClick={() => useMention(choice)}><Icon size={15}/><span><b>{choice.label}</b><small>{choice.group} · {choice.detail}</small></span></button>; }) : <div className="composerSuggestEmpty" role="status">{mentionsLoading ? "Carregando referências locais…" : "Nenhum contexto local encontrado."}</div>}
     </div>}
     {commandSuggestions.length > 0 && !mentionMenuOpen && <div id="slash-menu" className="composerSuggestMenu slashMenu" role="listbox" aria-label="Comandos rápidos">{commandSuggestions.map(({ command, label, icon: Icon }, index) => <button id={`slash-option-${index}`} key={command} type="button" role="option" aria-selected={selected === index} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSelected(index)} onClick={() => useCommand(command)}><Icon size={15}/><span><b>{command}</b><small>{label}</small></span></button>)}</div>}
-    <div className="composerToolbar"><button className="iconButton" onClick={onAttach} aria-label="Anexar documentos"><Paperclip size={18}/><span>Documento</span></button><span className="contextIndicator"><i className="dot"/>Local</span>{busy ? <button className="stopButton" onClick={onStop} aria-label="Parar geração"><Square size={15}/></button> : <button className="sendButton" onClick={() => void send()} disabled={!text.trim() || pending} aria-label="Enviar mensagem"><Send size={17}/></button>}</div>
+    <div className="composerToolbar"><button className="iconButton" onClick={onAttach} aria-label="Anexar documentos"><Paperclip size={18}/><span>Documento</span></button><span className="contextIndicator"><i className="dot"/>Local</span>{busy ? <Tooltip content="Parar geração"><button type="button" className="stopButton" onClick={onStop} aria-label="Parar geração"><Square size={15}/></button></Tooltip> : <Tooltip content="Enviar mensagem"><button type="button" className="sendButton" onClick={() => void send()} disabled={!text.trim() || pending} aria-label="Enviar mensagem"><Send size={17}/></button></Tooltip>}</div>
   </div><small className="composerHint">Enter para enviar · Shift + Enter para nova linha · digite @ para contexto local</small></div></footer>;
 }

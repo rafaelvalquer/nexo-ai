@@ -33,7 +33,7 @@
 .assistantToolCopy { display: grid; min-width: 0; line-height: 1.25; }
 .assistantToolCopy b { color: var(--nexo-text); font-size: 11px; font-weight: 600; }
 .assistantToolCopy small { overflow: hidden; color: var(--nexo-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.assistantToolChip.isActive .assistantToolIcon svg { animation: assistantToolPulse 1.4s ease-in-out infinite; }
+.assistantToolChip.isActive .assistantToolIcon svg { animation: assistantToolPulse var(--nexo-motion-shimmer) var(--nexo-ease-in-out) infinite; }
 
 @keyframes assistantToolPulse { 50% { opacity: .45; } }
 
@@ -48,6 +48,28 @@
 .chatTab {
   color: var(--nexo-text-secondary);
 }
+
+.chatTabsList { outline: none; }
+.chatTabItem { position: relative; min-width: 0; }
+.chatTabItem .chatTab { grid-template-columns: 10px minmax(0, 1fr); padding-right: 34px; }
+.chatTabClose {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: none;
+  place-items: center;
+  width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.chatTabItem:hover .chatTabClose,
+.chatTabItem:focus-within .chatTabClose { display: grid; }
+.chatTab[role="tab"]:focus-visible { z-index: 1; outline-offset: -2px; }
 
 .chatTab:hover,
 .chatTab.active {
@@ -85,6 +107,11 @@
 .chatTabClose:hover {
   background: var(--nexo-surface-3);
   color: var(--nexo-text);
+}
+
+@media (max-width: 900px) {
+  .mobileChatDrawer .chatTabClose { display: grid; }
+  .mobileChatDrawer .chatTabItem .chatTab { padding-right: 34px; }
 }
 
 .activeChatIdentity {
@@ -244,8 +271,8 @@
 .executionSummary svg { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out); }
 .executionSummary p.active svg,.attachmentItem.indexing small svg { animation-duration: var(--nexo-motion-spin); animation-timing-function: var(--nexo-ease-linear); }
 .typing > span { animation-duration: var(--nexo-motion-pulse); }
-.typing > span:nth-child(2) { animation-delay: 150ms; }
-.typing > span:nth-child(3) { animation-delay: 300ms; }
+.typing > span:nth-child(2) { animation-delay: var(--nexo-motion-delay-stagger); }
+.typing > span:nth-child(3) { animation-delay: var(--nexo-motion-delay-double); }
 .streamCursor { animation-duration: var(--nexo-motion-cursor); }
 .reasoningPulse { animation-duration: var(--nexo-motion-pulse); }
 .suggestion { transition: transform var(--nexo-motion-fast) var(--nexo-ease-out),border-color var(--nexo-motion-fast) var(--nexo-ease-out),background var(--nexo-motion-fast) var(--nexo-ease-out); }

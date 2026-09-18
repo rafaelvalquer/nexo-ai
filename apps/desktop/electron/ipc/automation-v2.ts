@@ -1,10 +1,11 @@
 import { ipcMain } from "electron";
 import type { NexoCore } from "@nexo/core";
-import type { AutomationAction, AutomationCondition, AutomationOutput, AutomationPolicy, AutomationTrigger, CreateAutomationV2Input, UpdateAutomationV2Input } from "@nexo/shared";
+import type { MacroStep, MacroCondition, MacroOutput, MacroPolicy, MacroTrigger, CreateMacroInput, UpdateMacroInput } from "@nexo/shared";
 
 const TRIGGERS = new Set(["schedule","interval","manual","app-start","file.created","file.changed","file.deleted","email.received","calendar.before_event","calendar.event_started","system.threshold"]);
 const CONDITION_OPERATORS = new Set(["equals","notEquals","contains","notContains","startsWith","endsWith","greaterThan","lessThan","exists"]);
 
+/** @deprecated Use registerMacroIpc and the nexo:macro:* IPC channels. */
 export function registerAutomationV2Ipc(core: NexoCore): void {
   ipcMain.handle("nexo:automation:create-v2",(_,value)=>core.macros.create(validateCreate(core,value)));
   ipcMain.handle("nexo:automation:cancel",(_,id)=>core.macros.cancel(requireId(id)));
@@ -16,7 +17,7 @@ export function registerAutomationV2Ipc(core: NexoCore): void {
     const current=core.macros.get(automationId);
     if(!current)throw new Error("Automação não encontrada.");
     const merged=validateCreate(core,{...pickEditable(current),...requireRecord(value,"Atualização")});
-    return core.macros.update(automationId,merged as UpdateAutomationV2Input);
+    return core.macros.update(automationId,merged as UpdateMacroInput);
   });
   ipcMain.handle("nexo:automation:duplicate",(_,id)=>core.macros.duplicate(requireId(id)));
   ipcMain.handle("nexo:automation:test",(_,id)=>core.macros.test(requireId(id)));
@@ -28,7 +29,7 @@ export function registerAutomationV2Ipc(core: NexoCore): void {
   ipcMain.handle("nexo:automation:trigger-catalog",()=>core.macros.triggerCatalog());
 }
 
-function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
+function validateCreate(core:NexoCore,value:unknown):CreateMacroInput {
   const data=requireRecord(value,"Automação");
   const name=requireText(data.name,"Nome",160);
   const description=optionalText(data.description,"Descrição",1200);
@@ -45,7 +46,7 @@ function validateCreate(core:NexoCore,value:unknown):CreateAutomationV2Input {
   return {name,description,icon,prompt,enabled:data.enabled,trigger,conditions,conditionOperator,actions,output,policy};
 }
 
-function validateTrigger(value:unknown):AutomationTrigger {
+function validateTrigger(value:unknown):MacroTrigger {
   const data=requireRecord(value,"Gatilho");
   const type=requireText(data.type,"Tipo de gatilho",80);
   if(!TRIGGERS.has(type))throw new Error("Tipo de gatilho inválido.");
@@ -61,7 +62,7 @@ function validateTrigger(value:unknown):AutomationTrigger {
     if(mode==="cron"&&!cron)throw new Error("Agendamento inválido.");
     const daysOfWeek=Array.isArray(data.daysOfWeek)?data.daysOfWeek.map(item=>requireInteger(item,"Dia da semana",0,6)):undefined;
     const dayOfMonth=data.dayOfMonth===undefined?undefined:requireInteger(data.dayOfMonth,"Dia do mês",1,31);
-    return {type,mode:mode as Extract<AutomationTrigger,{type:"schedule"}>["mode"],cron,at,time,daysOfWeek,dayOfMonth};
+    return {type,mode:mode as Extract<MacroTrigger,{type:"schedule"}>["mode"],cron,at,time,daysOfWeek,dayOfMonth};
   }
   if(type==="file.created"||type==="file.changed"||type==="file.deleted")return {type,path:requireText(data.path,"Pasta monitorada",2000),debounceMs:data.debounceMs===undefined?1500:requireInteger(data.debounceMs,"Debounce",0,60000)};
   if(type==="email.received"){
@@ -76,21 +77,21 @@ function validateTrigger(value:unknown):AutomationTrigger {
   return {type:"system.threshold",metric,operator:operator as "gt"|"gte"|"lt"|"lte",threshold:requireNumber(data.threshold,"Limite",0,100),checkIntervalMinutes:requireInteger(data.checkIntervalMinutes,"Intervalo de consulta",1,1440)};
 }
 
-function validateConditions(value:unknown):AutomationCondition[]{
+function validateConditions(value:unknown):MacroCondition[]{
   if(value===undefined)return[];
   if(!Array.isArray(value)||value.length>50)throw new Error("Condições inválidas.");
-  return value.map((item,index)=>{const data=requireRecord(item,`Condição ${index+1}`),operator=String(data.operator??"");if(!CONDITION_OPERATORS.has(operator))throw new Error(`Operador inválido na condição ${index+1}.`);return{id:requireText(data.id,`ID da condição ${index+1}`,100),field:requireText(data.field,`Campo da condição ${index+1}`,200),operator:operator as AutomationCondition["operator"],value:safeJsonValue(data.value)};});
+  return value.map((item,index)=>{const data=requireRecord(item,`Condição ${index+1}`),operator=String(data.operator??"");if(!CONDITION_OPERATORS.has(operator))throw new Error(`Operador inválido na condição ${index+1}.`);return{id:requireText(data.id,`ID da condição ${index+1}`,100),field:requireText(data.field,`Campo da condição ${index+1}`,200),operator:operator as MacroCondition["operator"],value:safeJsonValue(data.value)};});
 }
 
-function validateActions(value:unknown,allowed:Set<string>):AutomationAction[]{
+function validateActions(value:unknown,allowed:Set<string>):MacroStep[]{
   if(!Array.isArray(value)||value.length<1||value.length>20)throw new Error("Adicione entre 1 e 20 ações.");
   return value.map((item,index)=>{const data=requireRecord(item,`Ação ${index+1}`),type=requireText(data.type,`Tipo da ação ${index+1}`,120);if(!allowed.has(type))throw new Error(`Ação não registrada: ${type}`);const condition=data.condition===undefined?undefined:validateConditions([data.condition])[0];return{id:requireText(data.id,`ID da ação ${index+1}`,100),type,config:requireRecord(safeJsonValue(data.config??{}),`Configuração da ação ${index+1}`),continueOnError:data.continueOnError===true,condition};});
 }
 
-function validateOutput(value:unknown):AutomationOutput {
+function validateOutput(value:unknown):MacroOutput {
   if(value===undefined)return{type:"notification"};const data=requireRecord(value,"Saída");if(data.type==="notification"||data.type==="silent")return{type:data.type};if(data.type==="chat"){const mode=data.conversationMode;if(mode!=="automation"&&mode!=="existing")throw new Error("Destino de chat inválido.");return{type:"chat",conversationMode:mode};}throw new Error("Saída da automação inválida.");
 }
-function validatePolicy(value:unknown):AutomationPolicy {
+function validatePolicy(value:unknown):MacroPolicy {
   if(value===undefined)return{maxConcurrentRuns:1,retries:{enabled:true,count:2},onRepeatedFailure:"pause"};const data=requireRecord(value,"Política"),retries=requireRecord(data.retries,"Retry");return{maxConcurrentRuns:1,retries:{enabled:retries.enabled!==false,count:requireInteger(retries.count??2,"Quantidade de retries",0,5)},onRepeatedFailure:data.onRepeatedFailure==="continue"?"continue":"pause"};
 }
 function pickEditable(value:Record<string,unknown>){return{name:value.name,description:value.description,icon:value.icon,prompt:value.prompt,enabled:value.enabled,trigger:value.trigger,conditions:value.conditions,conditionOperator:value.conditionOperator,actions:value.actions,output:value.output,policy:value.policy};}

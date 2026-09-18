@@ -101,6 +101,76 @@
   border-color: var(--nexo-border-strong);
 }
 
+.settingsNav {
+  position: sticky;
+  top: 66px;
+  z-index: 6;
+  display: flex;
+  gap: 6px;
+  max-width: 980px;
+  margin: 0 0 14px;
+  padding: 8px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--nexo-surface-1) 94%, transparent);
+  border: 1px solid var(--nexo-border);
+  border-radius: 12px;
+  backdrop-filter: blur(16px);
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+
+.settingsNav button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--nexo-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settingsNav button:hover {
+  border-color: var(--nexo-border);
+  background: var(--nexo-surface-2);
+  color: var(--nexo-text);
+}
+
+.settingsNav button:focus-visible { outline-offset: -2px; }
+.settingsNavLinks { display: flex; flex-direction: column; gap: 5px; }
+.settingsNavSelectLabel { display: none; }
+
+@media (max-width: 959px) {
+  .settingsNavLinks { display: none; }
+  .settingsNavSelectLabel {
+    display: grid;
+    flex: 1;
+    gap: 5px;
+    min-width: 0;
+    color: var(--nexo-text-muted);
+    font-size: 11px;
+  }
+  .settingsNavSelectLabel select {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0 10px;
+    color: var(--nexo-text);
+    background: var(--nexo-surface-2);
+    border: 1px solid var(--nexo-border-strong);
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings label:not(.check):not(.uiSwitchField) { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .settings input, .settings select { min-width: 0; width: 100%; }
+  .settings .folder { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .settings .folder code { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .settings *, .settingsNav * { transition: none !important; }
   .settingsTestConnection .spinning { animation: none !important; }

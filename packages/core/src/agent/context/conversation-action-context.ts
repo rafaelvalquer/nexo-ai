@@ -16,6 +16,7 @@ export type ActionContextCalendar = {
   start?: string;
   end?: string;
 };
+export type ActionContextFile = { name:string; path:string; root?:string; size?:number; modifiedAt?:string };
 
 export type ConversationActionContextState = {
   updatedAt: string;
@@ -25,6 +26,7 @@ export type ConversationActionContextState = {
   lastQuery?: string;
   emails?: ActionContextEmail[];
   events?: ActionContextCalendar[];
+  files?: ActionContextFile[];
   emailConnectionId?: string;
   calendarConnectionId?: string;
 };
@@ -49,6 +51,13 @@ export function observeConversationActionContext(
   };
 
   if (!result.ok) return next;
+
+  if (step.tool === "find_file") {
+    const data=result.data as any;
+    const matches=Array.isArray(data?.matches)?data.matches:[];
+    next.lastDomain="filesystem";
+    next.files=matches.filter((item:any)=>typeof item?.name==="string"&&typeof item?.path==="string").slice(0,50).map((item:any)=>({name:String(item.name),path:String(item.path),...(typeof item.root==="string"?{root:item.root}:{}),...(typeof item.size==="number"?{size:item.size}:{}),...(typeof item.modifiedAt==="string"?{modifiedAt:item.modifiedAt}:{})}));
+  }
 
   // Any mailbox mutation makes the previous selection unsafe to reuse. A later
   // explicit follow-up must start from a new live search rather than stale IDs.

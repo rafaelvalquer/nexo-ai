@@ -1,6 +1,3 @@
-import type { AutomationPreset } from "@nexo/shared";
-export const filesystemPresets: AutomationPreset[] = [
-  { id:"monitor-downloads",version:1,category:"filesystem",title:"Monitorar Downloads",description:"Avisa quando novos arquivos aparecem na pasta escolhida.",icon:"folder-down",requiredCapabilities:[],automation:{name:"Monitorar Downloads",icon:"folder-down",trigger:{type:"file.created",path:"",debounceMs:1500},conditions:[],actions:[{id:"notify",type:"notification.show",config:{title:"Novo arquivo",content:"$trigger.data.path"}}]} },
-  { id:"new-pdf-downloads",version:1,category:"filesystem",title:"Novo PDF em Downloads",description:"Avisa somente quando um PDF novo aparecer.",icon:"file-text",requiredCapabilities:[],automation:{name:"Novo PDF em Downloads",icon:"file-text",trigger:{type:"file.created",path:"",debounceMs:1500},conditions:[{id:"pdf",field:"path",operator:"endsWith",value:".pdf"}],actions:[{id:"notify",type:"notification.show",config:{title:"Novo PDF",content:"$trigger.data.path"}}]} },
-  { id:"new-csv-report",version:1,category:"filesystem",title:"Novo CSV de relatório",description:"Detecta CSVs cujo nome contém relatório.",icon:"table",requiredCapabilities:[],automation:{name:"Novo CSV de relatório",icon:"table",trigger:{type:"file.created",path:"",debounceMs:1500},conditions:[{id:"csv",field:"path",operator:"endsWith",value:".csv"},{id:"name",field:"path",operator:"contains",value:"relatorio"}],conditionOperator:"AND",actions:[{id:"summary",type:"nexo.command",config:{command:"Analise o arquivo CSV recém recebido e resuma os principais pontos."}}]} }
-];
+/** @deprecated Use filesystemMacroPresets from macros/presets/filesystem. */
+export { filesystemMacroPresets as filesystemPresets } from "../../macros/presets/filesystem.js";
+export type { MacroPreset as AutomationPreset } from "@nexo/shared";

@@ -20,6 +20,12 @@ describe("responsePolicy", () => {
     expect(responsePolicy(["calendar_list"]).mode).toBe("presentation");
   });
 
+  it("mantém leituras locais de sistema e macros determinísticas, sem pedir síntese ao modelo", () => {
+    for (const tool of ["memory_usage", "disk_usage", "system_info", "process_list", "macro_list"]) {
+      expect(responsePolicy([tool])).toEqual({ mode: "deterministic", appendText: true });
+    }
+  });
+
   it("retorna mode synthesize e appendText true para ferramentas não-apresentação", () => {
     const policy = responsePolicy(["read_file"]);
     expect(policy.mode).toBe("synthesize");

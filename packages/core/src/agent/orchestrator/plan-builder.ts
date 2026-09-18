@@ -152,7 +152,13 @@ function buildFilesystemPlan(intent: AgentIntent, tools: AgentToolDescriptor[]):
 
   if (intent.intent === "read") {
     if (!resolvedPath) return { direct: "Qual arquivo você quer ler e em qual pasta ele está?" };
+    if(intent.operation==="open_file")return readStep("open_path",{path:resolvedPath},`Abrindo ${resolvedPath}…`,tools,"deterministic");
     return readStep("read_file", { path: resolvedPath }, `Lendo ${resolvedPath}…`, tools, "synthesize");
+  }
+
+  if(intent.intent==="summarize"&&intent.operation==="analyze_file"){
+    if(!resolvedPath)return{direct:"Qual arquivo você quer analisar?"};
+    return readStep("document_summarize",{path:resolvedPath,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},`Analisando ${resolvedPath}…`,tools,"synthesize");
   }
 
   if (intent.intent === "delete") {

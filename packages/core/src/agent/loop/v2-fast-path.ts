@@ -4,6 +4,7 @@ import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import { containsPathTraversal, parseTextFileIntent } from "../intent/text-file-intent.js";
 import { isComposedDocumentWorkflow, parseFileIntent } from "../intent/file-intent.js";
 import type { AgentToolDescriptor } from "../orchestrator/tool-catalog.js";
+import { FilesystemCommandResolver, filesystemCommandTool } from "../../filesystem/intent/filesystem-command-resolver.js";
 
 export type V2FastPathCall = {
   name: string;
@@ -13,7 +14,7 @@ export type V2FastPathCall = {
 
 export type V2FastPathRejection = {
   rejected: true;
-  code: "PATH_TRAVERSAL_DENIED" | "PATH_NOT_RECOGNIZED";
+  code: "PATH_TRAVERSAL_DENIED" | "PATH_NOT_RECOGNIZED" | "UNSUPPORTED_FILE_TYPE";
   message: string;
   explanation: string;
 };
@@ -23,11 +24,17 @@ export type V2FastPathResult = V2FastPathCall | V2FastPathRejection;
 type FolderResolution = { path: string } | V2FastPathRejection;
 
 export class V2FastPathRouter {
+  private readonly filesystemResolver = new FilesystemCommandResolver();
   constructor(private readonly locations: LocationRegistry = new LocationRegistry()) {}
 
   resolve(text: string, tools: AgentToolDescriptor[], allowedRoots:string[]=[]): V2FastPathResult | null {
     if (isComposedDocumentWorkflow(text)) return null;
     const available = new Map(tools.map(tool => [tool.name, tool]));
+
+    const unsupportedSpreadsheet=this.filesystemResolver.unsupportedSpreadsheetCreation(text);
+    if(unsupportedSpreadsheet)return{rejected:true,code:"UNSUPPORTED_FILE_TYPE",message:unsupportedSpreadsheet,explanation:"Formato de criação ainda não disponível…"};
+    const filesystemCommand=this.filesystemResolver.resolve(text,allowedRoots,this.locations);
+    if(filesystemCommand){const command=filesystemCommandTool(filesystemCommand);return this.call(available,command.tool,command.input,command.explanation);}
 
     if(/\b(confirmo|pode\s+criar|salve|salvar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:true},"Salvando o rascunho da macro pausada…");
     if(/\b(cancele|cancelar|descarte|descartar)\b/i.test(text)&&/\b(macro|rascunho)\b/i.test(text))return this.call(available,"macro_confirm_draft",{confirm:false},"Descartando o rascunho da macro…");
@@ -167,7 +174,7 @@ function textFileCreation(text: string, locations: LocationRegistry): { path: st
   const resolution = new PathIntentResolver(locations).resolve(request.destination);
   if (resolution.status !== "resolved" || !resolution.resolvedPath) return pathNotRecognized(request.destination);
 
-  return { path: path.join(resolution.resolvedPath, request.fileName), content: request.content };
+  return { path: path.join(resolution.resolvedPath, request.fileName), content: request.content ?? "" };
 }
 
 function requestedCount(text: string) {
