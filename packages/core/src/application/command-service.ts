@@ -30,10 +30,10 @@ export type HybridIntentDiagnosticsV2={
   normalizedInput?:string;
   safety?:{status:string;reason?:string};
   exactCandidate?:{source:string;route:string;accepted:boolean;rejectedReason?:string};
-  hybrid?:{invoked:boolean;status?:string;operation?:string;confidence?:number};
-  mapping?:{tool?:string;deferredAction?:string};
+  hybrid?:{invoked:boolean;model?:string;status?:string;operation?:string;entities?:Record<string,unknown>;missing?:string[];ambiguities?:Array<{code:string;field?:string;message:string;critical?:boolean}>;confidence?:number};
+  mapping?:{tool?:string;deferredAction?:string;resolvedScope?:string};
   finalRoute?:{source:string;type:string;tool?:string};
-  latency:{totalMs:number;hybridMs?:number};
+  latency:{totalMs:number;hybridMs?:number;parserMs?:number;validationMs?:number;mappingMs?:number};
 };
 
 export type HybridCommandOptions = {
@@ -99,7 +99,10 @@ export class CommandService {
       const hybrid=await this.routeHybridInternal(text,previous,signal);
       diagnostics.latency.hybridMs=Date.now()-hybridStarted;
       const resolverDiag=this.hybrid?.resolver.diagnostics();
-      diagnostics.hybrid={invoked:true,status:resolverDiag?.status,operation:resolverDiag?.operation,confidence:resolverDiag?.confidence};
+      diagnostics.hybrid={invoked:true,model:resolverDiag?.model,status:resolverDiag?.status,operation:resolverDiag?.operation,entities:resolverDiag?.entities,missing:resolverDiag?.missing,ambiguities:resolverDiag?.ambiguities,confidence:resolverDiag?.confidence};
+      diagnostics.latency.parserMs=resolverDiag?.parserMs;
+      diagnostics.latency.validationMs=resolverDiag?.validationMs;
+      diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
       if(hybrid.type!=="unknown"){
         const conflict=this.conflictGuard.evaluate(text,hybrid);
         if(conflict.accepted){
