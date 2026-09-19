@@ -6,16 +6,20 @@ let server:ViteDevServer;let url:string;
 test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("apps/desktop/vite.config.ts"),root:path.resolve("apps/desktop/renderer"),server:{host:"127.0.0.1",port:0},logLevel:"error"});await server.listen();const address=server.httpServer!.address();if(!address||typeof address==="string")throw new Error("Prévia indisponível");url=`http://127.0.0.1:${address.port}`;});
 test.afterAll(async()=>{await server?.close();});
 
-test("Dashboard usa fallback neural sem átomo e mostra cinco atalhos",async({page})=>{
-  let orbSceneRequested=false;
-  page.on("request",request=>{if(request.url().includes("/components/ai/orb/OrbScene.tsx"))orbSceneRequested=true;});
+test("Dashboard mantém fallback neural acessível e cinco atalhos",async({page})=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  let neuralSceneRequested=false;
+  page.on("request",request=>{if(request.url().includes("/components/ai/neural/NeuralScene.tsx"))neuralSceneRequested=true;});
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
   const palette=await page.locator(".dashboardPage").evaluate(node=>({violet:getComputedStyle(node).getPropertyValue("--dash-violet").trim(),token:getComputedStyle(document.documentElement).getPropertyValue("--nexo-violet").trim(),hero:getComputedStyle(document.querySelector(".dashboardHero")!).backgroundImage}));
   expect(palette.violet).toBe(palette.token);expect(palette.hero).toContain("radial-gradient");
-  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback")).toBeVisible();await expect(page.locator(".nucleusCanvas")).toHaveCount(0);expect(orbSceneRequested).toBe(false);
-  const orb=page.locator(".nexoNucleus");await expect(orb).toHaveCSS("--nucleus-core","#765cff");
+  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();
+  await expect(page.locator(".neuralFallback")).toBeVisible();
+  await expect(page.locator(".nucleusCanvas")).toHaveCount(0);
+  expect(neuralSceneRequested).toBe(false);
+  const core=page.locator(".nexoNeuralCore");await expect(core).toHaveCSS("--nucleus-core","#765cff");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
-  await expect(orb).toHaveCSS("--nucleus-core","#3bd89f");await expect(orb).toHaveCSS("--nucleus-ring","#8cfdca");
+  await expect(core).toHaveCSS("--nucleus-core","#3bd89f");await expect(core).toHaveCSS("--nucleus-ring","#8cfdca");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
   await page.getByRole("button",{name:"Explorar núcleo"}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
