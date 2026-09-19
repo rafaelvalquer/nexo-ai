@@ -164,6 +164,11 @@ export class CommandService {
 
   /** Compatibility Hybrid entry point retained for rollback/tests. */
   async routeHybrid(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
+    const safety=this.safetyGuard.evaluate(normalizeIntentInput(text));
+    if(safety.terminal){
+      if(safety.status==="informational")return{type:"chat",stream:true};
+      return{type:"chat",response:safety.response};
+    }
     if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!mayBeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return{type:"unknown"};
     return this.routeHybridInternal(text,previous,signal);
   }
@@ -238,7 +243,10 @@ export class CommandService {
   }
 
   private conversationFallback(text:string):CommandRoute{
-    return isLikelyConversation(text)?{type:"chat",stream:true}:{type:"chat",response:"Não consegui mapear essa solicitação para uma operação segura. Reformule o pedido ou informe mais detalhes."};
+    // Preserve the existing Agent V2/planner path for operational requests that
+    // none of the command routers resolved. Only obvious conversation becomes
+    // a direct chat stream here.
+    return isLikelyConversation(text)?{type:"chat",stream:true}:{type:"unknown"};
   }
 
   private shouldInvokeHybrid(text:string){
