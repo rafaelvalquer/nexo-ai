@@ -17,11 +17,11 @@ describe("CommandService", () => {
   it("routes deterministic local reads and conversation without consulting AgentPlanner", async () => {
     const registry = new ToolRegistry();
     const commands = new CommandService(registry);
-    expect(commands.route("verifique uso da memória")).toMatchObject({ type: "tool", tool: "memory_usage" });
-    expect(commands.route("Busque arquivos Nexo e compare as datas.")).toMatchObject({ type: "tool", tool: "search_files", input: { query: "nexo" } });
-    expect(commands.route("Dos arquivos anteriores, qual deles é o segundo?", { updatedAt: new Date().toISOString(), files: [{ name: "manual.txt", path: "C:\\Downloads\\manual.txt" }, { name: "contrato.pdf", path: "C:\\Downloads\\contrato.pdf" }] })).toMatchObject({ type: "tool", tool: "file_info", input: { path: "C:\\Downloads\\contrato.pdf" } });
-    expect(commands.route("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
-    expect(commands.route("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file", responseMode: "deterministic" });
+    expect(await commands.resolve("verifique uso da memória")).toMatchObject({ type: "tool", tool: "memory_usage" });
+    expect(await commands.resolve("Busque arquivos Nexo e compare as datas.")).toMatchObject({ type: "tool", tool: "search_files", input: { query: "nexo" } });
+    expect(await commands.resolve("Dos arquivos anteriores, qual deles é o segundo?", { updatedAt: new Date().toISOString(), files: [{ name: "manual.txt", path: "C:\\Downloads\\manual.txt" }, { name: "contrato.pdf", path: "C:\\Downloads\\contrato.pdf" }] })).toMatchObject({ type: "tool", tool: "file_info", input: { path: "C:\\Downloads\\contrato.pdf" } });
+    expect(await commands.resolve("vamos conversar sobre javascript")).toMatchObject({ type: "chat", stream: true });
+    expect(await commands.resolve("Crie teste.txt em Downloads\\NexoTeste")).toMatchObject({ type: "tool", tool: "create_text_file", responseMode: "deterministic" });
     const cases:[string,"tool"|"macro",string][]=[
       ["Abra o Chrome.","tool","open_application"],
       ["Liste os arquivos de Downloads.","tool","list_files"],
@@ -31,7 +31,7 @@ describe("CommandService", () => {
       ["Quais são minhas macros?","macro","list"],
       ["Execute a macro Trabalho.","macro","run"]
     ];
-    for(const [text,type,value] of cases)expect(commands.route(text)).toMatchObject(type==="tool"?{type,tool:value}:{type,operation:value});
+    for(const [text,type,value] of cases)expect(await commands.resolve(text)).toMatchObject(type==="tool"?{type,tool:value}:{type,operation:value});
 
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "nexo-command-service-"));
     directories.push(directory);
@@ -53,12 +53,12 @@ describe("CommandService", () => {
     expect(planner.streamDirectAnswer).not.toHaveBeenCalled();
     expect(graphFactory).not.toHaveBeenCalled();
     expect(plan).not.toHaveBeenCalled();
-    expect(metrics.record).toHaveBeenCalledWith("agent.route", 1, { route: "llm" });
+    expect(metrics.record).toHaveBeenCalledWith("agent.command_route.type",1,{type:"chat",source:expect.any(String)});
 
     await expect(engine.run("verifique uso da memória")).resolves.toMatchObject({ text: "Memória disponível", engine: "fast-path", toolsUsed: ["memory_usage"] });
     expect(executeMemory).toHaveBeenCalledOnce();
     expect(observe).toHaveBeenCalledOnce();
     expect(plan).not.toHaveBeenCalled();
-    expect(metrics.record).toHaveBeenCalledWith("agent.route", 1, { route: "deterministic" });
+    expect(metrics.record).toHaveBeenCalledWith("agent.command_route.tool",1,{tool:"memory_usage",source:"exact"});
   });
 });

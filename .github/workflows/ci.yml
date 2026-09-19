@@ -18,9 +18,17 @@ jobs:
       - run: pnpm version:check
       - run: pnpm build
 
-  hybrid-intent-model:
+  agent-model-smoke:
     needs: core
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+    env:
+      NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL || 'http://127.0.0.1:11434' }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,27 +37,50 @@ jobs:
       - run: corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Pull local evaluation model
+        if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --show-error --silent http://127.0.0.1:11434/api/pull             --header 'content-type: application/json'             --data "{"name":"$NEXO_MODEL_EVAL_MODEL","stream":false}"
       - name: Agent model-backed smoke
-        env:
-          NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
-          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL }}
-        shell: powershell
+        run: pnpm eval:agent:model
+
+  hybrid-intent-model:
+    needs: core
+    runs-on: ubuntu-latest
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+    env:
+      NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL || 'http://127.0.0.1:11434' }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+      NEXO_INTENT_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+      NEXO_INTENT_P95_MAX_MS: "1500"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Pull local evaluation model
+        if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
+        shell: bash
         run: |
-          if (-not $env:NEXO_MODEL_EVAL_URL) {
-            throw "Configure NEXO_MODEL_EVAL_URL para executar o gate de modelo."
-          }
-          pnpm eval:agent:model
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --show-error --silent http://127.0.0.1:11434/api/pull             --header 'content-type: application/json'             --data "{"name":"$NEXO_MODEL_EVAL_MODEL","stream":false}"
       - name: Hybrid intent model gate
-        env:
-          NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
-          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL }}
-          NEXO_INTENT_P95_MAX_MS: "1500"
-        shell: powershell
-        run: |
-          if (-not $env:NEXO_MODEL_EVAL_URL) {
-            throw "Configure NEXO_MODEL_EVAL_URL para executar o gate real do Hybrid Intent Resolver."
-          }
-          pnpm eval:intents:hybrid
+        run: pnpm eval:intents:hybrid
       - name: Upload Hybrid Intent evaluation
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,7 +104,7 @@ jobs:
       - run: pnpm test:e2e
 
   package:
-    needs: [core, hybrid-intent-model, desktop-e2e]
+    needs: [core, agent-model-smoke, hybrid-intent-model, desktop-e2e]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

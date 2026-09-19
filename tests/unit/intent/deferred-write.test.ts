@@ -9,6 +9,12 @@ describe("filesystem deferred write",()=>{
     expect(result.step).toMatchObject({tool:"write_text_file",input:{path:"C:\\Users\\Rafael\\Downloads\\teste123.txt",content:"teste modificação"},approval:{actionType:"update"}});
   });
 
+  it("encerra sem alteração quando o arquivo não é encontrado",()=>{
+    const result=materializeDeferredAction(action,{ok:true,success:true,summary:"0 encontrados",data:{matches:[]}});
+    expect(result.step).toBeUndefined();
+    expect(result.direct).toContain("Nenhum arquivo foi alterado");
+  });
+
   it("não escolhe automaticamente quando há múltiplos arquivos",()=>{
     const result=materializeDeferredAction(action,{ok:true,success:true,summary:"2 encontrados",data:{matches:[{path:"C:\\A\\teste123.txt"},{path:"C:\\B\\teste123.txt"}]}});
     expect(result.step).toBeUndefined();
