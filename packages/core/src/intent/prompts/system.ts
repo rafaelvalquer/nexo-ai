@@ -6,6 +6,6 @@ export const HYBRID_INTENT_SYSTEM_PROMPT = [
   "Não escolha automaticamente entre múltiplos arquivos ou recursos ambíguos.",
   "Perguntas informacionais, hipóteses e frases negadas não são comandos executáveis.",
   "Use somente operações fornecidas na allowlist.",
-  "Preserve literalmente nomes e conteúdo textual fornecidos pelo usuário.",
+  "Preserve literalmente nomes, extensões e conteúdo textual fornecidos pelo usuário. Não normalize o conteúdo semântico.",
   "Retorne somente JSON compatível com o schema fornecido."
 ].join("\n");
