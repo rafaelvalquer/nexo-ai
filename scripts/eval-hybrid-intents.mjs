@@ -5,6 +5,10 @@ import {pathToFileURL} from "node:url";
 
 const root=process.cwd();
 const coreDist=path.join(root,"packages/core/dist");
+const artifactsDir=path.join(root,"artifacts");
+await fs.mkdir(artifactsDir,{recursive:true});
+const reportPath=path.join(artifactsDir,"hybrid-intent-eval.json");
+
 const [{HybridIntentResolver,LLMIntentParser,filesystemOperations},{OllamaProvider}]=await Promise.all([
   import(pathToFileURL(path.join(coreDist,"intent/index.js"))),
   import(pathToFileURL(path.join(coreDist,"llm/ollama.js")))
@@ -13,30 +17,43 @@ const [{HybridIntentResolver,LLMIntentParser,filesystemOperations},{OllamaProvid
 const baseUrl=(process.env.NEXO_MODEL_EVAL_URL??process.env.NEXO_OLLAMA_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
 const model=process.env.NEXO_MODEL_EVAL_MODEL??process.env.NEXO_MODEL??"qwen3:4b";
 const intentModel=process.env.NEXO_INTENT_MODEL??model;
+const maxP95=Number(process.env.NEXO_INTENT_P95_MAX_MS??1500);
 const provider=new OllamaProvider(baseUrl,model,undefined,intentModel);
 const health=await provider.health();
-if(!health.ok){console.error(`Ollama indisponível: ${health.detail}`);process.exit(2);}
+if(!health.ok){
+  await writeReport({model:intentModel,error:`Ollama indisponível: ${health.detail}`});
+  console.error(`Ollama indisponível: ${health.detail}`);
+  process.exit(2);
+}
 
-const executableFiles=[
+const baseFiles=[
   "filesystem-create-folder.json",
   "filesystem-create-file.json",
   "filesystem-find-file.json",
   "filesystem-list.json",
   "filesystem-write-file.json"
 ];
-const ambiguousFile="ambiguous-cases.json";
-const executable=[];
-for(const file of executableFiles){
-  const rows=JSON.parse(await fs.readFile(path.join(root,"tests/evals/intents",file),"utf8"));
-  for(const row of rows)executable.push({...row,file});
+const rows=[];
+for(const file of baseFiles){
+  for(const row of JSON.parse(await fs.readFile(path.join(root,"tests/evals/intents",file),"utf8")))rows.push({...row,file,executable:true});
 }
-const ambiguous=(JSON.parse(await fs.readFile(path.join(root,"tests/evals/intents",ambiguousFile),"utf8"))).map(row=>({...row,file:ambiguousFile}));
+for(const row of JSON.parse(await fs.readFile(path.join(root,"tests/evals/intents","ambiguous-cases.json"),"utf8")))rows.push({...row,file:"ambiguous-cases.json",executable:false});
+for(const row of JSON.parse(await fs.readFile(path.join(root,"tests/evals/intents","filesystem-real-world-regressions.json"),"utf8")))rows.push({...row,file:"filesystem-real-world-regressions.json"});
 
 const resolver=new HybridIntentResolver(new LLMIntentParser(provider));
-let operationOk=0,entityChecks=0,entityOk=0,wrongTool=0,schemaInvalid=0,unsafePathResolution=0,ambiguousSafe=0;
-const latencies=[],failures=[];
+const warmups=[
+  "procure teste.txt",
+  "crie uma pasta teste em downloads",
+  "troque o conteúdo do teste.txt por abc"
+];
+for(const text of warmups)await resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations]});
 
-for(const [index,row] of [...executable,...ambiguous].entries()){
+let operationOk=0,entityChecks=0,entityOk=0,wrongTool=0,schemaInvalid=0,unsafePathResolution=0,safeNonExecutable=0;
+const latencies=[],failures=[];
+const executableRows=rows.filter(row=>row.operation);
+const nonExecutableRows=rows.filter(row=>!row.operation);
+
+for(const [index,row] of rows.entries()){
   const started=performance.now();
   const result=await resolver.resolve({text:row.input,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations]});
   latencies.push(performance.now()-started);
@@ -46,7 +63,6 @@ for(const [index,row] of [...executable,...ambiguous].entries()){
     if(operation)operationOk++;
     if(result.status==="resolved"&&result.intent.operation!==row.operation)wrongTool++;
     if(result.status==="unknown"&&["LLM_INTENT_PARSE_FAILED","INVALID_INTENT_SCHEMA"].includes(result.reason))schemaInvalid++;
-
     for(const [key,expected] of Object.entries(row.entities??{})){
       entityChecks++;
       const actual=result.status!=="unknown"?result.intent.entities?.[key]?.value:undefined;
@@ -56,31 +72,51 @@ for(const [index,row] of [...executable,...ambiguous].entries()){
     if(!operation||!entitiesMatch(result,row.entities??{}))failures.push({input:row.input,file:row.file,expected:{operation:row.operation,entities:row.entities},actual:summarize(result)});
   }else{
     const safe=result.status==="clarification"||result.status==="unknown";
-    if(safe)ambiguousSafe++;
-    else failures.push({input:row.input,file:row.file,expected:"clarification_or_unknown",actual:summarize(result)});
+    if(safe)safeNonExecutable++;
+    else failures.push({input:row.input,file:row.file,expected:row.expectedStatus??"clarification_or_unknown",actual:summarize(result)});
   }
-  process.stdout.write(`\rHybrid Intent Evaluation ${index+1}/${executable.length+ambiguous.length}`);
+  process.stdout.write(`\rHybrid Intent Evaluation ${index+1}/${rows.length}`);
 }
 process.stdout.write("\n");
 
-const operationAccuracy=ratio(operationOk,executable.length);
+const operationAccuracy=ratio(operationOk,executableRows.length);
 const entityAccuracy=ratio(entityOk,entityChecks);
-const wrongToolRate=ratio(wrongTool,executable.length);
-const schemaInvalidRate=ratio(schemaInvalid,executable.length+ambiguous.length);
-const ambiguitySafety=ratio(ambiguousSafe,ambiguous.length);
+const wrongToolRate=ratio(wrongTool,executableRows.length);
+const schemaInvalidRate=ratio(schemaInvalid,rows.length);
+const ambiguitySafety=ratio(safeNonExecutable,nonExecutableRows.length);
 const sorted=[...latencies].sort((a,b)=>a-b);
-const p95=sorted[Math.max(0,Math.ceil(sorted.length*.95)-1)]??0;
+const p50=percentile(sorted,.50),p95=percentile(sorted,.95);
 
-console.log(`Model: ${intentModel} (fallback: ${model})`);
-console.log(`Executable cases: ${executable.length}`);
-console.log(`Ambiguous/negative cases: ${ambiguous.length}`);
+const report={
+  model:intentModel,
+  cases:rows.length,
+  executableCases:executableRows.length,
+  nonExecutableCases:nonExecutableRows.length,
+  operationAccuracy,
+  entityAccuracy,
+  wrongToolRate,
+  schemaInvalidRate,
+  ambiguitySafety,
+  unsafeInventedPaths:unsafePathResolution,
+  p50Ms:Math.round(p50),
+  p95Ms:Math.round(p95),
+  maxP95Ms:maxP95,
+  warmupCases:warmups.length,
+  failures:failures.slice(0,50)
+};
+await writeReport(report);
+
+console.log(`Model: ${intentModel}`);
+console.log(`Cases: ${rows.length}`);
 console.log(`Operation accuracy: ${pct(operationAccuracy)}`);
 console.log(`Entity accuracy: ${pct(entityAccuracy)}`);
 console.log(`Wrong tool rate: ${pct(wrongToolRate)}`);
 console.log(`Schema invalid rate: ${pct(schemaInvalidRate)}`);
 console.log(`Ambiguity/negative safety: ${pct(ambiguitySafety)}`);
-console.log(`Unsafe invented path resolutions: ${unsafePathResolution}`);
-console.log(`P95 resolver latency: ${Math.round(p95)} ms`);
+console.log(`Unsafe invented paths: ${unsafePathResolution}`);
+console.log(`P50 resolver latency: ${Math.round(p50)} ms`);
+console.log(`P95 resolver latency: ${Math.round(p95)} ms (max ${maxP95} ms)`);
+console.log(`Report: ${reportPath}`);
 if(failures.length){console.log(`\nFailures: ${failures.length}`);console.log(JSON.stringify(failures.slice(0,30),null,2));}
 
 const success=
@@ -89,11 +125,14 @@ const success=
   wrongToolRate<=.005&&
   schemaInvalidRate<=.01&&
   ambiguitySafety===1&&
-  unsafePathResolution===0;
+  unsafePathResolution===0&&
+  p95<=maxP95;
 process.exit(success?0:1);
 
+async function writeReport(value){await fs.writeFile(reportPath,JSON.stringify(value,null,2)+"\n","utf8");}
 function ratio(value,total){return total?value/total:1;}
 function pct(value){return `${(value*100).toFixed(2)}%`;}
+function percentile(sorted,p){if(!sorted.length)return 0;return sorted[Math.max(0,Math.ceil(sorted.length*p)-1)]??0;}
 function canonicalAlias(value){
   const normalized=String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
   if(["download","downloads","meus downloads","pasta downloads","pasta download"].includes(normalized))return"downloads";

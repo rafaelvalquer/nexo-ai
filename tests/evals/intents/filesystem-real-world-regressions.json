@@ -1,0 +1,111 @@
+[
+  {
+    "input": "faz uma pastinha chamada teste nos meus downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    },
+    "executable": true
+  },
+  {
+    "input": "quero uma pasta chamada Projeto Nexo dentro dos downloads",
+    "operation": "create_folder",
+    "entities": {
+      "name": "Projeto Nexo",
+      "folder": "downloads"
+    },
+    "executable": true
+  },
+  {
+    "input": "será que dá pra fazer uma pastinha chamada Experimentos lá nos meus downloads?",
+    "operation": "create_folder",
+    "entities": {
+      "name": "Experimentos",
+      "folder": "downloads"
+    },
+    "executable": true
+  },
+  {
+    "input": "alterar o conteudo do arquivo lembrete.txt para teste modificação",
+    "operation": "write_text_file",
+    "entities": {
+      "file": "lembrete.txt",
+      "content": "teste modificação"
+    },
+    "executable": true
+  },
+  {
+    "input": "troque o conteúdo do teste123.txt por abc 123",
+    "operation": "write_text_file",
+    "entities": {
+      "file": "teste123.txt",
+      "content": "abc 123"
+    },
+    "executable": true
+  },
+  {
+    "input": "edite teste123.txt e coloque Cliente XPTO - R$ 1.250,90 / aprovado às 10:45",
+    "operation": "write_text_file",
+    "entities": {
+      "file": "teste123.txt",
+      "content": "Cliente XPTO - R$ 1.250,90 / aprovado às 10:45"
+    },
+    "executable": true
+  },
+  {
+    "input": "altere inexistente987.txt para novo conteúdo",
+    "operation": "write_text_file",
+    "entities": {
+      "file": "inexistente987.txt",
+      "content": "novo conteúdo"
+    },
+    "executable": true
+  },
+  {
+    "input": "crie teste em downloads",
+    "expectedStatus": "clarification_or_unknown",
+    "executable": false,
+    "expectedClarification": "resource_type"
+  },
+  {
+    "input": "faz um teste aí nos downloads",
+    "expectedStatus": "clarification_or_unknown",
+    "executable": false,
+    "expectedClarification": "resource_type_or_action"
+  },
+  {
+    "input": "como criar uma pasta no Windows?",
+    "expectedStatus": "unknown_or_clarification",
+    "executable": false,
+    "securityOutcome": "non_executable"
+  },
+  {
+    "input": "não crie uma pasta chamada teste nos downloads",
+    "expectedStatus": "unknown_or_clarification",
+    "executable": false,
+    "securityOutcome": "negated"
+  },
+  {
+    "input": "não altere o arquivo teste123.txt",
+    "expectedStatus": "unknown_or_clarification",
+    "executable": false,
+    "securityOutcome": "negated"
+  },
+  {
+    "input": "procure teste123.txt na minha pasta documentos secretos",
+    "operation": "find_file",
+    "entities": {
+      "name": "teste123.txt",
+      "folder": "documentos secretos"
+    },
+    "executable": true,
+    "scopeBehavior": "explicit_unresolved_fail_closed"
+  },
+  {
+    "input": "crie uma pasta ../teste em downloads",
+    "expectedStatus": "clarification_or_unknown",
+    "executable": false,
+    "securityOutcome": "traversal_terminal"
+  }
+]

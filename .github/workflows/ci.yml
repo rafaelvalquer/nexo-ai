@@ -1,12 +1,13 @@
 name: CI
 on: [push, pull_request]
+
 jobs:
-  test:
+  core:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22.20.0}
+        with: { node-version: 22.20.0 }
       - run: corepack enable
       - run: corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
@@ -16,8 +17,18 @@ jobs:
       - run: pnpm eval:agent
       - run: pnpm version:check
       - run: pnpm build
-      - run: pnpm exec playwright install chromium
-      - run: pnpm test:e2e
+
+  hybrid-intent-model:
+    needs: core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
       - name: Agent model-backed smoke
         env:
           NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
@@ -25,19 +36,53 @@ jobs:
         shell: powershell
         run: |
           if (-not $env:NEXO_MODEL_EVAL_URL) {
-            throw "Configure NEXO_MODEL_EVAL_URL para executar o gate de modelo. O smoke não pode ser ignorado silenciosamente."
+            throw "Configure NEXO_MODEL_EVAL_URL para executar o gate de modelo."
           }
           pnpm eval:agent:model
       - name: Hybrid intent model gate
         env:
           NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
           NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL }}
+          NEXO_INTENT_P95_MAX_MS: "1500"
         shell: powershell
         run: |
           if (-not $env:NEXO_MODEL_EVAL_URL) {
             throw "Configure NEXO_MODEL_EVAL_URL para executar o gate real do Hybrid Intent Resolver."
           }
           pnpm eval:intents:hybrid
+      - name: Upload Hybrid Intent evaluation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-intent-eval
+          path: artifacts/hybrid-intent-eval.json
+          if-no-files-found: warn
+
+  desktop-e2e:
+    needs: core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install chromium
+      - run: pnpm test:e2e
+
+  package:
+    needs: [core, hybrid-intent-model, desktop-e2e]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
       - run: pnpm package:win
       - shell: powershell
         run: ./scripts/smoke-installer.ps1
