@@ -49,6 +49,7 @@ export class OllamaProvider implements LLMProvider {
   }
 
   setModel(model: string) { this.model = model; }
+  intentModelName() { return this.intentModel ?? this.model; }
   setIntentModel(model?: string) { this.intentModel = model?.trim() || undefined; }
   setBaseUrl(url: string) { this.baseUrl = url.replace(/\/$/, ""); }
   setResourceManager(resources: ResourceManager) { this.resources = resources; }

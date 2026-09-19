@@ -4,50 +4,61 @@ import type { ToolRegistry } from "../tools/registry.js";
 import { LocationRegistry } from "../locations/location-registry.js";
 import { PathIntentResolver } from "../locations/path-intent-resolver.js";
 import type { CanonicalIntent } from "./types.js";
+import type { LocalMetricsService } from "../observability/metrics.js";
 
 export type MappedHybridIntent=
   |{type:"tool";tool:string;input:Record<string,unknown>;explanation:string;responseMode:"deterministic"|"presentation"|"synthesize";intent:AgentIntent;deferredAction?:DeferredAction}
   |{type:"clarification";question:string;intent:AgentIntent}
   |{type:"unknown";reason:string};
 
+export type ScopeResolution=
+  |{status:"absent"}
+  |{status:"resolved";path:string;raw:string}
+  |{status:"unresolved";raw:string};
+
 export class IntentToolMapper{
-  constructor(private readonly registry:ToolRegistry,private readonly allowedRoots:()=>string[]){}
+  constructor(private readonly registry:ToolRegistry,private readonly allowedRoots:()=>string[],private readonly metrics?:LocalMetricsService){}
 
   map(intent:CanonicalIntent):MappedHybridIntent{
     const agentIntent=toAgentIntent(intent);
     if(!this.registry.get(intent.operation))return{type:"unknown",reason:`TOOL_NOT_AVAILABLE:${intent.operation}`};
     switch(intent.operation){
       case"create_folder":{
-        const folder=this.resolveFolder(entity(intent,"folder"));const name=entity(intent,"name");
+        const scope=this.resolveScope(intent);const name=entity(intent,"name");
+        if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
+        const folder=scope.status==="resolved"?scope.path:undefined;
         if(!folder||!name)return{type:"unknown",reason:"UNRESOLVED_CREATE_FOLDER_TARGET"};
         return this.tool("create_folder",{path:joinPortable(folder,name)},`Preparando a criação da pasta ${name}…`,"deterministic",agentIntent);
       }
       case"create_text_file":{
-        const folder=this.resolveFolder(entity(intent,"folder"));const name=entity(intent,"name");
+        const scope=this.resolveScope(intent);const name=entity(intent,"name");
+        if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
+        const folder=scope.status==="resolved"?scope.path:undefined;
         if(!folder||!name)return{type:"unknown",reason:"UNRESOLVED_CREATE_FILE_TARGET"};
         return this.tool("create_text_file",{path:joinPortable(folder,name),content:entity(intent,"content")??""},`Preparando a criação de ${name}…`,"deterministic",agentIntent);
       }
       case"find_file":{
         const name=entity(intent,"name");if(!name)return{type:"unknown",reason:"MISSING_FILE_NAME"};
-        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
-        const root=scoped.path;return this.tool("find_file",{name,matchMode:path.extname(name)?"full_name":"stem",...(root?{root}:{})},`Procurando ${name} nas pastas autorizadas…`,"presentation",agentIntent);
+        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
+        const root=scoped.status==="resolved"?scoped.path:undefined;return this.tool("find_file",{name,matchMode:path.extname(name)?"full_name":"stem",...(root?{root}:{})},`Procurando ${name} nas pastas autorizadas…`,"presentation",agentIntent);
       }
       case"list_files":{
-        const folder=this.resolveFolder(entity(intent,"folder"));if(!folder)return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
+        const scope=this.resolveScope(intent);if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
+        const folder=scope.status==="resolved"?scope.path:undefined;if(!folder)return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
         return this.tool("list_files",{path:folder},`Listando itens em ${folder}…`,"presentation",agentIntent);
       }
       case"search_files":{
         const query=entity(intent,"query");if(!query)return{type:"unknown",reason:"MISSING_SEARCH_QUERY"};
-        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
-        const folder=scoped.path;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
+        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
+        const folder=scoped.status==="resolved"?scoped.path:undefined;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
       }
       case"write_text_file":{
         const content=entity(intent,"content");const explicit=entity(intent,"path");
         if(content===undefined)return{type:"unknown",reason:"MISSING_CONTENT"};
         if(explicit&&isAbsolutePortable(explicit))return this.tool("write_text_file",{path:explicit,content},"Preparando a alteração do arquivo…","deterministic",agentIntent);
         const file=entity(intent,"file");if(!file)return{type:"unknown",reason:"MISSING_FILE"};
-        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
-        const root=scoped.path;
+        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
+        const root=scoped.status==="resolved"?scoped.path:undefined;
         return{...this.tool("find_file",{name:file,matchMode:path.extname(file)?"full_name":"stem",...(root?{root}:{})},`Localizando ${file} antes da alteração…`,"deterministic",agentIntent),deferredAction:{kind:"filesystem.write_text",fileName:file,content,...(root?{root}:{})}};
       }
       case"read_file":{
@@ -87,15 +98,16 @@ export class IntentToolMapper{
   private tool(tool:string,input:Record<string,unknown>,explanation:string,responseMode:"deterministic"|"presentation"|"synthesize",intent:AgentIntent):Extract<MappedHybridIntent,{type:"tool"}>{
     return{type:"tool",tool,input,explanation,responseMode,intent};
   }
-  private resolveOptionalFolder(intent:CanonicalIntent):{status:"absent";path?:undefined}|{status:"resolved";path:string}|{status:"invalid";path?:undefined}{
-    const value=entity(intent,"folder");if(!value)return{status:"absent"};
-    const resolved=this.resolveFolder(value);return resolved?{status:"resolved",path:resolved}:{status:"invalid"};
-  }
-  private resolveFolder(value:string|undefined){
-    if(!value)return undefined;
+  resolveScope(intent:CanonicalIntent):ScopeResolution{
+    const raw=entity(intent,"folder");if(!raw)return{status:"absent"};
     const registry=new LocationRegistry({},[],this.allowedRoots());
-    const resolution=new PathIntentResolver(registry).resolve(value);
-    return resolution.status==="resolved"?resolution.resolvedPath:undefined;
+    const resolution=new PathIntentResolver(registry).resolve(raw);
+    if(resolution.status==="resolved"&&resolution.resolvedPath)return{status:"resolved",path:resolution.resolvedPath,raw};
+    this.metrics?.record("intent.scope.unresolved",1,{raw:raw.slice(0,80)});
+    return{status:"unresolved",raw};
+  }
+  private scopeClarification(intent:AgentIntent,raw:string):MappedHybridIntent{
+    return{type:"clarification",intent,question:`Não reconheci a pasta "${raw}" como um local autorizado. Qual pasta autorizada devo usar?`};
   }
 }
 

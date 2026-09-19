@@ -55,7 +55,7 @@ export type NexoSettings = {
   executionTimeoutMinutes:number|null;maxConcurrentChatSessions:number;maxConcurrentLLMRequests:number;oauth:OAuthConfiguration;
   agentLoopMode?:"legacy"|"read_only"|"shadow"|"full";forceLegacyAgent?:boolean;
   settingsSchemaVersion?:number;agentLoopModeExplicitlySelected?:boolean;agentLegacyFallbackEnabled?:boolean;developerDiagnosticsEnabled?:boolean;
-  hybridIntentResolverEnabled?:boolean;hybridIntentShadowMode?:boolean;hybridIntentFilesystemEnabled?:boolean;
+  hybridIntentResolverEnabled?:boolean;hybridIntentShadowMode?:boolean;hybridIntentFilesystemEnabled?:boolean;hybridIntentRoutingV2Enabled?:boolean;
 };
 
 export type OAuthConfiguration = { googleClientId:string;microsoftClientId:string;microsoftTenant:string };

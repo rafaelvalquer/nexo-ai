@@ -16,6 +16,17 @@ describe("HybridIntentResolver",()=>{
     if(result.status==="resolved")expect(result.confidence.overall).toBeGreaterThanOrEqual(.9);
   });
 
+  it("expõe diagnostics de parser e validação sem perder entidades",async()=>{
+    const resolver=new HybridIntentResolver({parse:async()=>canonical("create_folder"),modelName:()=>"qwen-test"});
+    await resolver.resolve({text:"faz uma pasta teste em downloads",availableOperations:["create_folder"]});
+    expect(resolver.diagnostics()).toMatchObject({
+      model:"qwen-test",status:"resolved",operation:"create_folder",
+      entities:{name:"teste",folder:"downloads"},
+      missing:[],ambiguities:[],confidence:expect.any(Number),
+      parserMs:expect.any(Number),validationMs:expect.any(Number),latencyMs:expect.any(Number)
+    });
+  });
+
   it("rejeita operação que não está na allowlist",async()=>{
     const resolver=new HybridIntentResolver({parse:async()=>canonical("write_text_file")});
     const result=await resolver.resolve({text:"altere teste.txt para abc",availableOperations:["create_folder"]});

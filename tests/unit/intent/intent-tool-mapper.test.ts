@@ -20,7 +20,7 @@ describe("IntentToolMapper",()=>{
 
   it("não amplia escopo quando uma pasta explícita não pode ser resolvida",()=>{
     const mapped=mapper.map(make("find_file","update",{name:"teste.txt",folder:"pasta-inexistente"}));
-    expect(mapped).toEqual({type:"unknown",reason:"UNRESOLVED_FOLDER"});
+    expect(mapped).toMatchObject({type:"clarification",question:expect.stringContaining("pasta-inexistente")});
   });
 
   it("não envia paths relativos diretamente para Tools físicas",()=>{
