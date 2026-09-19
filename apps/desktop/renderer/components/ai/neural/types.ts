@@ -31,6 +31,7 @@ export type SynapticPulse = {
   speed: number;
   intensity: number;
   reverse: boolean;
+  delay: number;
 };
 
 export type NeuralInteraction = {
@@ -64,6 +65,10 @@ export type NeuralStateConfig = {
   motionSpeed: number;
   spread: number;
   interactionStrength: number;
+  twinkleStrength: number;
+  shimmerStrength: number;
+  autonomousRotation: number;
+  spontaneousActivity: number;
   primary: string;
   secondary: string;
 };
