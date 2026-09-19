@@ -107,7 +107,7 @@ export class CommandService {
         const conflict=this.conflictGuard.evaluate(text,hybrid);
         if(conflict.accepted){
           this.hybrid?.metrics?.record(hybrid.type==="chat"?"intent.route.hybrid.clarification":"intent.route.hybrid.resolved",1,{route:routeLabel(hybrid)});
-          if(hybrid.type==="tool")diagnostics.mapping={tool:hybrid.tool,deferredAction:hybrid.deferredAction?.kind};
+          if(hybrid.type==="tool")diagnostics.mapping={tool:hybrid.tool,deferredAction:hybrid.deferredAction?.kind,resolvedScope:resolvedScopeFromRoute(hybrid)};
           return finish(hybrid,"hybrid");
         }
         this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(hybrid)});
@@ -196,7 +196,14 @@ export class CommandService {
   hybridDiagnostics(){
     if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
     if(this.hybrid?.diagnosticsEnabled?.())return structuredClone(this.lastDiagnostics);
-    return{requestId:this.lastDiagnostics.requestId,safety:this.lastDiagnostics.safety,hybrid:this.lastDiagnostics.hybrid,finalRoute:this.lastDiagnostics.finalRoute,latency:this.lastDiagnostics.latency};
+    const hybrid=this.lastDiagnostics.hybrid;
+    return{
+      requestId:this.lastDiagnostics.requestId,
+      safety:this.lastDiagnostics.safety,
+      hybrid:hybrid?{invoked:hybrid.invoked,status:hybrid.status,operation:hybrid.operation,confidence:hybrid.confidence}:undefined,
+      finalRoute:this.lastDiagnostics.finalRoute,
+      latency:this.lastDiagnostics.latency
+    };
   }
 
   private routeExact(text:string,previous?:ConversationActionContextState):CommandRoute{
@@ -322,3 +329,9 @@ function extractExplicitScope(text:string){
   return match?.[1]?.trim().replace(/[.!?]+$/u,"").trim()||undefined;
 }
 function foldScope(value:string){return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/\s+/g," ").trim();}
+
+
+function resolvedScopeFromRoute(route:Extract<CommandRoute,{type:"tool"}>){
+  const candidate=route.input.root??route.input.path;
+  return typeof candidate==="string"?candidate:undefined;
+}
