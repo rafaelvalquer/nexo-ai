@@ -256,9 +256,11 @@ test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page },te
   await page.getByPlaceholder("O que deseja fazer?").fill("escritório");
   await expect(page.getByRole("option", { name: /Abrir Escritório/ })).toBeVisible();
   await page.getByRole("option", { name: /Abrir Escritório/ }).click();
+  await expect(page.locator(".pixelOfficePage")).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("nexo.command.recent"))).toContain("Abrir Escritório");
   await page.keyboard.press("Control+K");
-  await expect(page.getByRole("option", { name: /Abrir Escritório.*Recente/ })).toBeVisible();
+  const reopenedRecent=page.getByRole("group",{name:"Recentes"});
+  await expect(reopenedRecent.getByRole("option",{name:/Abrir Escritório/})).toBeVisible();
 });
 
 test("navigation icon rail exposes the hovered and keyboard-focused label",async({page})=>{
