@@ -52,6 +52,17 @@ describe("CommandService.resolve Routing V2",()=>{
     expect(calls).toBe(0);
   });
 
+  it("preserva pasta de downloads como escopo conhecido",async()=>{
+    const route=await service(()=>canonical("list_files","list",{folder:"downloads"})).resolve("quais arquivos eu tenho na pasta de downloads?");
+    expect(route).toMatchObject({type:"tool",tool:"list_files",input:{path:root}});
+  });
+
+  it("barra textual no conteúdo não é tratada como path POSIX",async()=>{
+    const content="Cliente XPTO - R$ 1.250,90 / aprovado às 10:45";
+    const route=await service(()=>canonical("write_text_file","update",{file:"teste.txt",content})).resolve(`edite teste.txt e coloque ${content}`);
+    expect(route).toMatchObject({type:"tool",tool:"find_file",deferredAction:{kind:"filesystem.write_text",content}});
+  });
+
   it("escopo explícito não resolvido não vira busca global",async()=>{
     const route=await service(()=>canonical("find_file","find",{name:"teste123.txt",folder:"documentos secretos"})).resolve("procure teste123.txt na minha pasta documentos secretos");
     expect(route).toMatchObject({type:"chat",response:expect.stringContaining("documentos secretos")});

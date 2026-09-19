@@ -1,0 +1,194 @@
+[
+  {
+    "input": "faz uma pastinha chamada teste nos meus downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "create_folder",
+    "expectedTool": "create_folder",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "quero uma pasta chamada Projeto Nexo dentro dos downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "create_folder",
+    "expectedTool": "create_folder",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "será que dá pra fazer uma pastinha chamada Experimentos lá nos meus downloads?",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "create_folder",
+    "expectedTool": "create_folder",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "crie teste.txt em downloads",
+    "expectedRouteSource": "exact",
+    "expectedOperation": "create_text_file",
+    "expectedTool": "create_text_file",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "crie anotacoes.txt em downloads com conteúdo Hoje vou testar o Hybrid Intent",
+    "expectedRouteSource": "exact",
+    "expectedOperation": "create_text_file",
+    "expectedTool": "create_text_file",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads",
+    "expectedContent": "Hoje vou testar o Hybrid Intent"
+  },
+  {
+    "input": "crie lembrete.txt nos downloads com o texto Reunião às 14:30 — levar relatório",
+    "expectedRouteSource": "exact",
+    "expectedOperation": "create_text_file",
+    "expectedTool": "create_text_file",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedScope": "downloads",
+    "expectedContent": "Reunião às 14:30 — levar relatório"
+  },
+  {
+    "input": "procure teste123.txt",
+    "expectedRouteSource": "exact",
+    "expectedOperation": "find_file",
+    "expectedTool": "find_file",
+    "expectedExecutable": true,
+    "expectedApproval": false
+  },
+  {
+    "input": "procure lembrete.txt",
+    "expectedRouteSource": "exact",
+    "expectedOperation": "find_file",
+    "expectedTool": "find_file",
+    "expectedExecutable": true,
+    "expectedApproval": false
+  },
+  {
+    "input": "vê se você encontra o teste123.txt nos meus downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "find_file",
+    "expectedTool": "find_file",
+    "expectedExecutable": true,
+    "expectedApproval": false,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "vê se você encontra o lembrete.txt nos meus downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "find_file",
+    "expectedTool": "find_file",
+    "expectedExecutable": true,
+    "expectedApproval": false,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "mostra pra mim o que tem nos downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "list_files",
+    "expectedTool": "list_files",
+    "expectedExecutable": true,
+    "expectedApproval": false,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "quais arquivos eu tenho na pasta de downloads?",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "list_files",
+    "expectedTool": "list_files",
+    "expectedExecutable": true,
+    "expectedApproval": false,
+    "expectedScope": "downloads"
+  },
+  {
+    "input": "alterar o conteudo do arquivo teste123.txt para teste modificação",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "write_text_file",
+    "expectedTool": "find_file",
+    "expectedDeferredAction": "filesystem.write_text",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedContent": "teste modificação"
+  },
+  {
+    "input": "alterar o conteudo do arquivo teste.txt para teste modificação",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "write_text_file",
+    "expectedTool": "find_file",
+    "expectedDeferredAction": "filesystem.write_text",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedContent": "teste modificação"
+  },
+  {
+    "input": "troque o conteúdo do teste.txt por abc 123",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "write_text_file",
+    "expectedTool": "find_file",
+    "expectedDeferredAction": "filesystem.write_text",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedContent": "abc 123"
+  },
+  {
+    "input": "edite teste.txt e coloque Cliente XPTO - R$ 1.250,90 / aprovado às 10:45",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "write_text_file",
+    "expectedTool": "find_file",
+    "expectedDeferredAction": "filesystem.write_text",
+    "expectedExecutable": true,
+    "expectedApproval": true,
+    "expectedContent": "Cliente XPTO - R$ 1.250,90 / aprovado às 10:45"
+  },
+  {
+    "input": "como criar uma pasta no Windows?",
+    "expectedRouteSource": "safety",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedSafety": "informational"
+  },
+  {
+    "input": "não crie uma pasta chamada teste nos downloads",
+    "expectedRouteSource": "safety",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedSafety": "negated"
+  },
+  {
+    "input": "não altere o arquivo teste.txt",
+    "expectedRouteSource": "safety",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedSafety": "negated"
+  },
+  {
+    "input": "procure teste.txt na minha pasta documentos secretos",
+    "expectedRouteSource": "hybrid",
+    "expectedOperation": "find_file",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedScope": "documentos secretos",
+    "expectedClarification": true
+  },
+  {
+    "input": "crie uma pasta ../teste em downloads",
+    "expectedRouteSource": "safety",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedSafety": "traversal"
+  },
+  {
+    "input": "crie teste em downloads",
+    "expectedRouteSource": "hybrid",
+    "expectedExecutable": false,
+    "expectedApproval": false,
+    "expectedClarification": true
+  }
+]

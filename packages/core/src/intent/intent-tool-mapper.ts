@@ -14,7 +14,7 @@ export type MappedHybridIntent=
 export type ScopeResolution=
   |{status:"absent"}
   |{status:"resolved";path:string;raw:string}
-  |{status:"unresolved";raw:string};
+  |{status:"unresolved";raw:string;reason:"UNKNOWN_ALIAS"|"NOT_ALLOWED"|"AMBIGUOUS_LOCATION"};
 
 export class IntentToolMapper{
   constructor(private readonly registry:ToolRegistry,private readonly allowedRoots:()=>string[],private readonly metrics?:LocalMetricsService){}
@@ -35,7 +35,7 @@ export class IntentToolMapper{
         if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
         const folder=scope.status==="resolved"?scope.path:undefined;
         if(!folder||!name)return{type:"unknown",reason:"UNRESOLVED_CREATE_FILE_TARGET"};
-        return this.tool("create_text_file",{path:joinPortable(folder,name),content:entity(intent,"content")??""},`Preparando a criação de ${name}…`,"deterministic",agentIntent);
+        return this.tool("create_text_file",{path:joinPortable(folder,name),content:entityRaw(intent,"content")??""},`Preparando a criação de ${name}…`,"deterministic",agentIntent);
       }
       case"find_file":{
         const name=entity(intent,"name");if(!name)return{type:"unknown",reason:"MISSING_FILE_NAME"};
@@ -53,7 +53,7 @@ export class IntentToolMapper{
         const folder=scoped.status==="resolved"?scoped.path:undefined;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
       }
       case"write_text_file":{
-        const content=entity(intent,"content");const explicit=entity(intent,"path");
+        const content=entityRaw(intent,"content");const explicit=entity(intent,"path");
         if(content===undefined)return{type:"unknown",reason:"MISSING_CONTENT"};
         if(explicit&&isAbsolutePortable(explicit))return this.tool("write_text_file",{path:explicit,content},"Preparando a alteração do arquivo…","deterministic",agentIntent);
         const file=entity(intent,"file");if(!file)return{type:"unknown",reason:"MISSING_FILE"};
@@ -100,11 +100,19 @@ export class IntentToolMapper{
   }
   resolveScope(intent:CanonicalIntent):ScopeResolution{
     const raw=entity(intent,"folder");if(!raw)return{status:"absent"};
-    const registry=new LocationRegistry({},[],this.allowedRoots());
+    const roots=this.allowedRoots();
+    const registry=new LocationRegistry({},[],roots);
     const resolution=new PathIntentResolver(registry).resolve(raw);
-    if(resolution.status==="resolved"&&resolution.resolvedPath)return{status:"resolved",path:resolution.resolvedPath,raw};
-    this.metrics?.record("intent.scope.unresolved",1,{raw:raw.slice(0,80)});
-    return{status:"unresolved",raw};
+    if(resolution.status==="resolved"&&resolution.resolvedPath){
+      if(!isAllowedPath(resolution.resolvedPath,roots)){
+        this.metrics?.record("intent.scope.unresolved",1,{reason:"NOT_ALLOWED"});
+        return{status:"unresolved",raw,reason:"NOT_ALLOWED"};
+      }
+      return{status:"resolved",path:resolution.resolvedPath,raw};
+    }
+    const reason=resolution.status==="needs_confirmation"?"AMBIGUOUS_LOCATION":"UNKNOWN_ALIAS";
+    this.metrics?.record("intent.scope.unresolved",1,{reason});
+    return{status:"unresolved",raw,reason};
   }
   private scopeClarification(intent:AgentIntent,raw:string):MappedHybridIntent{
     return{type:"clarification",intent,question:`Não reconheci a pasta "${raw}" como um local autorizado. Qual pasta autorizada devo usar?`};
@@ -114,6 +122,10 @@ export class IntentToolMapper{
 function entity(intent:CanonicalIntent,key:string){
   const value=intent.entities[key]?.value;
   return typeof value==="string"&&value.trim()?value.trim():undefined;
+}
+function entityRaw(intent:CanonicalIntent,key:string){
+  const value=intent.entities[key]?.value;
+  return typeof value==="string"?value:undefined;
 }
 function joinPortable(base:string,relative:string){const segments=relative.split(/[\\/]+/).filter(Boolean);return path.win32.isAbsolute(base)?path.win32.join(base,...segments):path.join(base,...segments);}
 function isAbsolutePortable(value:string){return path.isAbsolute(value)||path.win32.isAbsolute(value);}
@@ -128,3 +140,13 @@ function toAgentIntent(intent:CanonicalIntent):AgentIntent{
   };
 }
 type intentName=AgentIntent["intent"];
+
+function isAllowedPath(candidate:string,roots:string[]){
+  return roots.some(root=>{
+    const windows=path.win32.isAbsolute(candidate)||path.win32.isAbsolute(root);
+    const api=windows?path.win32:path;
+    const normalizedRoot=api.normalize(root),normalizedCandidate=api.normalize(candidate);
+    const relative=api.relative(normalizedRoot,normalizedCandidate);
+    return relative===""||(!relative.startsWith(`..${api.sep}`)&&relative!==".."&&!api.isAbsolute(relative));
+  });
+}

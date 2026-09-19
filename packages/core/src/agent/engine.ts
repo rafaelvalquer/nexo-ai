@@ -107,34 +107,13 @@ export class AgentEngine{
       catch(error){const text=this.formatOllamaError(error,"continuar o rascunho da macro");hooks.onReplaceText?.(text);return{text};}
     }
 
-    // Common local commands, macros and ordinary chat avoid constructing an
-    // LLM plan. Mutations still go through executePlan and the regular policy.
-    const deterministic=this.commandService.route(resolvedUserText,previous);
-    if(deterministic.type!=="unknown"){
-      void this.commandService.evaluateShadow(resolvedUserText,deterministic,previous,hooks.signal).catch(()=>undefined);
-      this.metrics?.record("agent.route",1,{route:deterministic.type==="chat"&&deterministic.stream?"llm":"deterministic"});
-      this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.type});
-      if(deterministic.type==="clarification"){
-        if(!conversationId||!this.clarifications){const text=deterministic.intent.question??"Escolha um dos arquivos encontrados para continuar.";hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
-        const pending=this.clarifications.create(conversationId,resolvedUserText,deterministic.intent);
-        return this.clarificationReply(pending,hooks);
-      }
-      if(deterministic.type==="tool"||deterministic.type==="macro")return this.executeDeterministicRoute(resolvedUserText,deterministic,hooks,context);
-      if(deterministic.type==="chat"&&deterministic.response){hooks.onReplaceText?.(deterministic.response);hooks.onStatus?.("Resposta concluída.");return{text:deterministic.response,engine:"fast-path"};}
-      if(deterministic.type==="chat"&&deterministic.stream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
-    }
-
-    const hybrid=await this.commandService.routeHybrid(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
-    if(hybrid.type!=="unknown"){
-      this.metrics?.record("agent.route",1,{route:"hybrid-intent"});
-      if(hybrid.type==="tool"||hybrid.type==="macro")return this.executeDeterministicRoute(resolvedUserText,hybrid,hooks,context);
-      if(hybrid.type==="chat"&&hybrid.response){hooks.onReplaceText?.(hybrid.response);hooks.onStatus?.("Preciso de uma confirmação de intenção.");return{text:hybrid.response,engine:"fast-path"};}
-      if(hybrid.type==="chat"&&hybrid.stream){
-        hooks.onStatus?.("Pedido informacional identificado. A IA local está gerando a resposta…");hooks.onReplaceText?.("");
-        try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}
-        catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
-      }
-    }
+    // Command routing has a single production entry point. Safety, exact
+    // deterministic routes, Hybrid interpretation and legacy compatibility are
+    // internal CommandService concerns; AgentEngine only consumes CommandRoute.
+    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
+    this.recordCommandRoute(commandRoute);
+    const commandReply=await this.handleCommandRoute(resolvedUserText,commandRoute,hooks,context,conversationId);
+    if(commandReply)return commandReply;
 
     this.metrics?.record("agent.route",1,{route:this.agentLoopMode()==="legacy"?"llm":"agent"});
     if(this.agentLoopMode()==="read_only")return this.runAgentLoop(resolvedUserText,hooks,context,"read_only");
@@ -271,6 +250,48 @@ export class AgentEngine{
     return this.executeSteps(userText,steps,plan,hooks,context);
   }
 
+  private async handleCommandRoute(userText:string,route:CommandRoute,hooks:AgentRunHooks,context:LLMMessage[],conversationId?:string):Promise<AgentReply|undefined>{
+    if(route.type==="unknown")return undefined;
+    if(route.type==="clarification"){
+      if(!conversationId||!this.clarifications){
+        const text=route.intent.question??"Escolha um dos arquivos encontrados para continuar.";
+        hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando esclarecimento.");
+        return{text,engine:"fast-path"};
+      }
+      const pending=this.clarifications.create(conversationId,userText,route.intent);
+      return this.clarificationReply(pending,hooks);
+    }
+    if(route.type==="tool"||route.type==="macro"){
+      this.metrics?.record("agent.route",1,{route:"command"});
+      return this.executeDeterministicRoute(userText,route,hooks,context);
+    }
+    if(route.type==="chat"&&route.response){
+      hooks.onReplaceText?.(route.response);hooks.onStatus?.("Resposta concluída.");
+      return{text:route.response,engine:"fast-path"};
+    }
+    if(route.type==="chat"&&route.stream){
+      hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");
+      try{
+        const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);
+        hooks.onStatus?.("Resposta concluída.");
+        return{text:streamed,engine:"fast-path"};
+      }catch(error){
+        const text=this.formatOllamaError(error,"gerar a resposta");
+        hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");
+        return{text,engine:"fast-path"};
+      }
+    }
+    return undefined;
+  }
+
+  private recordCommandRoute(route:CommandRoute){
+    const diagnostic=this.commandService.hybridDiagnostics() as {finalRoute?:{source?:string;type?:string;tool?:string}}|undefined;
+    const source=diagnostic?.finalRoute?.source??"unknown";
+    this.metrics?.record("agent.command_route.source",1,{source});
+    this.metrics?.record("agent.command_route.type",1,{type:route.type,source});
+    if(route.type==="tool")this.metrics?.record("agent.command_route.tool",1,{tool:route.tool,source});
+  }
+
   private async executeDeterministicRoute(userText:string,route:Extract<CommandRoute,{type:"tool"|"macro"}>,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
     const step:PlanStep=route.type==="macro"
       ?{tool:`macro_${route.operation}`,input:route.input,explanation:route.explanation}
@@ -286,6 +307,7 @@ export class AgentEngine{
     hooks.onStatus?.("Plano validado pelo Core. Preparando execução…");
     const persistedRun=this.runtime?.start(userText,steps,{conversationId,taskId:hooks.visualContext?.taskId,agentId:hooks.visualContext?.agentId},{intent:plan.intent,deferredAction:plan.deferredAction,responseMode:plan.responseMode});
     const done:{step:PlanStep;result:ToolResult}[]=[];let previousContext=previous,deferredConsumed=false,modelFinalResponse:string|undefined;
+    if(plan.deferredAction?.kind==="filesystem.write_text")this.metrics?.record("intent.deferred_write.started",1);
     for(let stepIndex=0;stepIndex<steps.length;stepIndex++){
       const step=steps[stepIndex];this.assertNotAborted(hooks.signal);
       if(stepIndex>=AGENT_LIMITS.maxIterations){const text="O agente atingiu o limite seguro de iterações.";hooks.onReplaceText?.(text);if(persistedRun)this.runtime?.finish(persistedRun.id,"FAILED",text);return{text,results:done.map(x=>x.result)};}
@@ -304,7 +326,16 @@ export class AgentEngine{
       if(reply.result){hooks.onToolResult?.(tool.name,data,reply.result);done.push({step,result:reply.result});previousContext=this.planner.observe(previousContext,userText,plan,step,reply.result);if(conversationId)this.runtime?.saveConversationActionContext(conversationId,previousContext);}
       if(reply.result&&!reply.result.ok){hooks.onReplaceText?.(reply.text);hooks.onStatus?.("A ferramenta retornou uma falha.");return{text:reply.text,result:reply.result,results:done.map(x=>x.result)};}
       hooks.onStatus?.(`${tool.description}: concluído.`);
-      if(plan.deferredAction&&!deferredConsumed&&reply.result){const materialized=this.planner.materialize({deferredAction:plan.deferredAction} as Plan,reply.result);deferredConsumed=true;if(materialized?.direct){hooks.onReplaceText?.(materialized.direct);hooks.onStatus?.("Prévia concluída sem alterações.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",materialized.direct);return{text:materialized.direct,result:reply.result,results:done.map(x=>x.result)};}if(materialized?.step){if(data.connectionId&&/^(email|calendar)_/.test(materialized.step.tool))materialized.step.input.connectionId=data.connectionId;if(steps.length>=AGENT_LIMITS.maxToolCalls){const text="A ação exigiria etapas demais para o limite seguro.";return{text,results:done.map(x=>x.result)};}steps.push(materialized.step);}}
+      if(plan.deferredAction&&!deferredConsumed&&reply.result){
+        if(plan.deferredAction.kind==="filesystem.write_text"){
+          const matches=Array.isArray((reply.result.data as any)?.matches)?(reply.result.data as any).matches:[];
+          const metric=matches.length===0?"intent.deferred_write.not_found":matches.length===1?"intent.deferred_write.unique_match":"intent.deferred_write.multiple_matches";
+          this.metrics?.record(metric,1,{matches:matches.length});
+        }
+        const materialized=this.planner.materialize({deferredAction:plan.deferredAction} as Plan,reply.result);deferredConsumed=true;
+        if(materialized?.direct){hooks.onReplaceText?.(materialized.direct);hooks.onStatus?.("Prévia concluída sem alterações.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",materialized.direct);return{text:materialized.direct,result:reply.result,results:done.map(x=>x.result)};}
+        if(materialized?.step){if(data.connectionId&&/^(email|calendar)_/.test(materialized.step.tool))materialized.step.input.connectionId=data.connectionId;if(steps.length>=AGENT_LIMITS.maxToolCalls){const text="A ação exigiria etapas demais para o limite seguro.";return{text,results:done.map(x=>x.result)};}steps.push(materialized.step);}
+      }
       if(!plan.intent&&plan.origin==="llm"&&stepIndex===steps.length-1&&done.length<AGENT_LIMITS.maxToolCalls){try{const next=await this.planner.decideNext(userText,done.map(x=>x.result),context);if(typeof next.direct==="string"&&next.direct.trim())modelFinalResponse=next.direct;else if(next.tool)steps.push({tool:next.tool,input:next.input??{},explanation:next.explanation});}catch{}}
       if(persistedRun)this.runtime?.saveState(persistedRun.id,{userRequest:userText,steps,nextStep:stepIndex+1,results:done.map(x=>x.result),iteration:stepIndex+1,intent:plan.intent,deferredAction:deferredConsumed?undefined:plan.deferredAction,responseMode:plan.responseMode});if(modelFinalResponse)break;
     }
