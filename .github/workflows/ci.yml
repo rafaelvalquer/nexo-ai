@@ -40,12 +40,7 @@ jobs:
       - name: Pull local evaluation model
         if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
         shell: bash
-        run: |
-          for attempt in {1..60}; do
-            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
-            sleep 1
-          done
-          curl --fail --show-error --silent http://127.0.0.1:11434/api/pull             --header 'content-type: application/json'             --data "{"name":"$NEXO_MODEL_EVAL_MODEL","stream":false}"
+        run: bash scripts/ci/pull-ollama-model.sh
       - name: Agent model-backed smoke
         run: pnpm eval:agent:model
 
@@ -73,14 +68,36 @@ jobs:
       - name: Pull local evaluation model
         if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
         shell: bash
-        run: |
-          for attempt in {1..60}; do
-            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then break; fi
-            sleep 1
-          done
-          curl --fail --show-error --silent http://127.0.0.1:11434/api/pull             --header 'content-type: application/json'             --data "{"name":"$NEXO_MODEL_EVAL_MODEL","stream":false}"
+        run: bash scripts/ci/pull-ollama-model.sh
       - name: Hybrid intent model gate
         run: pnpm eval:intents:hybrid
+      - name: Hybrid intent model summary
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f artifacts/hybrid-intent-eval.json ]; then
+            echo "Hybrid Intent report was not generated." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Hybrid Intent Model Gate"
+            echo
+            echo "| Metric | Value |"
+            echo "| --- | ---: |"
+            echo "| Model | $(jq -r '.model // "unknown"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Cases | $(jq -r '.cases // 0' artifacts/hybrid-intent-eval.json) |"
+            echo "| Operation accuracy | $(jq -r '((.operationAccuracy // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Entity accuracy | $(jq -r '((.entityAccuracy // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Wrong tool rate | $(jq -r '((.wrongToolRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Schema invalid rate | $(jq -r '((.schemaInvalidRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Ambiguity/negative safety | $(jq -r '((.ambiguitySafety // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Unsafe invented paths | $(jq -r '.unsafeInventedPaths // 0' artifacts/hybrid-intent-eval.json) |"
+            echo "| P50 | $(jq -r '.p50Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
+            echo "| P90 | $(jq -r '.p90Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
+            echo "| P95 | $(jq -r '.p95Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
+            echo "| Max | $(jq -r '.maxMs // 0' artifacts/hybrid-intent-eval.json) ms |"
+            echo "| Failures | $(jq -r '(.failures // []) | length' artifacts/hybrid-intent-eval.json) |"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Hybrid Intent evaluation
         if: always()
         uses: actions/upload-artifact@v4
