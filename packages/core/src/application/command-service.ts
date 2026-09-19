@@ -329,7 +329,9 @@ function mayBeFilesystemRequest(text:string){
 }
 
 function hasExplicitPhysicalPath(text:string){
-  return /\b[A-Za-z]:[\\/]/.test(text)||/(?:^|\s)\\\\[^\s]+/.test(text)||/(?:^|\s)\/(?:[^\s/]+\/)*[^\s]*/.test(text);
+  return /\b[A-Za-z]:[\\/]/.test(text)
+    ||/(?:^|\s)\\\\[^\s]+/.test(text)
+    ||/(?:^|\s)\/(?:[^\s/]+(?:\/[^\s/]+)*)/.test(text);
 }
 
 function routeLabel(route:CommandRoute){
@@ -346,7 +348,7 @@ function preserveExplicitScope(intent:CanonicalIntent,text:string):CanonicalInte
   return{...intent,entities:{...intent.entities,folder:{value:raw,source:"user",confidence:1}}};
 }
 function extractExplicitScope(text:string){
-  const match=text.match(/\b(?:em|no|na|nos|nas|dentro\s+(?:de|da|do|das|dos))\s+(?:(?:minha|meu|minhas|meus)\s+)?(?:(?:pasta|diret[oó]rio)\s+)?(.+?)(?=\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+(?:coloque|escreva)|por\s+|para\s+)|[.!?]*$)/iu);
+  const match=text.match(/\b(?:em|no|na|nos|nas|dentro\s+(?:de|da|do|das|dos))\s+(?:(?:minha|meu|minhas|meus)\s+)?(?:(?:pasta|diret[oó]rio)(?:\s+(?:de|do|da|dos|das))?\s+)?(.+?)(?=\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+(?:coloque|escreva)|por\s+|para\s+)|[.!?]*$)/iu);
   return match?.[1]?.trim().replace(/[.!?]+$/u,"").trim()||undefined;
 }
 function foldScope(value:string){return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/\s+/g," ").trim();}
