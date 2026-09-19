@@ -35,14 +35,18 @@ describe("NexoCore optional modules",()=>{
     expect(core.tools.list().some(tool=>tool.name==="web_search"||tool.name==="find_file")).toBe(true);
   });
 
-  it("loads Documents and its RAG dependency only when explicitly ensured",async()=>{
+  it("loads Documents and RAG independently by capability",async()=>{
     const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:true,semanticSearchEnabled:true});
     expect(core.moduleSnapshot().find(module=>module.id==="documents")?.status).toBe("disabled");
     await core.ensureDocuments();
     expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
-      {id:"documents",status:"ready"},{id:"rag",status:"ready"}
+      {id:"documents",status:"ready"},{id:"rag",status:"disabled"}
     ]));
     expect(core.tools.list().some(tool=>tool.name==="document_get")).toBe(true);
+    await core.ensureRag();
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
+      {id:"documents",status:"ready"},{id:"rag",status:"ready"}
+    ]));
   });
 
   it("loads Documents without RAG when semantic search is disabled",async()=>{
@@ -66,8 +70,9 @@ describe("NexoCore optional modules",()=>{
 
   it("unregisters optional tools and stops dependent RAG when Documents are disabled",async()=>{
     const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:true,semanticSearchEnabled:true});
-    await core.ensureDocuments();
+    await core.ensureRag();
     expect(core.tools.list().some(tool=>tool.name==="document_get")).toBe(true);
+    expect(core.moduleSnapshot().find(module=>module.id==="rag")?.status).toBe("ready");
     await core.modules.disable("documents");
     expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([
       {id:"documents",status:"disabled"},{id:"rag",status:"disabled"}
