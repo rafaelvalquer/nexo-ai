@@ -57,6 +57,15 @@ describe("CommandService.resolve Routing V2",()=>{
     expect(route).toMatchObject({type:"chat",response:expect.stringContaining("documentos secretos")});
   });
 
+  it("feature flag permite rollback para o roteamento anterior",async()=>{
+    let calls=0;
+    const resolver=new HybridIntentResolver({parse:async()=>{calls++;return canonical("create_folder","create",{name:"teste",folder:"downloads"});}});
+    const rollback=new CommandService(registry,()=>[root],{resolver,mapper:new IntentToolMapper(registry,()=>[root]),enabled:()=>true,shadowMode:()=>false,filesystemEnabled:()=>true,routingV2Enabled:()=>false});
+    const route=await rollback.resolve("liste downloads");
+    expect(route).toMatchObject({type:"tool",tool:"list_files"});
+    expect(calls).toBe(0);
+  });
+
   it("ambiguidade arquivo versus pasta vira clarification",async()=>{
     const route=await service(()=>canonical("create_folder","create",{name:"teste",folder:"downloads"})).resolve("crie teste em downloads");
     expect(route).toMatchObject({type:"chat",response:expect.stringContaining("pasta ou um arquivo")});
