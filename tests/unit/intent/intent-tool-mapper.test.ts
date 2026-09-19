@@ -21,11 +21,18 @@ describe("IntentToolMapper",()=>{
   it("não amplia escopo quando uma pasta explícita não pode ser resolvida",()=>{
     const mapped=mapper.map(make("find_file","update",{name:"teste.txt",folder:"pasta-inexistente"}));
     expect(mapped).toMatchObject({type:"clarification",question:expect.stringContaining("pasta-inexistente")});
+    expect(mapper.resolveScope(make("find_file","update",{name:"teste.txt",folder:"pasta-inexistente"}))).toEqual({status:"unresolved",raw:"pasta-inexistente",reason:"UNKNOWN_ALIAS"});
   });
 
   it("não envia paths relativos diretamente para Tools físicas",()=>{
     const mapped=mapper.map(make("trash_file","update",{path:"teste.txt"}));
     expect(mapped).toEqual({type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"});
+  });
+
+  it("preserva conteúdo literal no deferred write",()=>{
+    const content="Cliente  XPTO\r\nR$ 1.250,90 / aprovado às 10:45";
+    const mapped=mapper.map(make("write_text_file","update",{file:"teste123.txt",content}));
+    expect(mapped).toMatchObject({type:"tool",deferredAction:{kind:"filesystem.write_text",content}});
   });
 
   it("mapeia edição por nome para find_file + deferred write",()=>{
