@@ -2,76 +2,106 @@
   {
     "input": "liste downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "liste os arquivos em downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "mostre arquivos de downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "veja os itens da pasta downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "listar documentos",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "documents"
+    }
   },
   {
     "input": "mostre as pastas em downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "liste arquivos recentes em downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "quais arquivos estão em downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "veja downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "listar itens no download",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "mostre o conteúdo da pasta downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "liste meus downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "quais pastas existem em downloads",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "downloads"
+    }
   },
   {
     "input": "mostre arquivos no desktop",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "desktop"
+    }
   },
   {
     "input": "liste documentos recentes",
     "operation": "list_files",
-    "entities": {}
+    "entities": {
+      "folder": "documents"
+    }
   }
 ]

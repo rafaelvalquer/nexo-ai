@@ -18,6 +18,16 @@ describe("IntentToolMapper",()=>{
     expect(mapped).toMatchObject({type:"tool",tool:"create_folder",input:{path:path.join(root,"teste")}});
   });
 
+  it("não amplia escopo quando uma pasta explícita não pode ser resolvida",()=>{
+    const mapped=mapper.map(make("find_file","update",{name:"teste.txt",folder:"pasta-inexistente"}));
+    expect(mapped).toEqual({type:"unknown",reason:"UNRESOLVED_FOLDER"});
+  });
+
+  it("não envia paths relativos diretamente para Tools físicas",()=>{
+    const mapped=mapper.map(make("trash_file","update",{path:"teste.txt"}));
+    expect(mapped).toEqual({type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"});
+  });
+
   it("mapeia edição por nome para find_file + deferred write",()=>{
     const mapped=mapper.map(make("write_text_file","update",{file:"teste123.txt",content:"teste modificação"}));
     expect(mapped).toMatchObject({type:"tool",tool:"find_file",input:{name:"teste123.txt",matchMode:"full_name"},deferredAction:{kind:"filesystem.write_text",fileName:"teste123.txt",content:"teste modificação"}});

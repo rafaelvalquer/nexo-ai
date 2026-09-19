@@ -276,7 +276,11 @@ test("Hybrid Intent finds one text file before write and only mutates after appr
     }),downloads);
     const conversation=await page.evaluate(()=>window.nexo.createConversation("Hybrid write E2E"));
     const task=await page.evaluate(id=>window.nexo.startChatTask(id,"alterar o conteudo do arquivo teste123.txt para teste modificação",[]),conversation.id);
-    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("waiting_approval");
+    await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toMatch(/waiting_approval|completed|failed/);
+    const preApprovalTask=await page.evaluate(id=>window.nexo.getTask(id),task.id);
+    if(preApprovalTask?.status!=="waiting_approval"){
+      throw new Error(`Hybrid write terminou antes da aprovação: ${JSON.stringify({status:preApprovalTask?.status,result:preApprovalTask?.result,statusMessage:preApprovalTask?.statusMessage,statusHistory:preApprovalTask?.statusHistory,structuredCalls,unexpectedChatCalls})}`);
+    }
     expect(fs.readFileSync(target,"utf8")).toBe("teste");
     const approval=await page.evaluate(()=>window.nexo.listApprovals().then(rows=>rows.find((row:any)=>row.status==="pending")));
     expect(approval?.toolName).toBe("write_text_file");

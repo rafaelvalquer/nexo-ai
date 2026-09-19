@@ -2,76 +2,111 @@
   {
     "input": "procure arquivo teste",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste"
+    }
   },
   {
     "input": "procure teste.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste.txt"
+    }
   },
   {
     "input": "encontre teste.txt em downloads",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste.txt",
+      "folder": "downloads"
+    }
   },
   {
     "input": "busque o arquivo teste123.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste123.txt"
+    }
   },
   {
     "input": "localize notas.md",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "notas.md"
+    }
   },
   {
     "input": "ache dados.csv nos downloads",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "dados.csv",
+      "folder": "downloads"
+    }
   },
   {
     "input": "procure documento.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "documento.txt",
+      "folder": "documents"
+    }
   },
   {
     "input": "encontre arquivo relatorio.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "relatorio.txt"
+    }
   },
   {
     "input": "busque teste sem extensão",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste"
+    }
   },
   {
     "input": "procure teste em downloads",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste",
+      "folder": "downloads"
+    }
   },
   {
     "input": "localize teste123.txt na pasta downloads",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "teste123.txt",
+      "folder": "downloads"
+    }
   },
   {
     "input": "ache o arquivo vazio.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "vazio.txt"
+    }
   },
   {
     "input": "encontre notas.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "notas.txt"
+    }
   },
   {
     "input": "procure meu_arquivo.txt",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "meu_arquivo.txt"
+    }
   },
   {
     "input": "busque arquivo exemplo.md",
     "operation": "find_file",
-    "entities": {}
+    "entities": {
+      "name": "exemplo.md"
+    }
   }
 ]

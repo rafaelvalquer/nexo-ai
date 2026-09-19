@@ -236,12 +236,17 @@ test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page },te
   await page.reload();
   await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
   await page.evaluate(() => localStorage.setItem("nexo.command.recent", JSON.stringify(["Abrir Escritório"])));
+  // CommandPalette loads persisted recents when the shell is mounted. Reloading
+  // here makes the test exercise persisted state instead of mutating storage
+  // behind React after initialization.
+  await page.reload();
+  await expect(page.locator(".app")).toHaveClass(/sidebarCollapsed/);
   const paletteTrigger=page.getByRole("button",{name:"Abrir busca e comandos"});
   await paletteTrigger.focus();
   await page.keyboard.press("Control+K");
   const palette=page.getByRole("dialog", { name: "Paleta de comandos" });
   await expect(palette).toBeVisible();
-  await expect(page.getByRole("option",{name:/Abrir Escritório.*Recente/})).toBeVisible();
+  await expect(page.getByRole("group",{name:"Recentes"}).getByRole("option",{name:/Abrir Escritório/})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(palette).not.toBeVisible();
   await expect(paletteTrigger).toBeFocused();

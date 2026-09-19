@@ -46,7 +46,10 @@ export class CommandService {
       return{type:"clarification",action:fileAction,files:previous.files,intent};
     }
     const filesystemCommand = this.filesystemResolver.resolve(text, this.allowedRoots(), undefined, previous?.files);
-    if (filesystemCommand) return this.fromToolStep(filesystemCommandTool(filesystemCommand));
+    if (filesystemCommand) {
+      this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:filesystemCommandTool(filesystemCommand).tool});
+      return this.fromToolStep(filesystemCommandTool(filesystemCommand));
+    }
 
     const filesystemIntent = deterministicFilesystemIntent(text);
     if (filesystemIntent) {
@@ -95,7 +98,10 @@ export class CommandService {
     if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!looksLikeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return;
     const baseline=adaptDeterministicTool(deterministic.tool,deterministic.input);if(!baseline)return;
     const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)))],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
-    if(resolution.status!=="resolved")return;
+    if(resolution.status!=="resolved"){
+      if(resolution.status==="unknown")this.hybrid.metrics?.record("intent.shadow.resolver_error",1,{reason:resolution.reason});
+      return;
+    }
     const same=resolution.intent.operation===baseline.operation;
     this.hybrid.metrics?.record(same?"intent.shadow.same_operation":"intent.shadow.different_operation",1,{deterministic:baseline.operation,hybrid:resolution.intent.operation});
     if(same){
