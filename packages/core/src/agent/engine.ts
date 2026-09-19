@@ -107,34 +107,13 @@ export class AgentEngine{
       catch(error){const text=this.formatOllamaError(error,"continuar o rascunho da macro");hooks.onReplaceText?.(text);return{text};}
     }
 
-    // Common local commands, macros and ordinary chat avoid constructing an
-    // LLM plan. Mutations still go through executePlan and the regular policy.
-    const deterministic=this.commandService.route(resolvedUserText,previous);
-    if(deterministic.type!=="unknown"){
-      void this.commandService.evaluateShadow(resolvedUserText,deterministic,previous,hooks.signal).catch(()=>undefined);
-      this.metrics?.record("agent.route",1,{route:deterministic.type==="chat"&&deterministic.stream?"llm":"deterministic"});
-      this.metrics?.record("agent.fast_path_hit",1,{route:deterministic.type});
-      if(deterministic.type==="clarification"){
-        if(!conversationId||!this.clarifications){const text=deterministic.intent.question??"Escolha um dos arquivos encontrados para continuar.";hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
-        const pending=this.clarifications.create(conversationId,resolvedUserText,deterministic.intent);
-        return this.clarificationReply(pending,hooks);
-      }
-      if(deterministic.type==="tool"||deterministic.type==="macro")return this.executeDeterministicRoute(resolvedUserText,deterministic,hooks,context);
-      if(deterministic.type==="chat"&&deterministic.response){hooks.onReplaceText?.(deterministic.response);hooks.onStatus?.("Resposta concluída.");return{text:deterministic.response,engine:"fast-path"};}
-      if(deterministic.type==="chat"&&deterministic.stream){hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");return{text,engine:"fast-path"};}}
-    }
-
-    const hybrid=await this.commandService.routeHybrid(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
-    if(hybrid.type!=="unknown"){
-      this.metrics?.record("agent.route",1,{route:"hybrid-intent"});
-      if(hybrid.type==="tool"||hybrid.type==="macro")return this.executeDeterministicRoute(resolvedUserText,hybrid,hooks,context);
-      if(hybrid.type==="chat"&&hybrid.response){hooks.onReplaceText?.(hybrid.response);hooks.onStatus?.("Preciso de uma confirmação de intenção.");return{text:hybrid.response,engine:"fast-path"};}
-      if(hybrid.type==="chat"&&hybrid.stream){
-        hooks.onStatus?.("Pedido informacional identificado. A IA local está gerando a resposta…");hooks.onReplaceText?.("");
-        try{const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);hooks.onStatus?.("Resposta concluída.");return{text:streamed,engine:"fast-path"};}
-        catch(error){const text=this.formatOllamaError(error,"gerar a resposta");hooks.onReplaceText?.(text);return{text,engine:"fast-path"};}
-      }
-    }
+    // Command routing has a single production entry point. Safety, exact
+    // deterministic routes, Hybrid interpretation and legacy compatibility are
+    // internal CommandService concerns; AgentEngine only consumes CommandRoute.
+    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
+    this.recordCommandRoute(commandRoute);
+    const commandReply=await this.handleCommandRoute(resolvedUserText,commandRoute,hooks,context,conversationId);
+    if(commandReply)return commandReply;
 
     this.metrics?.record("agent.route",1,{route:this.agentLoopMode()==="legacy"?"llm":"agent"});
     if(this.agentLoopMode()==="read_only")return this.runAgentLoop(resolvedUserText,hooks,context,"read_only");
@@ -269,6 +248,48 @@ export class AgentEngine{
   private async executePlan(userText: string, plan: Plan, hooks: AgentRunHooks, context: LLMMessage[]): Promise<AgentReply> {
     const steps:PlanStep[]=plan.steps??(plan.tool?[{tool:plan.tool,input:plan.input??{},explanation:plan.explanation}]:[]);
     return this.executeSteps(userText,steps,plan,hooks,context);
+  }
+
+  private async handleCommandRoute(userText:string,route:CommandRoute,hooks:AgentRunHooks,context:LLMMessage[],conversationId?:string):Promise<AgentReply|undefined>{
+    if(route.type==="unknown")return undefined;
+    if(route.type==="clarification"){
+      if(!conversationId||!this.clarifications){
+        const text=route.intent.question??"Escolha um dos arquivos encontrados para continuar.";
+        hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando esclarecimento.");
+        return{text,engine:"fast-path"};
+      }
+      const pending=this.clarifications.create(conversationId,userText,route.intent);
+      return this.clarificationReply(pending,hooks);
+    }
+    if(route.type==="tool"||route.type==="macro"){
+      this.metrics?.record("agent.route",1,{route:"command"});
+      return this.executeDeterministicRoute(userText,route,hooks,context);
+    }
+    if(route.type==="chat"&&route.response){
+      hooks.onReplaceText?.(route.response);hooks.onStatus?.("Resposta concluída.");
+      return{text:route.response,engine:"fast-path"};
+    }
+    if(route.type==="chat"&&route.stream){
+      hooks.onStatus?.("A IA local está gerando a resposta…");hooks.onReplaceText?.("");
+      try{
+        const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);
+        hooks.onStatus?.("Resposta concluída.");
+        return{text:streamed,engine:"fast-path"};
+      }catch(error){
+        const text=this.formatOllamaError(error,"gerar a resposta");
+        hooks.onReplaceText?.(text);hooks.onStatus?.("A geração da resposta foi interrompida.");
+        return{text,engine:"fast-path"};
+      }
+    }
+    return undefined;
+  }
+
+  private recordCommandRoute(route:CommandRoute){
+    const diagnostic=this.commandService.hybridDiagnostics() as {finalRoute?:{source?:string;type?:string;tool?:string}}|undefined;
+    const source=diagnostic?.finalRoute?.source??"unknown";
+    this.metrics?.record("agent.command_route.source",1,{source});
+    this.metrics?.record("agent.command_route.type",1,{type:route.type,source});
+    if(route.type==="tool")this.metrics?.record("agent.command_route.tool",1,{tool:route.tool,source});
   }
 
   private async executeDeterministicRoute(userText:string,route:Extract<CommandRoute,{type:"tool"|"macro"}>,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
