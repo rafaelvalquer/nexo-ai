@@ -142,7 +142,7 @@ export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQu
     const pulsePositions=new Float32Array(profile.maxPulses*3),pulseIntensities=new Float32Array(profile.maxPulses);
 
     const fail=()=>{if(failed)return;failed=true;propsRef.current.onUnavailable();};
-    const makeBuffer=(data:BufferSource,usage=gl.STATIC_DRAW)=>{const buffer=gl.createBuffer();if(!buffer)throw new Error("Buffer WebGL indisponível.");buffers.push(buffer);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,data,usage);return buffer;};
+    const makeBuffer=(data:BufferSource,usage:number=gl.STATIC_DRAW)=>{const buffer=gl.createBuffer();if(!buffer)throw new Error("Buffer WebGL indisponível.");buffers.push(buffer);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,data,usage);return buffer;};
 
     try{
       const commonUniforms=["uMvp","uModelView","uTime","uPointer","uPointerStrength","uPointerSpeed","uSpread","uMotionSpeed","uWave","uActiveRegion","uPrimary","uSecondary","uDpr","uNodeIntensity","uConnectionIntensity"];
