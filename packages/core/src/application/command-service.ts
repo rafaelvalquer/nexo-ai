@@ -217,10 +217,21 @@ export class CommandService {
       return{type:"clarification",action:fileAction,files:previous.files,intent};
     }
     const command=this.filesystemResolver.resolve(text,this.allowedRoots(),undefined,previous?.files);
-    if(!command)return{type:"unknown"};
-    const step=filesystemCommandTool(command);
-    this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:step.tool});
-    return this.fromToolStep(step);
+    if(command){
+      const step=filesystemCommandTool(command);
+      this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:step.tool});
+      return this.fromToolStep(step);
+    }
+    // Preserve already-stable exact routes outside filesystem. Broad
+    // filesystem heuristics remain in routeLegacyFallback after Hybrid.
+    const other=this.fastRouter.route(text,{allowedRoots:this.allowedRoots()});
+    if(other.type==="macro")return other;
+    if(other.type==="tool"){
+      const definition=this.registry.get(other.tool);
+      const domain=definition?.domain??domainFromName(other.tool);
+      if(domain!=="filesystem")return this.fromToolStep({tool:other.tool,input:other.input,explanation:other.explanation});
+    }
+    return{type:"unknown"};
   }
 
   private async routeHybridInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
