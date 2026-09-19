@@ -3,6 +3,7 @@ import { responsePolicy } from "../chat/presentation/response-policy.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "../agent/orchestrator/intent-schema.js";
 import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper, normalizeIntentInput } from "../intent/index.js";
+import type { CanonicalIntent } from "../intent/types.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 import type { ConversationActionContextState } from "../agent/context/conversation-action-context.js";
 import { deterministicFilesystemIntent } from "../agent/orchestrator/filesystem-intent-enricher.js";
@@ -213,7 +214,8 @@ export class CommandService {
     const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...availableOperations],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
     if(resolution.status==="unknown")return{type:"unknown"};
     if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
-    const mapped=this.hybrid.mapper.map(resolution.intent);
+    const intent=preserveExplicitScope(resolution.intent,text);
+    const mapped=this.hybrid.mapper.map(intent);
     if(mapped.type==="unknown")return{type:"unknown"};
     if(mapped.type==="clarification")return{type:"chat",response:mapped.question};
     return this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation},mapped.intent,mapped.deferredAction,mapped.responseMode);
@@ -294,3 +296,18 @@ function hasExplicitPhysicalPath(text:string){
 function routeLabel(route:CommandRoute){
   return route.type==="tool"?route.tool:route.type==="macro"?`macro_${route.operation}`:route.type;
 }
+
+
+const SCOPE_AWARE_OPERATIONS=new Set(["find_file","search_files","list_files","create_folder","create_text_file","write_text_file"]);
+function preserveExplicitScope(intent:CanonicalIntent,text:string):CanonicalIntent{
+  if(!SCOPE_AWARE_OPERATIONS.has(intent.operation))return intent;
+  const raw=extractExplicitScope(text);if(!raw)return intent;
+  const current=intent.entities.folder?.value;
+  if(typeof current==="string"&&foldScope(current)===foldScope(raw))return intent;
+  return{...intent,entities:{...intent.entities,folder:{value:raw,source:"user",confidence:1}}};
+}
+function extractExplicitScope(text:string){
+  const match=text.match(/\b(?:em|no|na|nos|nas|dentro\s+(?:de|da|do|das|dos))\s+(?:(?:minha|meu|minhas|meus)\s+)?(?:(?:pasta|diret[oó]rio)\s+)?(.+?)(?=\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+(?:coloque|escreva)|por\s+|para\s+)|[.!?]*$)/iu);
+  return match?.[1]?.trim().replace(/[.!?]+$/u,"").trim()||undefined;
+}
+function foldScope(value:string){return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/\s+/g," ").trim();}
