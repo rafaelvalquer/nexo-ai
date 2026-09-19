@@ -246,7 +246,7 @@ test("sidebar recolhida persiste e a paleta abre por atalho", async ({ page },te
   await page.keyboard.press("Control+K");
   const palette=page.getByRole("dialog", { name: "Paleta de comandos" });
   await expect(palette).toBeVisible();
-  await expect(page.getByRole("option",{name:/Abrir Escritório.*Recente/})).toBeVisible();
+  await expect(page.getByRole("group",{name:"Recentes"}).getByRole("option",{name:/Abrir Escritório/})).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(palette).not.toBeVisible();
   await expect(paletteTrigger).toBeFocused();
