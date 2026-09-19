@@ -19,6 +19,13 @@ describe("semantic validator",()=>{
     expect(validateIntentSemantics(intent("create_folder",{name:"teste",folder:"downloads"}),"como criar uma pasta no Windows?").reason).toBe("INFORMATIONAL_REQUEST");
   });
 
+  it("rejeita name/newName que carregam caminho embutido",()=>{
+    const create=validateIntentSemantics(intent("create_folder",{name:"sub\\teste",folder:"downloads"}),"crie uma pasta sub\\teste em downloads");
+    expect(create.ambiguities).toEqual(expect.arrayContaining([expect.objectContaining({code:"unsafe_name",field:"name"})]));
+    const rename=validateIntentSemantics(intent("rename_file",{path:"C:\\Temp\\a.txt",newName:"outra\\b.txt"}),"renomeie C:\\Temp\\a.txt para outra\\b.txt");
+    expect(rename.ambiguities).toEqual(expect.arrayContaining([expect.objectContaining({code:"unsafe_name",field:"newName"})]));
+  });
+
   it("exige conteúdo para write_text_file",()=>{
     const result=validateIntentSemantics(intent("write_text_file",{file:"teste.txt"}),"altere teste.txt");
     expect(result.valid).toBe(false);

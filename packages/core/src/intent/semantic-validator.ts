@@ -37,7 +37,11 @@ export function validateIntentSemantics(intent:CanonicalIntent,userText:string):
 
   if(intent.operation==="create_folder"||intent.operation==="create_text_file"){
     const name=entityString(intent,"name");
-    if(name&&containsTraversal(name))ambiguities.push({code:"unsafe_name",field:"name",message:"O nome contém navegação relativa.",critical:true});
+    if(name&&unsafeLeafName(name))ambiguities.push({code:"unsafe_name",field:"name",message:"O nome deve representar apenas um arquivo ou pasta, sem caminho ou navegação relativa.",critical:true});
+  }
+  if(intent.operation==="rename_file"){
+    const newName=entityString(intent,"newName");
+    if(newName&&unsafeLeafName(newName))ambiguities.push({code:"unsafe_name",field:"newName",message:"O novo nome deve ser apenas o nome final, sem caminho.",critical:true});
   }
 
   if(intent.operation==="create_folder"&&isResourceTypeAmbiguous(text)){
@@ -73,6 +77,7 @@ function invalid(intent:CanonicalIntent,code:string,reason:string):SemanticValid
   return{valid:false,intent,missing:intent.missing,ambiguities:intent.ambiguities,reason:code};
 }
 function containsTraversal(value:string){return value.split(/[\\/]+/).some(part=>part==="."||part==="..");}
+function unsafeLeafName(value:string){return containsTraversal(value)||/[\\/]/.test(value)||isAbsolutePortable(value);}
 function isAbsolutePortable(value:string){return path.isAbsolute(value)||path.win32.isAbsolute(value);}
 function containsLiteralPath(text:string,value:string){
   const normalize=(input:string)=>input.replace(/\//g,"\\").replace(/[\\]+/g,"\\").toLocaleLowerCase();

@@ -29,7 +29,8 @@ export class IntentToolMapper{
       }
       case"find_file":{
         const name=entity(intent,"name");if(!name)return{type:"unknown",reason:"MISSING_FILE_NAME"};
-        const root=this.optionalFolder(intent);return this.tool("find_file",{name,matchMode:path.extname(name)?"full_name":"stem",...(root?{root}:{})},`Procurando ${name} nas pastas autorizadas…`,"presentation",agentIntent);
+        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
+        const root=scoped.path;return this.tool("find_file",{name,matchMode:path.extname(name)?"full_name":"stem",...(root?{root}:{})},`Procurando ${name} nas pastas autorizadas…`,"presentation",agentIntent);
       }
       case"list_files":{
         const folder=this.resolveFolder(entity(intent,"folder"));if(!folder)return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
@@ -37,38 +38,46 @@ export class IntentToolMapper{
       }
       case"search_files":{
         const query=entity(intent,"query");if(!query)return{type:"unknown",reason:"MISSING_SEARCH_QUERY"};
-        const folder=this.optionalFolder(intent);return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
+        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
+        const folder=scoped.path;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
       }
       case"write_text_file":{
         const content=entity(intent,"content");const explicit=entity(intent,"path");
         if(content===undefined)return{type:"unknown",reason:"MISSING_CONTENT"};
         if(explicit&&isAbsolutePortable(explicit))return this.tool("write_text_file",{path:explicit,content},"Preparando a alteração do arquivo…","deterministic",agentIntent);
         const file=entity(intent,"file");if(!file)return{type:"unknown",reason:"MISSING_FILE"};
-        const root=this.optionalFolder(intent);
+        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
+        const root=scoped.path;
         return{...this.tool("find_file",{name:file,matchMode:path.extname(file)?"full_name":"stem",...(root?{root}:{})},`Localizando ${file} antes da alteração…`,"deterministic",agentIntent),deferredAction:{kind:"filesystem.write_text",fileName:file,content,...(root?{root}:{})}};
       }
       case"read_file":{
         const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
+        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("read_file",{path:target},`Lendo ${path.basename(target)}…`,"synthesize",agentIntent);
       }
       case"file_info":{
         const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
+        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("file_info",{path:target},`Consultando ${path.basename(target)}…`,"deterministic",agentIntent);
       }
       case"copy_file":{
         const source=entity(intent,"source"),destination=entity(intent,"destination");if(!source||!destination)return{type:"unknown",reason:"MISSING_COPY_PATH"};
+        if(!isAbsolutePortable(source)||!isAbsolutePortable(destination))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("copy_file",{source,destination},"Preparando a cópia do arquivo…","deterministic",agentIntent);
       }
       case"move_file":{
         const source=entity(intent,"source"),destination=entity(intent,"destination");if(!source||!destination)return{type:"unknown",reason:"MISSING_MOVE_PATH"};
+        if(!isAbsolutePortable(source)||!isAbsolutePortable(destination))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("move_file",{source,destination},"Preparando a movimentação do arquivo…","deterministic",agentIntent);
       }
       case"rename_file":{
         const current=entity(intent,"path"),newName=entity(intent,"newName");if(!current||!newName)return{type:"unknown",reason:"MISSING_RENAME_TARGET"};
+        if(!isAbsolutePortable(current))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("rename_file",{path:current,newPath:joinPortable(path.dirname(current),newName)},"Preparando a renomeação do arquivo…","deterministic",agentIntent);
       }
       case"trash_file":{
         const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
+        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
         return this.tool("trash_file",{path:target},"Preparando o envio para a lixeira…","deterministic",agentIntent);
       }
       default:return{type:"unknown",reason:`UNMAPPED_OPERATION:${intent.operation}`};
@@ -78,8 +87,9 @@ export class IntentToolMapper{
   private tool(tool:string,input:Record<string,unknown>,explanation:string,responseMode:"deterministic"|"presentation"|"synthesize",intent:AgentIntent):Extract<MappedHybridIntent,{type:"tool"}>{
     return{type:"tool",tool,input,explanation,responseMode,intent};
   }
-  private optionalFolder(intent:CanonicalIntent){
-    const value=entity(intent,"folder");return value?this.resolveFolder(value):undefined;
+  private resolveOptionalFolder(intent:CanonicalIntent):{status:"absent";path?:undefined}|{status:"resolved";path:string}|{status:"invalid";path?:undefined}{
+    const value=entity(intent,"folder");if(!value)return{status:"absent"};
+    const resolved=this.resolveFolder(value);return resolved?{status:"resolved",path:resolved}:{status:"invalid"};
   }
   private resolveFolder(value:string|undefined){
     if(!value)return undefined;
