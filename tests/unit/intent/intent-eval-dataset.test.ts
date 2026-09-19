@@ -9,7 +9,8 @@ const phase1Files=[
   "filesystem-list.json",
   "filesystem-write-file.json",
   "ambiguous-cases.json",
-  "filesystem-real-world-regressions.json"
+  "filesystem-real-world-regressions.json",
+  "filesystem-manual-regressions-v2.json"
 ];
 
 describe("hybrid intent eval dataset",()=>{
@@ -22,6 +23,11 @@ describe("hybrid intent eval dataset",()=>{
     expect(rows.some((row:any)=>row.input==="alterar o conteudo do arquivo teste123.txt para teste modificação")).toBe(true);
     expect(rows.some((row:any)=>row.input==="será que dá pra fazer uma pastinha chamada Experimentos lá nos meus downloads?")).toBe(true);
     expect(rows.some((row:any)=>row.input==="não altere o arquivo teste123.txt")).toBe(true);
+    const manual=JSON.parse(fs.readFileSync(path.join(dir,"filesystem-manual-regressions-v2.json"),"utf8"));
+    expect(manual).toHaveLength(22);
+    expect(manual.every((row:any)=>typeof row.expectedRouteSource==="string"&&typeof row.expectedExecutable==="boolean")).toBe(true);
+    expect(manual.some((row:any)=>row.expectedDeferredAction==="filesystem.write_text")).toBe(true);
+    expect(manual.some((row:any)=>row.expectedSafety==="traversal")).toBe(true);
   });
 
   it("golden cases executáveis têm operação e entidades obrigatórias mensuráveis",()=>{
