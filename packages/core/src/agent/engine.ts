@@ -307,6 +307,7 @@ export class AgentEngine{
     hooks.onStatus?.("Plano validado pelo Core. Preparando execução…");
     const persistedRun=this.runtime?.start(userText,steps,{conversationId,taskId:hooks.visualContext?.taskId,agentId:hooks.visualContext?.agentId},{intent:plan.intent,deferredAction:plan.deferredAction,responseMode:plan.responseMode});
     const done:{step:PlanStep;result:ToolResult}[]=[];let previousContext=previous,deferredConsumed=false,modelFinalResponse:string|undefined;
+    if(plan.deferredAction?.kind==="filesystem.write_text")this.metrics?.record("intent.deferred_write.started",1);
     for(let stepIndex=0;stepIndex<steps.length;stepIndex++){
       const step=steps[stepIndex];this.assertNotAborted(hooks.signal);
       if(stepIndex>=AGENT_LIMITS.maxIterations){const text="O agente atingiu o limite seguro de iterações.";hooks.onReplaceText?.(text);if(persistedRun)this.runtime?.finish(persistedRun.id,"FAILED",text);return{text,results:done.map(x=>x.result)};}
@@ -325,7 +326,16 @@ export class AgentEngine{
       if(reply.result){hooks.onToolResult?.(tool.name,data,reply.result);done.push({step,result:reply.result});previousContext=this.planner.observe(previousContext,userText,plan,step,reply.result);if(conversationId)this.runtime?.saveConversationActionContext(conversationId,previousContext);}
       if(reply.result&&!reply.result.ok){hooks.onReplaceText?.(reply.text);hooks.onStatus?.("A ferramenta retornou uma falha.");return{text:reply.text,result:reply.result,results:done.map(x=>x.result)};}
       hooks.onStatus?.(`${tool.description}: concluído.`);
-      if(plan.deferredAction&&!deferredConsumed&&reply.result){const materialized=this.planner.materialize({deferredAction:plan.deferredAction} as Plan,reply.result);deferredConsumed=true;if(materialized?.direct){hooks.onReplaceText?.(materialized.direct);hooks.onStatus?.("Prévia concluída sem alterações.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",materialized.direct);return{text:materialized.direct,result:reply.result,results:done.map(x=>x.result)};}if(materialized?.step){if(data.connectionId&&/^(email|calendar)_/.test(materialized.step.tool))materialized.step.input.connectionId=data.connectionId;if(steps.length>=AGENT_LIMITS.maxToolCalls){const text="A ação exigiria etapas demais para o limite seguro.";return{text,results:done.map(x=>x.result)};}steps.push(materialized.step);}}
+      if(plan.deferredAction&&!deferredConsumed&&reply.result){
+        if(plan.deferredAction.kind==="filesystem.write_text"){
+          const matches=Array.isArray((reply.result.data as any)?.matches)?(reply.result.data as any).matches:[];
+          const metric=matches.length===0?"intent.deferred_write.not_found":matches.length===1?"intent.deferred_write.unique_match":"intent.deferred_write.multiple_matches";
+          this.metrics?.record(metric,1,{matches:matches.length});
+        }
+        const materialized=this.planner.materialize({deferredAction:plan.deferredAction} as Plan,reply.result);deferredConsumed=true;
+        if(materialized?.direct){hooks.onReplaceText?.(materialized.direct);hooks.onStatus?.("Prévia concluída sem alterações.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",materialized.direct);return{text:materialized.direct,result:reply.result,results:done.map(x=>x.result)};}
+        if(materialized?.step){if(data.connectionId&&/^(email|calendar)_/.test(materialized.step.tool))materialized.step.input.connectionId=data.connectionId;if(steps.length>=AGENT_LIMITS.maxToolCalls){const text="A ação exigiria etapas demais para o limite seguro.";return{text,results:done.map(x=>x.result)};}steps.push(materialized.step);}
+      }
       if(!plan.intent&&plan.origin==="llm"&&stepIndex===steps.length-1&&done.length<AGENT_LIMITS.maxToolCalls){try{const next=await this.planner.decideNext(userText,done.map(x=>x.result),context);if(typeof next.direct==="string"&&next.direct.trim())modelFinalResponse=next.direct;else if(next.tool)steps.push({tool:next.tool,input:next.input??{},explanation:next.explanation});}catch{}}
       if(persistedRun)this.runtime?.saveState(persistedRun.id,{userRequest:userText,steps,nextStep:stepIndex+1,results:done.map(x=>x.result),iteration:stepIndex+1,intent:plan.intent,deferredAction:deferredConsumed?undefined:plan.deferredAction,responseMode:plan.responseMode});if(modelFinalResponse)break;
     }
