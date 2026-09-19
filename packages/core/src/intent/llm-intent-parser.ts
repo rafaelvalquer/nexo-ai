@@ -4,7 +4,7 @@ import { normalizeIntentInput } from "./input-normalizer.js";
 import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
 import { filesystemIntentPrompt } from "./prompts/filesystem.js";
-import type { CanonicalIntent, IntentResolutionInput } from "./types.js";
+import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput } from "./types.js";
 
 export interface IntentParser {
   parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>;
@@ -58,7 +58,7 @@ function applyEntityProvenance(intent:CanonicalIntent,input:string):CanonicalInt
     const values=Array.isArray(entity.value)?entity.value:[entity.value];
     const literal=values.every(value=>typeof value!=="string"||containsLiteral(comparable,value));
     const semanticAlias=key==="folder"&&values.length===1&&typeof values[0]==="string"&&locationAliasMentioned(input,values[0]);
-    const source=literal?"user":semanticAlias?"semantic_alias":intent.referencesPreviousResult?"previous_context":"inferred";
+    const source:IntentEntitySource=literal?"user":semanticAlias?"semantic_alias":intent.referencesPreviousResult?"previous_context":"inferred";
     return[key,{...entity,source}];
   }));
   return{...intent,entities};
