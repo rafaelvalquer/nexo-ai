@@ -195,7 +195,17 @@ export class CommandService {
 
   hybridDiagnostics(){
     if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
-    if(this.hybrid?.diagnosticsEnabled?.())return structuredClone(this.lastDiagnostics);
+    if(this.hybrid?.diagnosticsEnabled?.()){
+      return structuredClone({
+        ...this.lastDiagnostics,
+        routing:{
+          source:this.lastDiagnostics.finalRoute?.source,
+          operation:this.lastDiagnostics.hybrid?.operation,
+          tool:this.lastDiagnostics.finalRoute?.tool,
+          deferredAction:this.lastDiagnostics.mapping?.deferredAction
+        }
+      });
+    }
     const hybrid=this.lastDiagnostics.hybrid;
     return{
       requestId:this.lastDiagnostics.requestId,
