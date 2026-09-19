@@ -9,6 +9,10 @@ export type RouteConflictDecision={accepted:true}|{accepted:false;reason:"read_v
 export class RouteConflictGuard{
   evaluate(text:string,route:CommandRoute):RouteConflictDecision{
     if(route.type!=="tool"||!READ_ONLY.has(route.tool))return{accepted:true};
+    // A read tool may be the deterministic discovery step of a mutation plan.
+    // It is safe to accept only when the mutation is explicitly carried as a
+    // deferred action; an isolated read candidate still conflicts.
+    if(route.deferredAction)return{accepted:true};
     if(hasMutationEvidence(text)&&!isExplicitReadRequest(text))return{accepted:false,reason:"read_vs_mutation"};
     return{accepted:true};
   }
