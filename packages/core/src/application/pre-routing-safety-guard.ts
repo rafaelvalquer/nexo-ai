@@ -29,6 +29,8 @@ export function isInformational(text:string){
 }
 
 function hasTraversal(input:NormalizedIntentInput){
-  const candidates=[input.routingText,...input.literalSegments.map(segment=>segment.value)];
-  return candidates.some(value=>/(?:^|[\s"'\\/])\.\.(?:[\\/]|\b|$)/u.test(value)||/(?:^|[\s"'\\/])\.(?=\s+(?:em|no|na|nos|nas|para|dentro)|\s*$)/iu.test(value));
+  const contentStart=input.literalSegments.filter(segment=>segment.type==="content").map(segment=>segment.start).sort((a,b)=>a-b)[0];
+  const operational=contentStart===undefined?input.original:input.original.slice(0,contentStart);
+  return /(?:^|[\s"'\\/])\.\.(?:[\\/]|\b|$)/u.test(operational)
+    ||/(?:^|[\s"'\\/])\.(?=\s+(?:em|no|na|nos|nas|para|dentro)|\s*$)/iu.test(operational);
 }
