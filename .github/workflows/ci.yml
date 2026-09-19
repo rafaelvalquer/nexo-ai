@@ -28,6 +28,16 @@ jobs:
             throw "Configure NEXO_MODEL_EVAL_URL para executar o gate de modelo. O smoke não pode ser ignorado silenciosamente."
           }
           pnpm eval:agent:model
+      - name: Hybrid intent model gate
+        env:
+          NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL }}
+          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL }}
+        shell: powershell
+        run: |
+          if (-not $env:NEXO_MODEL_EVAL_URL) {
+            throw "Configure NEXO_MODEL_EVAL_URL para executar o gate real do Hybrid Intent Resolver."
+          }
+          pnpm eval:intents:hybrid
       - run: pnpm package:win
       - shell: powershell
         run: ./scripts/smoke-installer.ps1

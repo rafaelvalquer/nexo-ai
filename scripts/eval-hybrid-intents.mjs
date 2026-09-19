@@ -10,8 +10,8 @@ const [{HybridIntentResolver,LLMIntentParser,filesystemOperations},{OllamaProvid
   import(pathToFileURL(path.join(coreDist,"llm/ollama.js")))
 ]);
 
-const baseUrl=(process.env.NEXO_OLLAMA_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
-const model=process.env.NEXO_MODEL??"qwen3:4b";
+const baseUrl=(process.env.NEXO_MODEL_EVAL_URL??process.env.NEXO_OLLAMA_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
+const model=process.env.NEXO_MODEL_EVAL_MODEL??process.env.NEXO_MODEL??"qwen3:4b";
 const intentModel=process.env.NEXO_INTENT_MODEL??model;
 const provider=new OllamaProvider(baseUrl,model,undefined,intentModel);
 const health=await provider.health();
