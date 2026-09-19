@@ -252,7 +252,7 @@ test("Hybrid Intent finds one text file before write and only mutates after appr
         structuredCalls++;
         response.end(JSON.stringify({message:{content:JSON.stringify({
           schemaVersion:1,domain:"filesystem",intent:"update",operation:"write_text_file",
-          entities:{file:"teste123.txt",content:"teste modificação"},referencesPreviousResult:false,
+          entities:{file:"teste123.txt",content:"abc 123"},referencesPreviousResult:false,
           ambiguities:[],missing:[],modelConfidence:.99
         })},done:true}));
         return;
@@ -275,7 +275,7 @@ test("Hybrid Intent finds one text file before write and only mutates after appr
       hybridIntentResolverEnabled:true,hybridIntentShadowMode:false,hybridIntentFilesystemEnabled:true
     }),downloads);
     const conversation=await page.evaluate(()=>window.nexo.createConversation("Hybrid write E2E"));
-    const task=await page.evaluate(id=>window.nexo.startChatTask(id,"alterar o conteudo do arquivo teste123.txt para teste modificação",[]),conversation.id);
+    const task=await page.evaluate(id=>window.nexo.startChatTask(id,"troque o conteúdo do teste123.txt por abc 123",[]),conversation.id);
     await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toMatch(/waiting_approval|completed|failed/);
     const preApprovalTask=await page.evaluate(id=>window.nexo.getTask(id),task.id);
     if(preApprovalTask?.status!=="waiting_approval"){
@@ -284,11 +284,11 @@ test("Hybrid Intent finds one text file before write and only mutates after appr
     expect(fs.readFileSync(target,"utf8")).toBe("teste");
     const approval=await page.evaluate(()=>window.nexo.listApprovals().then(rows=>rows.find((row:any)=>row.status==="pending")));
     expect(approval?.toolName).toBe("write_text_file");
-    expect(approval?.input).toMatchObject({path:target,content:"teste modificação"});
+    expect(approval?.input).toMatchObject({path:target,content:"abc 123"});
     expect(approval?.preview).toContain("Novo conteúdo");
     await page.evaluate(id=>window.nexo.resolveApproval(id,true),approval!.id);
     await expect.poll(()=>page.evaluate(id=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("completed");
-    expect(fs.readFileSync(target,"utf8")).toBe("teste modificação");
+    expect(fs.readFileSync(target,"utf8")).toBe("abc 123");
     expect(structuredCalls).toBe(1);
     expect(unexpectedChatCalls).toBe(0);
   }finally{
