@@ -1,6 +1,6 @@
 {
   "name": "nexo-ai",
-  "version": "0.7.0-rc.4",
+  "version": "0.7.0-rc.5",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {

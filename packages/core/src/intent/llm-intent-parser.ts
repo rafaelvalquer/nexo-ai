@@ -4,7 +4,7 @@ import { normalizeIntentInput } from "./input-normalizer.js";
 import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
 import { filesystemIntentPrompt } from "./prompts/filesystem.js";
-import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput } from "./types.js";
+import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, NormalizedIntentInput } from "./types.js";
 
 export interface IntentParser {
   parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>;
@@ -28,10 +28,10 @@ export class LLMIntentParser implements IntentParser{
           schemaName:"NexoHybridIntentV1",
           parse:value=>parseModelIntent(value)
         },signal);
-        return applyEntityProvenance(toCanonicalIntent(parsed),normalized.normalized);
+        return applyLiteralEntities(applyEntityProvenance(toCanonicalIntent(parsed),normalized.routingText),normalized);
       }
       const raw=await this.llm.plan(messages,signal);
-      return applyEntityProvenance(toCanonicalIntent(parseModelIntent(JSON.parse(stripCodeFence(raw)))),normalized.normalized);
+      return applyLiteralEntities(applyEntityProvenance(toCanonicalIntent(parseModelIntent(JSON.parse(stripCodeFence(raw)))),normalized.routingText),normalized);
     }catch(error){
       if(input.signal?.aborted)throw input.signal.reason??error;
       return undefined;
@@ -88,4 +88,12 @@ function canonicalLocation(value:string){
 
 function fold(value:string){
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/\s+/g," ").trim();
+}
+
+
+function applyLiteralEntities(intent:CanonicalIntent,input:NormalizedIntentInput):CanonicalIntent{
+  if(intent.operation!=="write_text_file"&&intent.operation!=="create_text_file")return intent;
+  const literal=input.literalSegments.find(segment=>segment.type==="content");
+  if(!literal)return intent;
+  return{...intent,entities:{...intent.entities,content:{value:literal.value,source:"user",confidence:1}}};
 }

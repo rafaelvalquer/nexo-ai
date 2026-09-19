@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { responsePolicy } from "../chat/presentation/response-policy.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "../agent/orchestrator/intent-schema.js";
-import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper } from "../intent/index.js";
+import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper, normalizeIntentInput } from "../intent/index.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 import type { ConversationActionContextState } from "../agent/context/conversation-action-context.js";
 import { deterministicFilesystemIntent } from "../agent/orchestrator/filesystem-intent-enricher.js";
@@ -10,6 +11,8 @@ import { validateIntentRequirements } from "../agent/orchestrator/intent-require
 import { DeterministicRouter } from "../router/deterministic-router.js";
 import { FilesystemCommandResolver, filesystemCommandTool } from "../filesystem/intent/filesystem-command-resolver.js";
 import type { ActionContextFile } from "../agent/context/conversation-action-context.js";
+import { PreRoutingSafetyGuard } from "./pre-routing-safety-guard.js";
+import { RouteConflictGuard } from "./route-conflict-guard.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
@@ -20,21 +23,109 @@ export type CommandRoute =
   | { type:"clarification"; action:"open_file"|"analyze_file"; files:ActionContextFile[]; intent:AgentIntent }
   | { type: "unknown" };
 
-/** Routes deterministic work without invoking the semantic AgentPlanner. */
+export type HybridIntentDiagnosticsV2={
+  requestId:string;
+  originalInput?:string;
+  normalizedInput?:string;
+  safety?:{status:string;reason?:string};
+  exactCandidate?:{source:string;route:string;accepted:boolean;rejectedReason?:string};
+  hybrid?:{invoked:boolean;status?:string;operation?:string;confidence?:number};
+  mapping?:{tool?:string;deferredAction?:string};
+  finalRoute?:{source:string;type:string;tool?:string};
+  latency:{totalMs:number;hybridMs?:number};
+};
+
 export type HybridCommandOptions = {
   resolver: HybridIntentResolver;
   mapper: IntentToolMapper;
   enabled: () => boolean;
   shadowMode: () => boolean;
   filesystemEnabled: () => boolean;
+  routingV2Enabled?:()=>boolean;
+  diagnosticsEnabled?:()=>boolean;
   metrics?: LocalMetricsService;
 };
 
 export class CommandService {
   private readonly fastRouter = new DeterministicRouter();
   private readonly filesystemResolver = new FilesystemCommandResolver();
+  private readonly safetyGuard = new PreRoutingSafetyGuard();
+  private readonly conflictGuard = new RouteConflictGuard();
+  private lastDiagnostics?:HybridIntentDiagnosticsV2;
+
   constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions) {}
 
+  /** Canonical async routing entry point for AgentEngine in Routing V2. */
+  async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
+    if(this.hybrid?.routingV2Enabled?.()===false){
+      const legacy=this.route(text,previous);
+      return legacy.type==="unknown"?this.routeHybrid(text,previous,signal):legacy;
+    }
+
+    const started=Date.now(),requestId=randomUUID(),normalized=normalizeIntentInput(text);
+    const diagnostics:HybridIntentDiagnosticsV2={requestId,originalInput:text,normalizedInput:normalized.routingText,hybrid:{invoked:false},latency:{totalMs:0}};
+    const finish=(route:CommandRoute,source:string)=>{
+      diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:undefined};
+      diagnostics.latency.totalMs=Date.now()-started;
+      this.lastDiagnostics=diagnostics;
+      return route;
+    };
+
+    const safety=this.safetyGuard.evaluate(normalized);
+    diagnostics.safety={status:safety.status,reason:safety.terminal?safety.reason:undefined};
+    if(safety.terminal){
+      this.hybrid?.metrics?.record(safety.status==="negated"?"intent.safety.negated":safety.status==="informational"?"intent.safety.informational":"intent.safety.traversal",1);
+      return finish(safety.status==="informational"?{type:"chat",stream:true}:{type:"chat",response:safety.response},"safety");
+    }
+
+    const exact=this.routeExact(text,previous);
+    if(exact.type!=="unknown"){
+      const conflict=this.conflictGuard.evaluate(text,exact);
+      diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
+      if(conflict.accepted){
+        this.hybrid?.metrics?.record("intent.route.exact.accepted",1,{route:routeLabel(exact)});
+        void this.evaluateShadow(text,exact,previous,signal).catch(()=>undefined);
+        return finish(exact,"exact");
+      }
+      this.hybrid?.metrics?.record("intent.route.exact.rejected",1,{reason:conflict.reason});
+      this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(exact)});
+    }
+
+    if(this.shouldInvokeHybrid(text)){
+      diagnostics.hybrid!.invoked=true;
+      this.hybrid?.metrics?.record("intent.route.hybrid.invoked",1);
+      const hybridStarted=Date.now();
+      const hybrid=await this.routeHybridInternal(text,previous,signal);
+      diagnostics.latency.hybridMs=Date.now()-hybridStarted;
+      const resolverDiag=this.hybrid?.resolver.diagnostics();
+      diagnostics.hybrid={invoked:true,status:resolverDiag?.status,operation:resolverDiag?.operation,confidence:resolverDiag?.confidence};
+      if(hybrid.type!=="unknown"){
+        const conflict=this.conflictGuard.evaluate(text,hybrid);
+        if(conflict.accepted){
+          this.hybrid?.metrics?.record(hybrid.type==="chat"?"intent.route.hybrid.clarification":"intent.route.hybrid.resolved",1,{route:routeLabel(hybrid)});
+          if(hybrid.type==="tool")diagnostics.mapping={tool:hybrid.tool,deferredAction:hybrid.deferredAction?.kind};
+          return finish(hybrid,"hybrid");
+        }
+        this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(hybrid)});
+      }else this.hybrid?.metrics?.record("intent.route.hybrid.unknown",1);
+    }
+
+    const legacy=this.routeLegacyFallback(text,previous);
+    if(legacy.type!=="unknown"){
+      const conflict=this.conflictGuard.evaluate(text,legacy);
+      if(conflict.accepted){
+        this.hybrid?.metrics?.record("intent.route.legacy_fallback",1,{route:routeLabel(legacy)});
+        return finish(legacy,"legacy");
+      }
+      this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(legacy)});
+    }
+
+    const chat=this.conversationFallback(text);
+    this.hybrid?.metrics?.record("intent.route.chat_fallback",1);
+    return finish(chat,"chat");
+  }
+
+  /** Compatibility route retained for rollback/tests during the RC. */
   route(text: string, previous?: ConversationActionContextState): CommandRoute {
     const unsupportedSpreadsheet = this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if (unsupportedSpreadsheet) return { type: "chat", response: unsupportedSpreadsheet };
@@ -50,7 +141,6 @@ export class CommandService {
       this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:filesystemCommandTool(filesystemCommand).tool});
       return this.fromToolStep(filesystemCommandTool(filesystemCommand));
     }
-
     const filesystemIntent = deterministicFilesystemIntent(text);
     if (filesystemIntent) {
       const intent = validateIntentRequirements(filesystemIntent);
@@ -64,7 +154,6 @@ export class CommandService {
       }
       if (built.directStream) return { type: "chat", stream: true };
     }
-
     const routed = this.fastRouter.route(text, { allowedRoots: this.allowedRoots() });
     if (routed.type === "unknown") return isLikelyConversation(text) ? { type: "chat", stream: true } : routed;
     if (routed.type === "macro") return routed;
@@ -72,30 +161,14 @@ export class CommandService {
     return routed.response&&!isLikelyConversation(text)?{type:"unknown"}:routed;
   }
 
+  /** Compatibility Hybrid entry point retained for rollback/tests. */
   async routeHybrid(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
-    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!looksLikeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return{type:"unknown"};
-    const availableOperations=filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)));
-    const resolution=await this.hybrid.resolver.resolve({
-      text,
-      allowedDomains:["filesystem"],
-      availableOperations:[...availableOperations],
-      context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},
-      signal
-    });
-    if(resolution.status==="unknown"){
-      if(resolution.reason==="NEGATED_ACTION")return{type:"chat",response:"Nenhuma ação foi executada porque o pedido contém uma negação explícita."};
-      if(resolution.reason==="INFORMATIONAL_REQUEST")return{type:"chat",stream:true};
-      return{type:"unknown"};
-    }
-    if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
-    const mapped=this.hybrid.mapper.map(resolution.intent);
-    if(mapped.type==="unknown")return{type:"unknown"};
-    if(mapped.type==="clarification")return{type:"chat",response:mapped.question};
-    return this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation},mapped.intent,mapped.deferredAction,mapped.responseMode);
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||!mayBeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return{type:"unknown"};
+    return this.routeHybridInternal(text,previous,signal);
   }
 
   async evaluateShadow(text:string,deterministic:CommandRoute,previous?:ConversationActionContextState,signal?:AbortSignal){
-    if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!looksLikeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return;
+    if(!this.hybrid||!this.hybrid.enabled()||!this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||deterministic.type!=="tool"||!mayBeFilesystemRequest(text)||hasExplicitPhysicalPath(text))return;
     const baseline=adaptDeterministicTool(deterministic.tool,deterministic.input);if(!baseline)return;
     const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)))],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
     if(resolution.status!=="resolved"){
@@ -111,7 +184,64 @@ export class CommandService {
     }
   }
 
-  hybridDiagnostics(){return this.hybrid?.resolver.diagnostics();}
+  hybridDiagnostics(){
+    if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
+    if(this.hybrid?.diagnosticsEnabled?.())return structuredClone(this.lastDiagnostics);
+    return{requestId:this.lastDiagnostics.requestId,safety:this.lastDiagnostics.safety,hybrid:this.lastDiagnostics.hybrid,finalRoute:this.lastDiagnostics.finalRoute,latency:this.lastDiagnostics.latency};
+  }
+
+  private routeExact(text:string,previous?:ConversationActionContextState):CommandRoute{
+    const unsupportedSpreadsheet=this.filesystemResolver.unsupportedSpreadsheetCreation(text);
+    if(unsupportedSpreadsheet)return{type:"chat",response:unsupportedSpreadsheet};
+    const indexedFile=previousFileAtRequestedPosition(text,previous?.files??[]);
+    if(indexedFile)return this.fromToolStep({tool:"file_info",input:{path:indexedFile.path},explanation:`Consultando ${indexedFile.name} da lista anterior…`});
+    const fileAction=previousFileAction(text);
+    if(fileAction&&previous?.files&&previous.files.length>1){
+      const intent:AgentIntent={schemaVersion:1,status:"needs_clarification",domain:"filesystem",intent:fileAction==="analyze_file"?"summarize":"read",operation:fileAction,entities:{files:previous.files},referencesPreviousResult:true,requiresDataLookup:false,requiresConfirmation:false,confidence:1,missing:["fileMatch"],question:`Encontrei ${previous.files.length} arquivos. Qual deles você quer ${fileAction==="analyze_file"?"analisar":"abrir"}?`};
+      return{type:"clarification",action:fileAction,files:previous.files,intent};
+    }
+    const command=this.filesystemResolver.resolve(text,this.allowedRoots(),undefined,previous?.files);
+    if(!command)return{type:"unknown"};
+    const step=filesystemCommandTool(command);
+    this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:step.tool});
+    return this.fromToolStep(step);
+  }
+
+  private async routeHybridInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||hasExplicitPhysicalPath(text))return{type:"unknown"};
+    const availableOperations=filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)));
+    const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...availableOperations],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
+    if(resolution.status==="unknown")return{type:"unknown"};
+    if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
+    const mapped=this.hybrid.mapper.map(resolution.intent);
+    if(mapped.type==="unknown")return{type:"unknown"};
+    if(mapped.type==="clarification")return{type:"chat",response:mapped.question};
+    return this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation},mapped.intent,mapped.deferredAction,mapped.responseMode);
+  }
+
+  private routeLegacyFallback(text:string,previous?:ConversationActionContextState):CommandRoute{
+    const filesystemIntent=deterministicFilesystemIntent(text);
+    if(filesystemIntent){
+      const intent=validateIntentRequirements(filesystemIntent);
+      const tools=this.registry.listForAgent().map(tool=>({...tool,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name}));
+      const built=buildIntentPlan(intent,tools,previous);
+      if(built.steps?.length===1)return this.fromToolStep(built.steps[0],intent);
+      if(built.steps?.length)return{type:"unknown"};
+      if(built.direct&&!mutationIntents.has(intent.intent))return{type:"chat",response:built.direct};
+      if(built.directStream)return{type:"chat",stream:true};
+    }
+    const routed=this.fastRouter.route(text,{allowedRoots:this.allowedRoots()});
+    if(routed.type==="tool")return this.fromToolStep({tool:routed.tool,input:routed.input,explanation:routed.explanation});
+    return routed;
+  }
+
+  private conversationFallback(text:string):CommandRoute{
+    return isLikelyConversation(text)?{type:"chat",stream:true}:{type:"chat",response:"Não consegui mapear essa solicitação para uma operação segura. Reformule o pedido ou informe mais detalhes."};
+  }
+
+  private shouldInvokeHybrid(text:string){
+    return Boolean(this.hybrid?.enabled()&&this.hybrid.filesystemEnabled()&&!this.hybrid.shadowMode()&&!hasExplicitPhysicalPath(text)&&mayBeFilesystemRequest(text));
+  }
 
   private fromToolStep(step: { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string }, intent?: AgentIntent, deferredAction?:DeferredAction, responseModeOverride?:"synthesize"|"deterministic"|"presentation"): CommandRoute {
     if (step.tool.startsWith("macro_")) return { type: "macro", operation: step.tool.slice("macro_".length), input: step.input, explanation: step.explanation };
@@ -136,26 +266,31 @@ function previousFileAction(text:string):"open_file"|"analyze_file"|undefined{
   return undefined;
 }
 
-function domainFromName(name: string): string {
-  if (name.startsWith("email_")) return "email";
-  if (name.startsWith("calendar_")) return "calendar";
-  if (name.startsWith("browser_")) return "browser";
-  if (name.startsWith("memory_")) return "memory";
-  if (/file|folder/.test(name)) return "filesystem";
-  return "system";
+function domainFromName(name:string){
+  if(name.startsWith("email_"))return"email";
+  if(name.startsWith("calendar_"))return"calendar";
+  if(name.startsWith("browser_"))return"browser";
+  if(name.startsWith("memory_"))return"memory";
+  if(/file|folder/.test(name))return"filesystem";
+  return"system";
 }
 
-function isLikelyConversation(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  if (/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized)) return true;
-  if (/\b(arquivos?|pastas?|navegador|aplicativo|programa|processo|disco|mem[oó]ria|downloads?|desktop|documentos?|documents?)\b|\.[a-z0-9]{2,8}\b|\b[a-z]:[\\/]|\\\\/i.test(normalized)) return false;
-  if (/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized)) return false;
+function isLikelyConversation(text:string){
+  const normalized=text.trim().toLowerCase();
+  if(/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized))return true;
+  if(/\b(arquivos?|pastas?|navegador|aplicativo|programa|processo|disco|mem[oó]ria|downloads?|desktop|documentos?|documents?)\b|\.[a-z0-9]{2,8}\b|\b[a-z]:[\\/]|\\\\/i.test(normalized))return false;
+  if(/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie|criar|edite|editar|altere|alterar|troque|mude|faça|fazer)\b/i.test(normalized))return false;
   return true;
 }
 
-function looksLikeFilesystemRequest(text:string){
-  return /\b(arquivos?|pastas?|pastinha|diret[oó]rios?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho|conte[uú]do\s+do\s+arquivo)\b|\.[a-z0-9]{1,12}\b|\b[A-Za-z]:[\\/]/i.test(text);
+function mayBeFilesystemRequest(text:string){
+  return /\b(?:arquivos?|pastas?|pastinha|diret[oó]rios?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho|conte[uú]do|renomeie|copie|mova|apague|edite|altere|troque)\b|\.[a-z0-9]{1,12}\b|\b[A-Za-z]:[\\/]/iu.test(text);
 }
+
 function hasExplicitPhysicalPath(text:string){
   return /\b[A-Za-z]:[\\/]/.test(text)||/(?:^|\s)\\\\[^\s]+/.test(text)||/(?:^|\s)\/(?:[^\s/]+\/)*[^\s]*/.test(text);
+}
+
+function routeLabel(route:CommandRoute){
+  return route.type==="tool"?route.tool:route.type==="macro"?`macro_${route.operation}`:route.type;
 }

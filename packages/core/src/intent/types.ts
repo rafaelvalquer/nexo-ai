@@ -72,9 +72,20 @@ export type IntentResolutionResult =
   | { status:"clarification"; intent:CanonicalIntent; confidence:IntentConfidence; question:string }
   | { status:"unknown"; reason:string; intent?:CanonicalIntent; confidence?:IntentConfidence };
 
+export interface NormalizedIntentLiteralSegment {
+  type: "quoted"|"content"|"path";
+  value: string;
+  start: number;
+  end: number;
+}
+
 export interface NormalizedIntentInput {
   original: string;
+  /** Routing-only text: NFKC, normalized line endings and collapsed whitespace. */
+  routingText: string;
+  /** @deprecated compatibility alias for routingText during the RC. */
   normalized: string;
+  literalSegments: NormalizedIntentLiteralSegment[];
   quoted: string[];
   explicitPaths: string[];
   extensions: string[];

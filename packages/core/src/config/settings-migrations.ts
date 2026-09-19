@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 4;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 5;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -34,6 +34,13 @@ const migrations: SettingsMigration[] = [{
       hybridIntentShadowMode: settings.hybridIntentShadowMode ?? false,
       hybridIntentFilesystemEnabled: settings.hybridIntentFilesystemEnabled ?? true,
       settingsSchemaVersion: 4 };
+  }
+}, {
+  version: 5,
+  migrate(settings) {
+    return { ...settings,
+      hybridIntentRoutingV2Enabled: settings.hybridIntentRoutingV2Enabled ?? true,
+      settingsSchemaVersion: 5 };
   }
 }];
 
