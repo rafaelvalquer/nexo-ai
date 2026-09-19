@@ -8,10 +8,12 @@ import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, Normal
 
 export interface IntentParser {
   parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>;
+  modelName?():string|undefined;
 }
 
 export class LLMIntentParser implements IntentParser{
   constructor(private readonly llm:LLMProvider,private readonly timeoutMs=4_500){}
+  modelName(){return (this.llm as LLMProvider & {intentModelName?:()=>string}).intentModelName?.();}
 
   async parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>{
     const normalized=normalizeIntentInput(input.text);
