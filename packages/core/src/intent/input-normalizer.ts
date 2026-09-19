@@ -40,7 +40,7 @@ export function normalizeIntentInput(text:string):NormalizedIntentInput{
 
   const quoted=literalSegments.filter(segment=>segment.type==="quoted").map(segment=>segment.value);
   const extensions=[...new Set([...nfkc.matchAll(EXTENSION)].map(match=>match[1].toLowerCase()))];
-  return{original,routingText,normalized:routingText,literalSegments:dedupeSegments(literalSegments),quoted,explicitPaths:[...new Set(explicitPaths)],extensions};
+  return{original,routingText,normalized:nfkc.trim(),literalSegments:dedupeSegments(literalSegments),quoted,explicitPaths:[...new Set(explicitPaths)],extensions};
 }
 
 function extractContentSegment(original:string):NormalizedIntentLiteralSegment|undefined{
