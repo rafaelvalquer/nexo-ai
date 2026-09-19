@@ -49,8 +49,8 @@ export class IntentToolMapper{
       }
       case"search_files":{
         const query=entity(intent,"query");if(!query)return{type:"unknown",reason:"MISSING_SEARCH_QUERY"};
-        const scoped=this.resolveOptionalFolder(intent);if(scoped.status==="invalid")return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
-        const folder=scoped.path;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
+        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
+        const folder=scoped.status==="resolved"?scoped.path:undefined;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
       }
       case"write_text_file":{
         const content=entity(intent,"content");const explicit=entity(intent,"path");
