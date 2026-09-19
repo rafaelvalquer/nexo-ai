@@ -25,6 +25,23 @@ test("Dashboard mantém fallback neural acessível e cinco atalhos",async({page}
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
 });
 
+test("Dashboard mantém o Neural Core WebGL ativo em idle quando suportado",async({page})=>{
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const webglSupported=await page.evaluate(()=>{
+    const canvas=document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl"));
+  });
+  test.skip(!webglSupported,"WebGL indisponível no runner");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-webgl","ready",{timeout:10_000});
+  await expect(core).toHaveAttribute("data-state","idle");
+  await expect(page.locator(".nucleusCanvas")).toBeVisible();
+  await expect(page.locator(".neuralFallback")).toHaveCount(0);
+});
+
 test("a troca para uma rota lazy mostra skeleton contextual e acessível",async({page})=>{
   await page.emulateMedia({reducedMotion:"reduce"});
   let releaseChunk!:()=>void;
