@@ -9,12 +9,18 @@ describe("Neural Core visual states",()=>{
     for(const state of states){
       expect(neuralStates[state]).toBeDefined();
       expect(neuralColors[state]).toBeDefined();
+      expect(neuralStates[state].twinkleStrength).toBeGreaterThanOrEqual(0);
+      expect(neuralStates[state].shimmerStrength).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it("mantém atividade em idle e reduz atividade quando offline",()=>{
-    expect(neuralStates.idle.pulseCount).toBeGreaterThan(0);
+  it("mantém idle vivo sem competir com estados de trabalho",()=>{
+    expect(neuralStates.idle.pulseCount).toBe(10);
+    expect(neuralStates.idle.pulseSpeed).toBeCloseTo(.46);
+    expect(neuralStates.idle.autonomousRotation).toBe(1);
+    expect(neuralStates.idle.spontaneousActivity).toBeGreaterThan(0);
     expect(neuralStates.offline.pulseCount).toBeLessThan(neuralStates.idle.pulseCount);
     expect(neuralStates["executing-tool"].pulseCount).toBeGreaterThan(neuralStates.idle.pulseCount);
+    expect(neuralStates.planning.pulseCount).toBeGreaterThan(neuralStates.idle.pulseCount);
   });
 });

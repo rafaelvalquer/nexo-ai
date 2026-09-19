@@ -21,7 +21,7 @@ test("Dashboard mantém fallback neural acessível e cinco atalhos",async({page}
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
   await expect(core).toHaveCSS("--nucleus-core","#3bd89f");await expect(core).toHaveCSS("--nucleus-ring","#8cfdca");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
-  await page.getByRole("button",{name:"Explorar núcleo"}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
+  await page.getByRole("button",{name:"Explorar núcleo do Nexo",exact:true}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
 });
 
