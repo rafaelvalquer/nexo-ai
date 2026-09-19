@@ -18,6 +18,7 @@
     "browser:doctor": "node scripts/browser-doctor.mjs",
     "browser:stability": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && node scripts/browser-stability.mjs",
     "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
+    "eval:intents:hybrid": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-hybrid-intents.mjs",
     "eval:agent": "vitest run --config vitest.agent-evals.config.ts",
     "eval:agent:model": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-agent-model-backed.mjs",
     "eval:models": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node tests/model-evals/run-model-benchmark.mjs",
