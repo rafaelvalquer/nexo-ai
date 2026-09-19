@@ -12,6 +12,17 @@ describe("LLMIntentParser",()=>{
     expect(result).toMatchObject({domain:"filesystem",intent:"create",operation:"create_folder",entities:{name:{value:"teste"},folder:{value:"downloads"}},source:"llm"});
   });
 
+
+  it("classifica alias normalizado como semantic_alias em vez de afirmar origem do usuário",async()=>{
+    const llm:any={
+      planStructured:async(request:any)=>request.parse({schemaVersion:1,domain:"filesystem",intent:"create",operation:"create_folder",entities:{name:"teste",folder:"downloads"},referencesPreviousResult:false,ambiguities:[],missing:[],modelConfidence:.98})
+    };
+    const parser=new LLMIntentParser(llm,1000);
+    const result=await parser.parse({text:"faz uma pasta teste no download",availableOperations:["create_folder"]});
+    expect(result?.entities.name.source).toBe("user");
+    expect(result?.entities.folder.source).toBe("semantic_alias");
+  });
+
   it("retorna undefined para JSON inválido sem executar nada",async()=>{
     const llm:any={planStructured:async()=>{throw new Error("invalid")}};
     const parser=new LLMIntentParser(llm,1000);
