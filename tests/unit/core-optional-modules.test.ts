@@ -57,6 +57,14 @@ describe("NexoCore optional modules",()=>{
     ]));
   });
 
+  it("rejects document attachments clearly when Documents is disabled without affecting filesystem",async()=>{
+    const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
+    const conversation=await core.createConversation("Documents disabled");
+    await expect(core.startChatTask(conversation.id,"resuma este documento",["fake-document-id"])).rejects.toThrow("módulo de documentos está desativado");
+    expect(core.tools.list().some(tool=>tool.name==="find_file"||tool.name==="list_files")).toBe(true);
+    expect(core.moduleSnapshot()).toEqual(expect.arrayContaining([{id:"documents",status:"disabled"},{id:"rag",status:"disabled"}]));
+  });
+
   it("does not construct Connections while disabled and attaches its tools on demand",async()=>{
     const core=await coreWithSettings({connectionsEnabled:false,documentsEnabled:false,semanticSearchEnabled:false});
     await expect(core.ensureConnections()).rejects.toThrow("desativado");
