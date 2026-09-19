@@ -98,11 +98,11 @@ export class NexoCore{
     this.modules.register({id:"rag",dependencies:["documents"],start:async()=>{this.documents.setEmbeddingProvider(new EmbeddingProvider(this.settings.ollamaUrl,this.settings.embeddingModel));},stop:async()=>{this.documents.setEmbeddingProvider(undefined);}});
   }
   async ensureConnections(){await this.ready();if(!this.settings.connectionsEnabled)throw new Error("O módulo de conexões está desativado nas configurações.");await this.modules.ensure("connections");return this.connections;}
-  async ensureDocuments(){await this.ready();if(this.settings.documentsEnabled===false)throw new Error("O módulo de documentos está desativado nas configurações.");await this.modules.ensure("documents");if(this.settings.semanticSearchEnabled!==false)await this.modules.ensure("rag");return this.documents;}
+  async ensureDocuments(){await this.ready();if(this.settings.documentsEnabled===false)throw new Error("O módulo de documentos está desativado nas configurações.");await this.modules.ensure("documents");return this.documents;}
+  async ensureRag(){await this.ensureDocuments();if(this.settings.semanticSearchEnabled===false)throw new Error("A busca semântica de documentos está desativada nas configurações.");await this.modules.ensure("rag");return this.documents;}
   private async ensureModuleCapability(moduleId:"documents"|"rag"){
     if(moduleId==="documents"){await this.ensureDocuments();return;}
-    if(this.settings.semanticSearchEnabled===false)throw new Error("A busca semântica de documentos está desativada nas configurações.");
-    await this.ensureDocuments();await this.modules.ensure("rag");
+    await this.ensureRag();
   }
   private async ensureModulesForTool(toolName:string){for(const moduleId of this.moduleCapabilities.forTool(toolName))await this.ensureModuleCapability(moduleId);}
     moduleSnapshot(){return this.modules.snapshot();}
