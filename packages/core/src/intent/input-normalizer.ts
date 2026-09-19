@@ -8,9 +8,9 @@ const EXTENSION=/\.([A-Za-z0-9]{1,12})\b/gu;
 const EDIT_VERB=/\b(?:edite|editar|altere|alterar|troque|mude|mudar|modifique|modificar|substitua|escreva|escrever)\b/iu;
 
 export function normalizeIntentInput(text:string):NormalizedIntentInput{
-  const original=text.replace(/\r\n?/g,"\n");
-  const nfkc=original.normalize("NFKC");
-  const routingText=nfkc.replace(/[\t\n ]+/g," ").trim();
+  const original=text;
+  const normalizedLineEndings=text.normalize("NFKC").replace(/\r\n?/g,"\n");
+  const routingText=normalizedLineEndings.replace(/[\t\n ]+/g," ").trim();
   const literalSegments:NormalizedIntentLiteralSegment[]=[];
 
   for(const match of original.matchAll(QUOTED)){
@@ -39,8 +39,8 @@ export function normalizeIntentInput(text:string):NormalizedIntentInput{
   if(content)literalSegments.push(content);
 
   const quoted=literalSegments.filter(segment=>segment.type==="quoted").map(segment=>segment.value);
-  const extensions=[...new Set([...nfkc.matchAll(EXTENSION)].map(match=>match[1].toLowerCase()))];
-  return{original,routingText,normalized:nfkc.trim(),literalSegments:dedupeSegments(literalSegments),quoted,explicitPaths:[...new Set(explicitPaths)],extensions};
+  const extensions=[...new Set([...normalizedLineEndings.matchAll(EXTENSION)].map(match=>match[1].toLowerCase()))];
+  return{original,routingText,normalized:normalizedLineEndings.trim(),literalSegments:dedupeSegments(literalSegments),quoted,explicitPaths:[...new Set(explicitPaths)],extensions};
 }
 
 function extractContentSegment(original:string):NormalizedIntentLiteralSegment|undefined{
