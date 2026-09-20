@@ -2,7 +2,7 @@ import type {DomainCandidate} from "./types.js";
 export function deterministicDomainCandidates(text:string):DomainCandidate[]{
   const value=fold(text),out:DomainCandidate[]=[];
   const push=(domain:DomainCandidate["domain"],confidence:number,evidence:string)=>out.push({domain,confidence,source:"deterministic",evidence:[evidence]});
-  if(/\b(e-?mail|gmail|caixa de entrada|remetente|mensagem)\b/.test(value))push("email",.99,"email_marker");
+  if(/\b(e-?mails?|gmail|caixa de entrada|remetente|mensagem)\b/.test(value))push("email",.99,"email_marker");
   if(/\b(agenda|calendario|compromisso|reuniao|evento|convite)\b/.test(value))push("calendar",.99,"calendar_marker");
   if(/\b(infomoney|g1|uol|terra|cnn|site|internet|web|noticias?|manchetes?)\b|https?:\/\//.test(value))push("web",.98,"web_marker");
   if(/\b(clique|clicar|preencha|preencher|login|entrar na conta|baixar|download)\b/.test(value)&&/\b(site|pagina|navegador|web|http)/.test(value))push("browser",.995,"browser_interaction");
