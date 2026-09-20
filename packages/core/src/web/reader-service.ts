@@ -102,7 +102,7 @@ function requestOnce(url:URL,signal:AbortSignal|undefined,timeoutMs:number,maxBy
   return new Promise((resolve,reject)=>{
     if(signal?.aborted){reject(signal.reason??new Error("Operação cancelada."));return;}
     const transport=url.protocol==="https:"?https:http;
-    const request=transport.request(url,{method:"GET",headers:{"accept":"text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1","user-agent":"NexoAI-WebReader/1.1"},lookup:((hostname:string,options:any,callback:any)=>{
+    const request=transport.request(url,{method:"GET",headers:{"accept":"text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1","accept-language":"pt-BR,pt;q=0.9,en;q=0.7","accept-encoding":"identity","user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 NexoAI-WebReader/1.2"},lookup:((hostname:string,options:any,callback:any)=>{
       dns.lookup(hostname,{all:true,verbatim:true},(error,records)=>{if(error)return callback(error);if(!records.length||records.some(record=>!isPublicAddress(record.address)))return callback(new Error("O domínio resolve para um endereço privado ou reservado."));callback(null,options?.all?records:records[0].address,records[0].family);});
     }) as any});
     const finishError=(error:Error)=>{request.destroy();reject(error);};
