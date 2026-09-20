@@ -2,7 +2,7 @@
 set -euo pipefail
 
 OLLAMA_URL="${NEXO_MODEL_EVAL_URL:-http://127.0.0.1:11434}"
-MODEL="${NEXO_MODEL_EVAL_MODEL:-qwen3:0.6b}"
+MODEL="${NEXO_MODEL_EVAL_MODEL:-qwen3:4b}"
 
 echo "Waiting for Ollama at ${OLLAMA_URL}..."
 
