@@ -80,6 +80,7 @@ export type AccuracyCommandOptions={
   shadowMode:()=>boolean;
   contextEnabled:()=>boolean;
   goalEnabled:()=>boolean;
+  failurePenaltyFor?:(text:string,candidate:DecisionCandidate)=>number;
   metrics?:LocalMetricsService;
 };
 
@@ -183,7 +184,8 @@ export class CommandService {
     if(entries.length){
       const goals=new Map<string,GoalSatisfaction>();
       for(const entry of entries){const goal=this.accuracy?.goalEvaluator.evaluate(text,entry.candidate)??{status:"unknown",score:.7} as GoalSatisfaction;goals.set(decisionKey(entry.candidate),goal);}
-      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals});
+      const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
+      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey});
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
       if(decision.clarificationNeeded){
         const selected=decision.selectedCandidate??entries[0].candidate;
