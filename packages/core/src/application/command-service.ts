@@ -86,6 +86,7 @@ export type AccuracyCommandOptions={
   goalEnabled:()=>boolean;
   failurePenaltyFor?:(text:string,candidate:DecisionCandidate)=>number;
   memoryCandidatesFor?:(text:string,expectedDomain?:string)=>Promise<{candidates:DecisionCandidate[];examples:RetrievedIntentExample[]}>;
+  plannerCandidatesFor?:(text:string)=>DecisionCandidate[];
   entityLedgerFor?:(conversationId:string,turn:number)=>ConversationEntity[];
   pendingClarificationFor?:(conversationId:string)=>ContextSnapshot["pendingClarification"]|undefined;
   metrics?:LocalMetricsService;
@@ -117,7 +118,9 @@ export class CommandService {
     const expectedDomain=expectedDomainFromEvidence(domainEvidence);
     const memoryBundle=await this.accuracy?.memoryCandidatesFor?.(text,expectedDomain).catch(()=>undefined);
     const memoryCandidates=memoryBundle?.candidates??[];
-    if(trace)trace.intentCandidates.push(...memoryCandidates);
+    const plannerCandidates=this.accuracy?.plannerCandidatesFor?.(text)??[];
+    const supportingCandidates=[...memoryCandidates,...plannerCandidates];
+    if(trace)trace.intentCandidates.push(...supportingCandidates);
     let contextEvidence:ReturnType<ContextResolver["resolve"]>|undefined;
 
     const saveTrace=()=>{
@@ -218,7 +221,7 @@ export class CommandService {
       const goals=new Map<string,GoalSatisfaction>();
       for(const entry of entries){const goal=this.accuracy?.goalEvaluator.evaluate(text,entry.candidate)??{status:"unknown",score:.7} as GoalSatisfaction;goals.set(decisionKey(entry.candidate),goal);}
       const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
-      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates:memoryCandidates,domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
+      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates,domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
       if(this.refinementFlags.candidateArbiterShadowMode){this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});const first=entries[0];if(first)return finish(first.route,first.source);}
       if(decision.clarificationNeeded){
