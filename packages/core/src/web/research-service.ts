@@ -75,7 +75,7 @@ function buildSearchQueries(query:string,domain:string|undefined,headlineRequest
   if(!domain)return[query];
   const primary=`site:${domain} ${query}`;
   if(!headlineRequest)return[primary];
-  return[primary,`site:${domain} notícias hoje`];
+  return[`site:${domain} notícias hoje`,primary];
 }
 function buildHeadlines(ranked:WebArticleCandidate[],articles:Array<{title:string;url:string;snippet:string;publishedAt?:string}>,source?:string):WebResearchHeadline[]{
   const readByUrl=new Map(articles.map(article=>[canonicalUrl(article.url),article]));
