@@ -17,7 +17,14 @@ console.log(JSON.stringify({
     snippet:article.snippet.slice(0,240),
     textPreview:article.text.slice(0,400)
   })),
+  headlines:result.headlines.map(headline=>({
+    title:headline.title,
+    url:headline.url,
+    snippet:headline.snippet.slice(0,240),
+    fullyRead:headline.fullyRead,
+    discoveredFrom:headline.discoveredFrom
+  })),
   failedSources:result.failedSources
 },null,2));
 
-if(!result.articles.length)process.exitCode=1;
+if(!result.articles.length&&!result.headlines.length)process.exitCode=1;
