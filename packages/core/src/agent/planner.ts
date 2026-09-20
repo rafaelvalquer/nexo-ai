@@ -23,6 +23,7 @@ import {semanticMutationAllowed} from "./security/semantic-mutation-guard.js";
 import {ContextResolver} from "./context/context-resolver.js";
 import {contextSnapshotFromActionState} from "./context/context-snapshot.js";
 import {EntityResolverV2} from "../intent/entities/resolver.js";
+import type {DecisionCandidate} from "./decision/types.js";
 import type {GoalOutcome} from "./outcome/types.js";
 import {IntentLearningCoordinator} from "./intent-memory/learning-coordinator.js";
 import {isUserCorrection,classifyCorrection} from "./intent-memory/correction-capture.js";
@@ -51,12 +52,14 @@ export class AgentPlanner{
   private readonly synthesizer:ResponseSynthesizer;
   private intentRetriever?:IntentMemoryRetriever;
   private retrieverStore?:IntentMemoryStore;
+  private lastMemoryDecisionCandidates:DecisionCandidate[]=[];
   constructor(private llm:LLMProvider,private registry:ToolRegistry,private intentMemory?:IntentMemoryStore,private intentLearningEnabled:()=>boolean=()=>true,private metrics?:LocalMetricsService,private readonly authorizedRoots:()=>string[]=()=>[]){
     this.orchestrator=new IntentOrchestrator(llm,diagnostic=>this.recordIntentDiagnostic(diagnostic));this.synthesizer=new ResponseSynthesizer(llm);if(intentMemory){this.intentRetriever=new IntentMemoryRetriever(intentMemory,text=>llm.embed(text));this.retrieverStore=intentMemory;}
   }
   /** Transitional access for AgentLoop; it does not expose planning/orchestration. */
   agentProvider(){return this.llm;}
   async plan(userText:string,context:LLMMessage[]=[],signal?:AbortSignal,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Promise<Plan>{
+    this.lastMemoryDecisionCandidates=[];
     const tools=availableTools??this.toolDescriptors();
     const preferenceIntent=deterministicEmailPreferenceIntent(userText);
     if(preferenceIntent)return{origin:"fast",intent:preferenceIntent,uiFlow:"email_mailbox_preferences"};
@@ -72,7 +75,10 @@ export class AgentPlanner{
     }
     const local=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});if(local?.tool&&/^\s*\[\[NEXO_TOOL:(?:browser_download|browser_click|browser_type)\]\]/.test(userText))return withPresentationPolicy({...local,origin:"fast"});const semantic=mustUseSemanticOrchestrator(userText,previous,local);if(local&&!semantic)return withPresentationPolicy({...local,origin:"fast"});if(!semantic&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};if(!semantic)return this.legacyToolPlan(userText,context,signal);
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
-    if(learned.length)this.activeMetrics()?.record("intent.memory.candidate_used",learned.length,{domain:hint?.domain??"unknown"});
+    if(learned.length){
+      this.activeMetrics()?.record("intent.memory.candidate_used",learned.length,{domain:hint?.domain??"unknown"});
+      this.lastMemoryDecisionCandidates=learned.map(item=>({source:"intent_memory",domain:item.intent.domain==="document"?"documents":item.intent.domain,operation:item.intent.operation,entities:item.intent.entities??{},missing:item.intent.missing??[],ambiguities:[],confidence:item.score,mutatesState:item.intent.requiresConfirmation,evidence:[`memory:${item.source}`,`successes:${item.verifiedSuccessCount}`,`failures:${item.failureCount}`]}));
+    }
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     if(learned.length&&learned[0].intent.operation!==interpreted.operation)this.activeMetrics()?.record("intent.memory.candidate_rejected",1,{suggested:learned[0].intent.operation,selected:interpreted.operation});
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
@@ -81,6 +87,7 @@ export class AgentPlanner{
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
+  memoryDecisionCandidates(){return structuredClone(this.lastMemoryDecisionCandidates);}
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult){

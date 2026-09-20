@@ -314,7 +314,23 @@ export class CommandService {
     }
   }
 
-  recordOutcome(status:"success"|"partial"|"failed"|"needs_clarification"){
+  recordPlannerDecision(plan:{tool?:string;steps?:Array<{tool:string;input:Record<string,unknown>}>;intent?:AgentIntent},memoryCandidates:import("../agent/decision/types.js").DecisionCandidate[]=[]){
+    if(!this.lastTrace)return;
+    for(const candidate of memoryCandidates)if(!this.lastTrace.intentCandidates.some(item=>item.source==="intent_memory"&&item.domain===candidate.domain&&item.operation===candidate.operation))this.lastTrace.intentCandidates.push(candidate);
+    const step=plan.steps?.[0]??(plan.tool?{tool:plan.tool,input:{}}:undefined);
+    if(step){
+      const route:CommandRoute={type:"tool",tool:step.tool,input:step.input??{},intent:plan.intent};
+      const candidate=candidateFromCommandRoute(route,"planner",plan.intent?.confidence??.8);
+      if(candidate){this.lastTrace.intentCandidates.push(candidate);this.lastTrace.selected=candidate;this.lastTrace.finalTool=step.tool;this.lastTrace.confidence=candidate.confidence;}
+    }
+    this.accuracy?.traceStore?.save(this.lastTrace);
+  }
+  recordAgentDecision(toolName:string,input:Record<string,unknown>={}){
+    if(!this.lastTrace)return;
+    const candidate=candidateFromCommandRoute({type:"tool",tool:toolName,input},"planner",.8);
+    if(candidate){this.lastTrace.intentCandidates.push(candidate);this.lastTrace.selected=candidate;this.lastTrace.finalTool=toolName;this.lastTrace.confidence=candidate.confidence;this.accuracy?.traceStore?.save(this.lastTrace);}
+  }
+    recordOutcome(status:"success"|"partial"|"failed"|"needs_clarification"){
     if(!this.lastTrace)return;
     this.lastTrace.outcome={status};
     this.accuracy?.traceStore?.save(this.lastTrace);
