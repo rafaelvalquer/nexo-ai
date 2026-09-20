@@ -197,3 +197,30 @@ test("filesystem search remains available with Documents disabled",async()=>{
     expect(ollama.stats().structuredCalls).toBe(0);
   }finally{await app.close();await new Promise<void>(resolve=>ollama.server.close(()=>resolve()));fs.rmSync(dataDir,{recursive:true,force:true});fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test("Refinamento V2 nunca envia arquivo local com typo para WebIntentResolver",async()=>{
+  test.setTimeout(150_000);
+  const root=fs.mkdtempSync(path.join(process.cwd(),".nexo-refinement-v2-filesystem-web-veto-")),downloads=path.join(root,"Downloads");fs.mkdirSync(downloads,{recursive:true});
+  const target=path.join(downloads,"teste123.txt");fs.writeFileSync(target,"original","utf8");
+  const ollama=await startOllama(prompt=>prompt.includes("teste123.txt")
+    ?{schemaVersion:1,domain:"filesystem",intent:"update",operation:"write_text_file",entities:{file:"teste123.txt",folder:"downloads",content:"rafael alterei"},referencesPreviousResult:false,ambiguities:[],missing:[],modelConfidence:.99}
+    :undefined);
+  const {app,page,dataDir}=await launchApp("nexo-refinement-v2-veto",ollama.url,root,downloads);
+  try{
+    const task=await runPrompt(page,"Refinement V2 typo","altere o arqquivo teste123.txt na pasta download para rafael alterei");
+    await expect.poll(()=>page.evaluate((id:string)=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("waiting_approval");
+    expect(fs.readFileSync(target,"utf8")).toBe("original");
+    const status=await page.evaluate(()=>window.nexo.status());
+    expect((status as any).agentDiagnostics?.hybridIntent?.webIntent?.invoked).toBe(false);
+    expect((status as any).agentDiagnostics?.hybridIntent?.hybrid?.operation).toBe("write_text_file");
+    expect((status as any).agentDiagnostics?.hybridIntent?.routing).toMatchObject({source:"hybrid",operation:"write_text_file",tool:"find_file"});
+    expect(ollama.stats().structuredCalls).toBe(1);
+    const approval=await page.evaluate(()=>window.nexo.listApprovals().then(rows=>rows.find((row:any)=>row.status==="pending")));
+    expect(approval?.toolName).toBe("write_text_file");
+    expect(approval?.input).toMatchObject({path:target,content:"rafael alterei"});
+    await page.evaluate(id=>window.nexo.resolveApproval(id,true),approval!.id);
+    await expect.poll(()=>page.evaluate((id:string)=>window.nexo.getTask(id).then(item=>item?.status),task.id),{timeout:30_000}).toBe("completed");
+    expect(fs.readFileSync(target,"utf8")).toBe("rafael alterei");
+  }finally{await app.close();await new Promise<void>(resolve=>ollama.server.close(()=>resolve()));fs.rmSync(dataDir,{recursive:true,force:true});fs.rmSync(root,{recursive:true,force:true});}
+});
