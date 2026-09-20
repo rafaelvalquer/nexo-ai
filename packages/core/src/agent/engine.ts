@@ -53,7 +53,7 @@ export class AgentEngine{
   private readonly directChat?:ChatService;
   private readonly agentGraphFactory?:()=>AgentGraph;
   private agentGraphInstance?:AgentGraph;
-  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager,records?:ExecutionRecordRepository,private readonly agentLoopMode:()=>"legacy"|"read_only"|"shadow"|"full"=()=>"legacy",private readonly approvalCoordinator?:ApprovalCoordinator,agentGraph?:AgentGraph|(()=>AgentGraph),private readonly legacyFallbackEnabled:()=>boolean=()=>false,private readonly reconciliation?:AgentReconciliationCoordinator,commandService?:CommandService,directChat?:ChatService,private readonly ensureToolCapability?:((toolName:string)=>Promise<void>),private readonly accuracy?:{outcomeVerifier?:OutcomeVerifier;outcomeEnabled?:()=>boolean}){this.commandService=commandService??new CommandService(registry,()=>permissions.allowedRoots());this.directChat=directChat;if(typeof agentGraph==="function")this.agentGraphFactory=agentGraph;else this.agentGraphInstance=agentGraph;this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections,name=>this.security?.isToolEnabled(name)??true);this.actionExecutor=new ActionExecutor(registry,permissions,audit,{security,metrics,resources,records,connections});if(runtime)this.clarifications=new ClarificationService(new ClarificationRepository(runtime),new ClarificationResolver(permissions));}
+  constructor(private planner:AgentPlanner,private registry:ToolRegistry,private permissions:PermissionEngine,private approvals:ApprovalService,private audit:AuditService,private connections?:ConnectionService,private runtime?:AgentRuntime,private security?:SecurityPolicyService,private metrics?:LocalMetricsService,private resources?:ResourceManager,records?:ExecutionRecordRepository,private readonly agentLoopMode:()=>"legacy"|"read_only"|"shadow"|"full"=()=>"legacy",private readonly approvalCoordinator?:ApprovalCoordinator,agentGraph?:AgentGraph|(()=>AgentGraph),private readonly legacyFallbackEnabled:()=>boolean=()=>false,private readonly reconciliation?:AgentReconciliationCoordinator,commandService?:CommandService,directChat?:ChatService,private readonly ensureToolCapability?:((toolName:string)=>Promise<void>),private readonly accuracy?:{outcomeVerifier?:OutcomeVerifier;outcomeEnabled?:()=>boolean}){this.commandService=commandService??new CommandService(registry,()=>permissions.allowedRoots());this.directChat=directChat;if(typeof agentGraph==="function")this.agentGraphFactory=agentGraph;else this.agentGraphInstance=agentGraph;this.toolCatalog=new CapabilityAwareToolCatalog(registry,connections,name=>this.security?.isToolEnabled(name)??true);this.actionExecutor=new ActionExecutor(registry,permissions,audit,{security,metrics,resources,records,connections});if(runtime)this.clarifications=new ClarificationService(new ClarificationRepository(runtime),new ClarificationResolver(permissions),metrics);}
   setConnections(connections?:ConnectionService){this.connections=connections;this.toolCatalog.setConnections(connections);this.actionExecutor.setConnections(connections);}
 
   async run(userText:string,hooks:AgentRunHooks={},context:LLMMessage[]=[]):Promise<AgentReply>{
@@ -61,6 +61,7 @@ export class AgentEngine{
     const shadowStarted=Date.now(),shadow=this.agentLoopMode()==="shadow"?new ShadowAgent(this.planner.agentProvider(),this.toolCatalog).decide(userText,context.map(message=>({...message,trust:"TRUSTED_LOCAL" as const})),hooks.signal).catch(()=>({kind:"invalid" as const,toolSequence:[] as [],intendedOutcome:"invalid" as const})):undefined;
     const conversationId=hooks.visualContext?.conversationId;
     const previous=this.runtime?.getConversationActionContext(conversationId);
+    this.planner.recordCorrectionSignal(previous,userText);
     const resolvedUserText=resolveSimpleCoreference(userText,previous);
     if(conversationId&&this.clarifications){
       const current=this.clarifications.pending(conversationId);
@@ -112,7 +113,7 @@ export class AgentEngine{
     // Command routing has a single production entry point. Safety, exact
     // deterministic routes, Hybrid interpretation and legacy compatibility are
     // internal CommandService concerns; AgentEngine only consumes CommandRoute.
-    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal).catch(()=>({type:"unknown"} as CommandRoute));
+    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal,{conversationId}).catch(()=>({type:"unknown"} as CommandRoute));
     this.recordCommandRoute(commandRoute);
     const commandReply=await this.handleCommandRoute(resolvedUserText,commandRoute,hooks,context,conversationId);
     if(commandReply)return commandReply;

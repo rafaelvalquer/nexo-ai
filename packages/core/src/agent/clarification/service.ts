@@ -7,16 +7,20 @@ import { ClarificationResolver,type ClarificationAnswer } from "./resolver.js";
 import type { ClarificationAttempt,ClarificationResume,PendingClarification } from "./types.js";
 import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
 import { normalizeRecipients } from "../../email/compose/normalizer.js";
+import type {LocalMetricsService} from "../../observability/metrics.js";
 
 const KNOWN_FOLDERS = new Set(["downloads", "documents", "desktop"]);
 
 export class ClarificationService {
-  constructor(private readonly repository: ClarificationRepository, private readonly resolver: ClarificationResolver) {}
+  constructor(private readonly repository: ClarificationRepository, private readonly resolver: ClarificationResolver,private readonly metrics?:LocalMetricsService) {}
 
   create(conversationId: string, originalRequest: string, intent: AgentIntent) {
     const missing = intent.missing?.filter(Boolean) ?? [];
     const field = missing[0];
     if (!field) throw new Error("Não há campo faltante para esclarecer.");
+    const existing=(intent.entities as Record<string,unknown>)[field];
+    if(existing!==undefined&&existing!==null&&existing!==""){this.metrics?.record("intent.clarification.unnecessary",1,{field,operation:intent.operation});throw new Error(`Clarification desnecessária: ${field} já está resolvido.`);}
+    this.metrics?.record("intent.clarification.created",1,{field,operation:intent.operation});
     const createdAt = new Date().toISOString();
     const record: PendingClarification = {
       id: randomUUID(), conversationId, domain: normalizeDomain(intent.domain), intent: intent.intent, operation: intent.operation, originalRequest,
