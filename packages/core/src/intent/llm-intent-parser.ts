@@ -36,6 +36,7 @@ export class LLMIntentParser implements IntentParser{
           messages,
           schema:modelIntentJsonSchemaFor(input.availableOperations,input.allowedDomains),
           schemaName:"NexoStructuredIntentV2",
+          maxAttempts:1,
           parse:value=>parseModelIntent(value)
         },signal);
         intent=toCanonicalIntent(parsed);
