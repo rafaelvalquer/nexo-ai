@@ -8,7 +8,7 @@ import { exponentialApproach, getAutonomousDrift, getAutonomousRotation, hexColo
 import { getTargetFrameInterval, lowerNeuralQuality, neuralQualityProfiles } from "./neuralPerformance";
 import { neuralStates } from "./neuralStates";
 import { ambientFragmentShader, ambientVertexShader, edgeFragmentShader, edgeVertexShader, nodeFragmentShader, nodeVertexShader, pulseFragmentShader, pulseVertexShader } from "./neuralShaders";
-import type { NeuralEdge, NeuralSceneProps, SynapticPulse } from "./types";
+import type { NeuralEdge, NeuralNode, NeuralSceneProps, SynapticPulse } from "./types";
 
 type ProgramInfo = {
   program: WebGLProgram;
@@ -120,7 +120,7 @@ function setColor(gl: WebGLRenderingContext, program: ProgramInfo, name: string,
   if (location) gl.uniform3fv(location,value);
 }
 
-function flattenNodes(nodes: ReturnType<typeof generateNeuralNodes>) {
+function flattenNodes(nodes: NeuralNode[]) {
   const positions=new Float32Array(nodes.length*3),phases=new Float32Array(nodes.length),weights=new Float32Array(nodes.length),regions=new Float32Array(nodes.length);
   nodes.forEach((node,index)=>{
     positions.set(node.position,index*3);
@@ -131,7 +131,7 @@ function flattenNodes(nodes: ReturnType<typeof generateNeuralNodes>) {
   return {positions,phases,weights,regions};
 }
 
-function flattenEdges(nodes: ReturnType<typeof generateNeuralNodes>, edges: NeuralEdge[]) {
+function flattenEdges(nodes: NeuralNode[], edges: NeuralEdge[]) {
   const count=edges.length*2,positions=new Float32Array(count*3),phases=new Float32Array(count),weights=new Float32Array(count),regions=new Float32Array(count);
   edges.forEach((edge,index)=>{
     const a=nodes[edge.source],b=nodes[edge.target],offset=index*6,vertex=index*2;
@@ -160,7 +160,7 @@ function nodeRadius(position: [number,number,number]) {
   return Math.hypot(position[0],position[1],position[2]);
 }
 
-export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQualityChange}: NeuralSceneProps) {
+export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQualityChange,onReady}: NeuralSceneProps) {
   const canvasRef=useRef<HTMLCanvasElement>(null);
   const propsRef=useRef({state,paused,onUnavailable,onQualityChange,onReady});
   const redrawRef=useRef<(()=>void)|undefined>(undefined);
