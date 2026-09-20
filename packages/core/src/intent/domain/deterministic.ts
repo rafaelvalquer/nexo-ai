@@ -5,7 +5,7 @@ export function deterministicDomainCandidates(text:string):DomainCandidate[]{
   if(/\b(e-?mail|gmail|caixa de entrada|remetente|mensagem)\b/.test(value))push("email",.99,"email_marker");
   if(/\b(agenda|calendario|compromisso|reuniao|evento|convite)\b/.test(value))push("calendar",.99,"calendar_marker");
   if(/\b(infomoney|g1|uol|terra|cnn|site|internet|web|noticias?|manchetes?)\b|https?:\/\//.test(value))push("web",.98,"web_marker");
-  if(/\b(clique|clicar|preencha|preencher|login|entrar na conta|baixar|download)\b/.test(value)&&/\b(site|pagina|navegador|web|http)/.test(value))push("browser",.97,"browser_interaction");
+  if(/\b(clique|clicar|preencha|preencher|login|entrar na conta|baixar|download)\b/.test(value)&&/\b(site|pagina|navegador|web|http)/.test(value))push("browser",.995,"browser_interaction");
   if(/\b(downloads?|documents?|documentos?|desktop|area de trabalho|arquivo|arquivos|pasta|pastas|diretorio)\b|\.[a-z0-9]{2,8}\b/.test(value))push("filesystem",.97,"filesystem_marker");
   if(/\b(resuma|resumir|analise|analisar|extraia|extrair)\b/.test(value)&&/\b(documento|pdf|docx|txt|arquivo)\b|\.(pdf|docx|doc|txt)\b/.test(value))push("documents",.995,"document_transform");
   if(/\b(processo|processos|cpu|memoria ram|disco|sistema|servico)\b/.test(value))push("system",.96,"system_marker");

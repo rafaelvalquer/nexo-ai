@@ -76,7 +76,7 @@ export class AgentPlanner{
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     if(learned.length&&learned[0].intent.operation!==interpreted.operation)this.activeMetrics()?.record("intent.memory.candidate_rejected",1,{suggested:learned[0].intent.operation,selected:interpreted.operation});
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
-    const contextual=applyUnifiedContext(enriched,userText,previous);
+    const contextual=applyUnifiedContext(enriched,userText,previous,this.activeMetrics());
     const intent=validateIntentRequirements(contextual);
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
@@ -123,12 +123,13 @@ function mustUseSemanticOrchestrator(text:string,previous:ConversationActionCont
 function isLikelyConversation(text:string){const normalized=text.trim().toLowerCase();if(/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized))return true;const computerResource=/\b(arquivos?|pastas?|navegador|aplicativo|programa|processo|disco|mem[oó]ria|downloads?|desktop|documentos?|documents?)\b|\.[a-z0-9]{2,8}\b|\b[a-z]:[\\/]|\\\\/i.test(normalized);if(computerResource)return false;const hasComputerAction=/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized);if(hasComputerAction)return false;if(/^\s*(oi|ol[aá]|bom dia|boa tarde|boa noite)\b/i.test(normalized))return true;if(/^\s*(quem|o que|oque|como|por que|porque|qual|quais|quando|onde|explique|resuma|conte|escreva|diga|pode me explicar)\b/i.test(normalized))return true;return true;}
 function domainFromName(name:string){if(name.startsWith("email_"))return"email";if(name.startsWith("calendar_"))return"calendar";if(name.startsWith("browser_"))return"browser";if(name.startsWith("memory_"))return"memory";if(/file|folder/.test(name))return"filesystem";return"system";}
 
-function applyUnifiedContext(intent:AgentIntent,text:string,previous?:ConversationActionContextState):AgentIntent{
+function applyUnifiedContext(intent:AgentIntent,text:string,previous?:ConversationActionContextState,metrics?:LocalMetricsService):AgentIntent{
   if(!previous)return intent;
   const snapshot=contextSnapshotFromActionState({conversationId:"current",turn:0,state:previous});
   const context=new ContextResolver().resolve(text,snapshot);
   if(!Object.keys(context.entities).length)return intent;
   const resolved=new EntityResolverV2().resolve({operation:intent.operation,text,llmEntities:intent.entities as Record<string,unknown>,contextEntities:context.entities as any});
+  for(const [key,entity] of Object.entries(resolved.entities)){const contextValue=context.entities[key]?.value;if(entity.source==="user"&&contextValue!==undefined&&contextValue!==entity.value)metrics?.record("intent.memory.context_override",1,{field:key,operation:intent.operation});}
   const entities=Object.fromEntries(Object.entries(resolved.entities).map(([key,entity])=>[key,entity.value]));
   const referencesPreviousResult=context.evidence.some(item=>item.source==="previous_result")||intent.referencesPreviousResult;
   const missing=intent.domain==="filesystem"&&resolved.missing.length?resolved.missing:intent.missing;
