@@ -99,7 +99,6 @@ export class CommandService {
         webOverrideReason=webConflict.reason;
         diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:false,rejectedReason:webConflict.reason};
         this.web?.metrics?.record("web.intent.route_override",1,{candidate:routeLabel(exact),reason:webConflict.reason??"web_goal"});
-        if(exact.type==="tool"&&exact.tool==="browser_open")this.web?.metrics?.record("web.intent.browser_open_false_positive",1);
       }else{
         const conflict=this.conflictGuard.evaluate(text,exact);
         diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
