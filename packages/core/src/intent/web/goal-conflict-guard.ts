@@ -11,7 +11,7 @@ export class WebGoalConflictGuard{
     return{accepted:true};
   }
 }
-export function hasInformationGoal(text:string){return /\b(pesquis|procure|busque|consulte|traga|mostre|diga|informe|resum|explique|descubra|not[ií]cias?|manchetes?|novidades|destaques?|principais)\b|\bo que saiu\b|\bultim[ao]s? releases?\b/i.test(text);}
+export function hasInformationGoal(text:string){return /\b(?:pesquis(?:e|ar|a|ando)?|procur(?:e|ar|a)?|busqu(?:e|ar|a)?|consult(?:e|ar|a)?|trag(?:a|er)|mostr(?:e|ar|a)|diga|informe|resum(?:a|ir|e)|expliqu(?:e|ar)|descubr(?:a|ir)|veja|not[ií]cias?|manchetes?|novidades|destaques?|principais)\b|\bo que saiu\b|\b[úu]ltim[ao]s?\s+releases?\b/i.test(text);}
 export function hasInteractionGoal(text:string){return /\b(clique|clicar|preencha|preencher|digite|digitar|baixe|baixar|download|selecione|selecionar|adicione|adicionar|envie|enviar)\b|\bfa[cç]a\s+login\b|\blog(?:in|ar)\b/i.test(text);}
 export function requiresPersonalSession(text:string){return /\b(minha\s+conta|meu\s+perfil|sess[aã]o\s+salva|autenticad[oa])\b/i.test(text);}
 export function requiresResearch(text:string){return hasInformationGoal(text)&&!/\b(?:s[oó]\s+)?(?:links?|resultados?\s+da\s+busca)\b/i.test(text);}
