@@ -21,6 +21,9 @@ async function coreWithAccount(id: string, provider: "google" | "microsoft") {
   await core.ready();
   core.updateSettings({ connectionsEnabled: true });
   await core.ensureConnections();
+  // Preference tests do not exercise provider I/O; keep the persisted-connection path real
+  // while preventing saveEmailSearchPreferences() from refreshing the live Dashboard.
+  (core as any).dashboardRefresh = async () => ({});
   return core;
 }
 
