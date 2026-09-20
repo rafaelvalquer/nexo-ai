@@ -9,10 +9,10 @@ export type GlobalDecisionResult={selectedCandidate?:DecisionCandidate;confidenc
 
 export class GlobalDecisionArbiter{
  constructor(private readonly veto=new HardVetoMatrix()){}
- decide(input:{userText:string;candidates:DecisionCandidate[];domainEvidence:DomainEvidenceSnapshot;expectedDomain?:string;context?:ContextEvidence[];goalByKey?:Map<string,GoalSatisfaction>;failurePenaltyByKey?:Map<string,number>}):GlobalDecisionResult{
+ decide(input:{userText:string;candidates:DecisionCandidate[];domainEvidence:DomainEvidenceSnapshot;expectedDomain?:string;context?:ContextEvidence[];goalByKey?:Map<string,GoalSatisfaction>;failurePenaltyByKey?:Map<string,number>;hardVetoEnabled?:boolean}):GlobalDecisionResult{
   const rejected:GlobalDecisionResult["rejectedCandidates"]=[],scored:Array<{candidate:DecisionCandidate;score:number}>=[];
   for(const candidate of dedupe(input.candidates)){
-   const veto=this.veto.evaluate(input.userText,candidate,input.domainEvidence);
+   const veto=input.hardVetoEnabled===false?{veto:false}:this.veto.evaluate(input.userText,candidate,input.domainEvidence);
    if(veto.veto){rejected.push({candidate,reason:veto.reason??"HARD_VETO"});continue;}
    const goal=input.goalByKey?.get(key(candidate))??{status:"unknown",score:.7} as GoalSatisfaction;
    if(goal.status==="unsatisfied"){rejected.push({candidate,reason:goal.reason??"GOAL_NOT_SATISFIED"});continue;}
