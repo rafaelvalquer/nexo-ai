@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Paperclip, Reply } from "lucide-react";
+import { Mail, Paperclip, Reply, Trash2 } from "lucide-react";
 import { useAppStore } from "../../../stores/app";
 import { NexoDrawer } from "../../ui/NexoDrawer";
 import { GadgetLoadingState } from "./GadgetLoadingState";
@@ -21,24 +21,28 @@ type Message = {
   hasAttachments: boolean;
 };
 
-export function EmailGadget({ data }: { data?: DashboardEmailData }) {
+type EmailDrawerAction =
+  | { type: "reply"; approvalId?: string }
+  | { type: "trash"; approvalId?: string }
+  | undefined;
+
+export function EmailGadget({ data, onRefresh }: { data?: DashboardEmailData; onRefresh?: () => Promise<void> | void }) {
   const diagnostics=useDeveloperDiagnosticsEnabled();
   const setPage = useAppStore(state => state.setPage);
   const [selected, setSelected] = useState<Message>();
   const [full, setFull] = useState<any>();
-  const [replying, setReplying] = useState(false);
+  const [action, setAction] = useState<EmailDrawerAction>();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [approvalId, setApprovalId] = useState<string>();
 
   async function open(message: Message) {
     if (!data || data.available === false) return;
     setSelected(message);
     setFull(undefined);
     setError("");
-    setReplying(false);
-    setApprovalId(undefined);
+    setAction(undefined);
+    setBody("");
     try {
       setFull(await window.nexo.dashboard.getEmailMessage(data.connectionId, message.id));
     } catch (reason) {
@@ -47,12 +51,12 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
   }
 
   async function send() {
-    if (!data || data.available === false) return;
+    if (!data || data.available === false || action?.type !== "reply") return;
     if (!selected || !body.trim()) return;
     setBusy(true);
     setError("");
     try {
-      if (!approvalId) {
+      if (!action.approvalId) {
         const result = await window.nexo.dashboard.replyEmail({
           connectionId: data.connectionId,
           messageId: selected.id,
@@ -60,18 +64,17 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
           bodyText: body
         });
         if (result.approvalId) {
-          setApprovalId(result.approvalId);
+          setAction({type:"reply",approvalId:result.approvalId});
           return;
         }
         if (!result.result?.ok) throw new Error(result.text ?? "Não foi possível preparar a resposta.");
       } else {
-        await window.nexo.resolveApproval(approvalId, true);
+        await window.nexo.resolveApproval(action.approvalId, true);
       }
       setBody("");
-      setReplying(false);
+      setAction(undefined);
       setSelected(undefined);
       setFull(undefined);
-      setApprovalId(undefined);
     } catch (reason) {
       setError(userFacingError(reason,"Não foi possível enviar a resposta. Confira o conteúdo e tente novamente.",diagnostics));
     } finally {
@@ -79,12 +82,55 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
     }
   }
 
-  async function cancelReply() {
-    if (approvalId) {
-      try { await window.nexo.resolveApproval(approvalId, false); } catch { /* Keep the editor usable if the approval already expired. */ }
+  async function cancelAction() {
+    if (action?.approvalId) {
+      try { await window.nexo.resolveApproval(action.approvalId, false); } catch { /* Approval may already be expired. */ }
     }
-    setApprovalId(undefined);
-    setReplying(false);
+    setAction(undefined);
+    setBody("");
+  }
+
+  async function beginTrash() {
+    if (!data || data.available === false || !data.canModify || !selected) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await window.nexo.dashboard.trashEmail({
+        connectionId: data.connectionId,
+        messageId: selected.id
+      });
+      if (result.approvalId) {
+        setAction({type:"trash",approvalId:result.approvalId});
+        return;
+      }
+      if (!result.result?.ok) throw new Error(result.text ?? "Não foi possível preparar a exclusão.");
+      await onRefresh?.();
+      setAction(undefined);
+      setSelected(undefined);
+      setFull(undefined);
+    } catch (reason) {
+      setError(userFacingError(reason,"Não foi possível mover esse e-mail para a lixeira. Verifique a conexão e tente novamente.",diagnostics));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmTrash() {
+    if (action?.type !== "trash" || !action.approvalId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await window.nexo.resolveApproval(action.approvalId, true);
+      await onRefresh?.();
+      setAction(undefined);
+      setSelected(undefined);
+      setFull(undefined);
+    } catch (reason) {
+      setAction({type:"trash"});
+      setError(userFacingError(reason,"Não foi possível mover esse e-mail para a lixeira. Verifique a conexão e tente novamente.",diagnostics));
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!data) {
@@ -98,6 +144,9 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
     </div>;
   }
 
+  const trashDisabled=!data.canModify||busy;
+  const trashTitle=!data.canModify?"Ative a permissão Alterar e-mails nas conexões.":undefined;
+
   return <>
     <div className="emailGadget">
       <header><Mail size={14}/><b>Caixa de entrada</b><span>{data.unreadCount} não lidos</span></header>
@@ -110,7 +159,7 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
     </div>
     <NexoDrawer
       open={Boolean(selected)}
-      onClose={() => { if (!busy) { if (approvalId) void cancelReply(); setSelected(undefined); } }}
+      onClose={() => { if (!busy) { if (action?.approvalId) void cancelAction(); setSelected(undefined); setFull(undefined); setAction(undefined); } }}
       eyebrow="E-MAIL · PRÉVIA LOCAL"
       title={full?.subject ?? selected?.subject ?? "Mensagem"}
       className="dashboardEmailDrawer"
@@ -119,14 +168,27 @@ export function EmailGadget({ data }: { data?: DashboardEmailData }) {
         <div className="emailDrawerMeta">{selected.from.name ?? selected.from.email} · {new Date(selected.receivedAt).toLocaleString("pt-BR")}</div>
         <pre className="emailDrawerBody">{full?.bodyText ?? full?.snippet ?? "Carregando mensagem…"}</pre>
         {error && <p role="alert">{error}</p>}
-        {replying ? <form className="emailDrawerReply" onSubmit={event => { event.preventDefault(); void send(); }}>
+        {action?.type === "reply" ? <form className="emailDrawerReply" onSubmit={event => { event.preventDefault(); void send(); }}>
           <label>Sua resposta<textarea autoFocus value={body} onChange={event => setBody(event.target.value)} maxLength={100000}/></label>
-          <small>{approvalId ? "Prévia pronta. Confirme abaixo para autorizar o envio." : `A resposta será enviada para ${selected.from.email}, na conversa original. O Nexo solicitará aprovação antes do envio.`}</small>
+          <small>{action.approvalId ? "Prévia pronta. Confirme abaixo para autorizar o envio." : `A resposta será enviada para ${selected.from.email}, na conversa original. O Nexo solicitará aprovação antes do envio.`}</small>
           <footer>
-            <button type="button" onClick={() => void cancelReply()} disabled={busy}>Cancelar</button>
-            <button type="submit" disabled={busy || !body.trim()}>{busy ? "Processando…" : approvalId ? "Aprovar e enviar resposta" : "Revisar resposta"}</button>
+            <button type="button" onClick={() => void cancelAction()} disabled={busy}>Cancelar</button>
+            <button type="submit" disabled={busy || !body.trim()}>{busy ? "Processando…" : action.approvalId ? "Aprovar e enviar resposta" : "Revisar resposta"}</button>
           </footer>
-        </form> : <footer className="emailDrawerActions"><button type="button" onClick={() => { setBody(""); setReplying(true); }}>Responder <Reply size={14}/></button></footer>}
+        </form> : action?.type === "trash" ? <div className="emailDrawerTrashConfirm">
+          <p>Este e-mail será movido para a lixeira da sua conta.</p>
+          <footer>
+            <button type="button" onClick={() => void cancelAction()} disabled={busy}>Cancelar</button>
+            <button type="button" className="emailDrawerDanger" onClick={() => action.approvalId ? void confirmTrash() : void beginTrash()} disabled={busy}>
+              {busy ? "Processando…" : "Mover para a lixeira"} <Trash2 size={14}/>
+            </button>
+          </footer>
+        </div> : <footer className="emailDrawerActions">
+          <button type="button" onClick={() => { setBody(""); setAction({type:"reply"}); }}>Responder <Reply size={14}/></button>
+          <button type="button" className="emailDrawerDanger" disabled={trashDisabled} title={trashTitle} onClick={() => void beginTrash()}>
+            Excluir <Trash2 size={14}/>
+          </button>
+        </footer>}
       </>}
     </NexoDrawer>
   </>;
