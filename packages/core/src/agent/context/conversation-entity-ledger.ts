@@ -4,20 +4,21 @@ import type { ConversationEntity } from "../resolution/entity-reference-resolver
 
 export class ConversationEntityLedger{
   constructor(private readonly db:NexoDatabase,private readonly maxEntries=100){}
-  list(conversationId:string,kind?:ConversationEntity["kind"]){const all=this.load(conversationId);return(kind?all.filter(item=>item.kind===kind):all).map((item,index)=>({...item,ordinal:index+1}));}
-  record(conversationId:string,observation:AgentObservation){
+  list(conversationId:string,kind?:ConversationEntity["kind"],currentTurn?:number){const all=this.load(conversationId);return(kind?all.filter(item=>item.kind===kind):all).map((item,index)=>({...item,ordinal:index+1,...(currentTurn!==undefined&&item.observedAtTurn!==undefined?{turnAge:Math.max(0,currentTurn-item.observedAtTurn)}:{})}));}
+  record(conversationId:string,observation:AgentObservation,turn=0){
     const discovered=discover(observation.data,observation.toolName);
     if(!discovered.length)return;
     const current=this.load(conversationId);
     const observed=[] as ConversationEntity[];
     for(const item of discovered){
       const existing=current.find(candidate=>candidate.kind===item.kind&&candidate.id===item.id);
-      const normalized={...(existing??{}),...item,ordinal:1};
+      const normalized={...(existing??{}),...item,ordinal:1,observedAtTurn:turn||(existing?.observedAtTurn??0),lastUsedAtTurn:turn||(existing?.lastUsedAtTurn??0)};
       if(!observed.some(candidate=>candidate.kind===normalized.kind&&candidate.id===normalized.id))observed.push(normalized);
     }
     const remaining=current.filter(candidate=>!observed.some(item=>item.kind===candidate.kind&&item.id===candidate.id));
     this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`entity-ledger:${conversationId}`,JSON.stringify([...observed,...remaining].slice(0,this.maxEntries))]);
   }
+  touch(conversationId:string,entity:Pick<ConversationEntity,"kind"|"id">,turn:number){const current=this.load(conversationId);const next=current.map(item=>item.kind===entity.kind&&item.id===entity.id?{...item,lastUsedAtTurn:turn}:item);this.db.run("INSERT OR REPLACE INTO application_state(key,value) VALUES(?,?)",[`entity-ledger:${conversationId}`,JSON.stringify(next)]);}
   clear(conversationId:string){this.db.run("DELETE FROM application_state WHERE key=?",[`entity-ledger:${conversationId}`]);}
   private load(conversationId:string):ConversationEntity[]{const row=this.db.get<{value:string}>("SELECT value FROM application_state WHERE key=?",[`entity-ledger:${conversationId}`]);if(!row)return[];try{const value=JSON.parse(row.value);return Array.isArray(value)?value:[];}catch{return[];}}
 }

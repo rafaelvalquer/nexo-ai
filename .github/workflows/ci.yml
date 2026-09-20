@@ -30,7 +30,7 @@ jobs:
           - 11434:11434
     env:
       NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL || 'http://127.0.0.1:11434' }}
-      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:4b' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,8 +58,8 @@ jobs:
           - 11434:11434
     env:
       NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL || 'http://127.0.0.1:11434' }}
-      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
-      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:4b' }}
+      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:4b' }}
       NEXO_INTENT_GATE_MODE: quality
       NEXO_INTENT_TIMEOUT_MS: "10000"
       NEXO_INTENT_HOSTED_P95_MAX_MS: "5000"
@@ -75,7 +75,7 @@ jobs:
         if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
         shell: bash
         env:
-          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:4b' }}
         run: bash scripts/ci/pull-ollama-model.sh
       - name: Hybrid intent quality gate
         run: pnpm eval:intents:hybrid
@@ -122,11 +122,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_INTENT_PERF_URL }}
-      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:0.6b' }}
-      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:0.6b' }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:4b' }}
+      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:4b' }}
       NEXO_INTENT_GATE_MODE: performance
       NEXO_INTENT_TIMEOUT_MS: "10000"
-      NEXO_INTENT_P95_MAX_MS: "1500"
+      NEXO_INTENT_P95_MAX_MS: "2500"
       NEXO_INTENT_REPORT_PATH: artifacts/hybrid-intent-performance.json
     steps:
       - uses: actions/checkout@v4

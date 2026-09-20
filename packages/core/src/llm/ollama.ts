@@ -45,7 +45,7 @@ export class OllamaProvider implements LLMProvider {
     intentModel?: string,
     private metrics?: LocalMetricsService
   ) {
-    this.intentModel = intentModel?.trim() || process.env.NEXO_INTENT_MODEL?.trim() || undefined;
+    this.intentModel = intentModel?.trim() || process.env.NEXO_INTENT_MODEL?.trim() || "qwen3:4b";
   }
 
   setModel(model: string) { this.model = model; }

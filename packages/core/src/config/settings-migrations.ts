@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 7;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 8;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -62,6 +62,19 @@ const migrations: SettingsMigration[] = [{
       outcomeVerifierEnabled: settings.outcomeVerifierEnabled ?? false,
       intentLearningV2Enabled: settings.intentLearningV2Enabled ?? false,
       settingsSchemaVersion: 7 };
+  }
+}, {
+  version: 8,
+  migrate(settings) {
+    return { ...settings,
+      agentLoopMode: settings.agentLoopModeExplicitlySelected === true ? settings.agentLoopMode : "full",
+      decisionRefinerEnabled: true,
+      decisionRefinerShadowMode: false,
+      contextResolverV2Enabled: true,
+      goalSatisfactionEnabled: true,
+      outcomeVerifierEnabled: true,
+      intentLearningV2Enabled: true,
+      settingsSchemaVersion: 8 };
   }
 }];
 

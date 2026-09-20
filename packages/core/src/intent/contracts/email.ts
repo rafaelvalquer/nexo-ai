@@ -1,0 +1,2 @@
+import {contract} from "./types.js";
+export const emailIntentContracts={email_latest:contract("list",[],["limit","mailbox"]),email_search:contract("find",["query"],["mailbox","limit"]),email_read:contract("read",["messageId"]),email_send:contract("update",["to","subject","body"],["cc","bcc"]),email_reply:contract("update",["messageId","body"]),email_archive:contract("update",["messageId"]),email_trash:contract("delete",["messageId"])} as const;

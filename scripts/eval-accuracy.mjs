@@ -4,7 +4,7 @@ import {fileURLToPath} from "node:url";
 import {deterministicDomainCandidates} from "../packages/core/dist/intent/domain/deterministic.js";
 import {deterministicWebIntent} from "../packages/core/dist/intent/web/resolver.js";
 import {deterministicFilesystemIntent} from "../packages/core/dist/agent/orchestrator/filesystem-intent-enricher.js";
-import {EntityResolverV2} from "../packages/core/dist/intent/entities/resolver.js";
+import {EntityResolverV3} from "../packages/core/dist/intent/entities/resolver.js";
 import {ContextResolver} from "../packages/core/dist/agent/context/context-resolver.js";
 import {GoalSatisfactionEvaluator} from "../packages/core/dist/agent/decision/goal-satisfaction.js";
 import {targetedClarification} from "../packages/core/dist/agent/clarification/targeted-clarification.js";
@@ -33,7 +33,7 @@ if(scope==="all"||scope==="operation"){
  }
 }
 if(scope==="all"||scope==="entities"){
- const resolver=new EntityResolverV2();
+ const resolver=new EntityResolverV3();
  for(const row of load("entities")){const result=resolver.resolve({operation:row.operation,text:row.text,llmEntities:row.llm,contextEntities:row.context,currentTurnEntities:row.current,memoryEntities:row.memory});let ok=true;for(const[k,v]of Object.entries(row.expect??{}))ok&&=result.entities[k]?.value===v;for(const k of row.reject??[]){const rejected=result.entities[k]===undefined&&result.rejected.includes(k);ok&&=rejected;if(!rejected)counters.unsafeExecution++;}check("entity",ok,{text:row.text,expected:row.expect??row.reject,actual:Object.fromEntries(Object.entries(result.entities).map(([k,v])=>[k,v.value])),rejected:result.rejected});}
 }
 if(scope==="all"||scope==="context"){
@@ -57,7 +57,7 @@ const wrongToolRate=counters.operation.total?counters.wrongTool/counters.operati
 const report={scope,domainAccuracy,operationAccuracy,entityAccuracy,contextResolution,goalSatisfaction,wrongToolRate,wrongMutation:counters.wrongMutation,unsafeExecution:counters.unsafeExecution,unnecessaryClarification,invalidSchemaRate:counters.invalidSchema,learningAccuracy:ratio("learning"),cases:Object.fromEntries(Object.entries(counters).filter(([,v])=>typeof v==="object").map(([k,v])=>[k,v.total])),failures};
 fs.mkdirSync(path.join(root,"artifacts"),{recursive:true});fs.writeFileSync(path.join(root,"artifacts/accuracy-eval.json"),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
-const gates={domainAccuracy:.99,operationAccuracy:.98,entityAccuracy:.97,contextResolution:.95,goalSatisfaction:.95,wrongToolRate:.005,unnecessaryClarification:.05,invalidSchemaRate:.01};
+const gates={domainAccuracy:.995,operationAccuracy:.99,entityAccuracy:.985,contextResolution:.98,goalSatisfaction:.98,wrongToolRate:.002,unnecessaryClarification:.02,invalidSchemaRate:.01};
 const failed=[];for(const[k,min]of Object.entries(gates)){if(["wrongToolRate","unnecessaryClarification","invalidSchemaRate"].includes(k)){if(report[k]>min)failed.push(`${k}=${report[k]} > ${min}`);}else if(report[k]<min)failed.push(`${k}=${report[k]} < ${min}`);}
 if(report.wrongMutation!==0)failed.push(`wrongMutation=${report.wrongMutation}`);if(report.unsafeExecution!==0)failed.push(`unsafeExecution=${report.unsafeExecution}`);
 if(failed.length){console.error("Accuracy gates failed:",failed.join(", "));process.exitCode=1;}

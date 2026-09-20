@@ -1,4 +1,4 @@
-export type ConversationEntity={kind:"email"|"file"|"document"|"event"|"page";id:string;label?:string;path?:string;ordinal:number};
+export type ConversationEntity={kind:"email"|"file"|"document"|"event"|"page";id:string;label?:string;path?:string;ordinal:number;observedAtTurn?:number;lastUsedAtTurn?:number;turnAge?:number};
 export interface EntityLedgerReader{list(conversationId:string,kind?:ConversationEntity["kind"]):ConversationEntity[];}
 
 const ORDINALS:Record<string,number>={primeiro:1,primeira:1,segundo:2,segunda:2,terceiro:3,terceira:3,quarto:4,quarta:4,quinto:5,quinta:5};
