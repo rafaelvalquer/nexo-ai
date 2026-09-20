@@ -11,3 +11,10 @@
 .dashboardEmailDrawer .nexoDrawerContent button:last-child:not([type=button]){border-color:var(--nexo-violet,#9483e8);background:var(--nexo-violet,#9483e8);color:#171322}
 .dashboardEmailDrawer .nexoDrawerContent button:disabled{opacity:.55;cursor:wait}
 @media(max-width:600px){.dashboardEmailDrawer{width:100vw}.emailDrawerBody{min-height:90px}}
+
+.emailDrawerTrashConfirm{display:grid;gap:10px}
+.emailDrawerTrashConfirm p{margin:0;color:var(--nexo-text-secondary,#aebbd0);font-size:12px}
+.emailDrawerTrashConfirm footer{display:flex;justify-content:flex-end;gap:8px}
+.dashboardEmailDrawer .nexoDrawerContent .emailDrawerDanger{border-color:var(--nexo-danger,#e96868);color:var(--nexo-danger,#e96868)}
+.dashboardEmailDrawer .nexoDrawerContent .emailDrawerDanger:not(:disabled):hover{background:color-mix(in srgb,var(--nexo-danger,#e96868) 12%,transparent)}
+.dashboardEmailDrawer .nexoDrawerContent .emailDrawerDanger:disabled{cursor:not-allowed}
