@@ -202,7 +202,7 @@ export class CommandService {
       diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
       if(structured.type!=="unknown"){
         const conflict=this.conflictGuard.evaluate(text,structured);
-        if(conflict.accepted)add(structured,"hybrid",resolverDiag?.confidence??.9);
+        if(conflict.accepted)add(structured,"hybrid",structured.type==="tool"?(structured.intent?.confidence??resolverDiag?.confidence??.9):(resolverDiag?.confidence??.9));
         else if(structured.type==="tool"){const candidate=candidateFromCommandRoute(structured,"hybrid",resolverDiag?.confidence??.9);if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
       }
     }else if(needsStructured&&!this.hybrid&&this.shouldInvokeWeb(text,domainEvidence,expectedDomain)){
