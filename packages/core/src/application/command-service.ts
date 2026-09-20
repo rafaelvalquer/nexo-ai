@@ -22,7 +22,7 @@ import {DecisionTraceStore} from "../agent/decision/decision-trace-store.js";
 import {GoalSatisfactionEvaluator,type GoalSatisfaction} from "../agent/decision/goal-satisfaction.js";
 import {DecisionRefiner} from "../agent/decision/decision-refiner.js";
 import {ContextResolver} from "../agent/context/context-resolver.js";
-import {contextSnapshotFromActionState} from "../agent/context/context-snapshot.js";
+import {ContextSnapshotBuilder} from "../agent/context/context-snapshot-builder.js";
 import {targetedClarification} from "../agent/clarification/targeted-clarification.js";
 import {DomainEvidenceBuilder,type DomainEvidenceSnapshot} from "../intent/domain/domain-evidence-builder.js";
 import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.js";
@@ -94,6 +94,8 @@ export class CommandService {
   private readonly domainEvidenceBuilder=new DomainEvidenceBuilder();
   private readonly globalArbiter=new GlobalDecisionArbiter();
   private readonly conversationTurns=new Map<string,number>();
+  private readonly contextObservedAt=new Map<string,{updatedAt:string;turn:number}>();
+  private readonly contextSnapshotBuilder=new ContextSnapshotBuilder();
 
   constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions,private readonly accuracy?:AccuracyCommandOptions) {}
 
@@ -119,7 +121,8 @@ export class CommandService {
 
     if(trace)for(const item of domainEvidence.items)trace.domainCandidates.push({source:"exact",domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence});
     if(this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
-      const snapshot=contextSnapshotFromActionState({conversationId:requestContext.conversationId??"current",turn,state:previous});
+      const previousResultTurnAge=this.previousResultTurnAge(requestContext.conversationId,previous,turn);
+      const snapshot=this.contextSnapshotBuilder.build({conversationId:requestContext.conversationId??"current",turn,state:previous,previousResultTurnAge});
       contextEvidence=this.accuracy.contextResolver.resolve(text,snapshot);if(trace)trace.contextUsed.push(...contextEvidence.evidence);
     }
 
@@ -200,6 +203,12 @@ export class CommandService {
 
   private nextConversationTurn(conversationId?:string){
     if(!conversationId)return 1;const next=(this.conversationTurns.get(conversationId)??0)+1;this.conversationTurns.set(conversationId,next);return next;
+  }
+  private previousResultTurnAge(conversationId:string|undefined,previous:ConversationActionContextState|undefined,currentTurn:number){
+    if(!conversationId||!previous?.updatedAt)return 0;
+    const known=this.contextObservedAt.get(conversationId);
+    if(!known||known.updatedAt!==previous.updatedAt){const observedAt=Math.max(1,currentTurn-1);this.contextObservedAt.set(conversationId,{updatedAt:previous.updatedAt,turn:observedAt});return Math.max(0,currentTurn-observedAt);}
+    return Math.max(0,currentTurn-known.turn);
   }
 
   /** Compatibility route retained for rollback/tests during the RC. */
