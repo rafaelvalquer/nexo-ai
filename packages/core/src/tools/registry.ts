@@ -25,13 +25,13 @@ import { NexoDatabase as DatabaseRuntime } from "../database/db.js";
 
 let activeToolRegistry: ToolRegistry | undefined;
 
-export type ToolRegistryOptions = { memory?:MemoryService;email?:EmailService;calendar?:CalendarService;browserSessions?:BrowserSessionManager;browserAgent?:BrowserAgentService;documents?:DocumentService;documentAssistant?:DocumentAssistantService;filesystemRoots?:()=>string[];permissions?:PermissionEngine;database?:NexoDatabase;onSearchProgress?:(event:{query:string;scannedEntries:number;scannedDirectories:number;matches:number;currentRoot:string})=>void;metric?:(name:string,value:number)=>void };
+export type ToolRegistryOptions = { memory?:MemoryService;email?:EmailService;calendar?:CalendarService;browserSessions?:BrowserSessionManager;browserAgent?:BrowserAgentService;documents?:DocumentService;documentAssistant?:DocumentAssistantService;filesystemRoots?:()=>string[];permissions?:PermissionEngine;database?:NexoDatabase;onSearchProgress?:(event:{query:string;scannedEntries:number;scannedDirectories:number;matches:number;currentRoot:string})=>void;metric?:(name:string,value:number,tags?:Record<string,string|number|boolean>)=>void };
 
 export class ToolRegistry {
   private tools = new Map<string,ToolDefinition>();
   constructor(options?:ToolRegistryOptions|MemoryService,email?:EmailService,calendar?:CalendarService,browserSessions?:BrowserSessionManager) {
     const configured=isOptions(options)?options:{memory:options as MemoryService|undefined,email,calendar,browserSessions};
-    const base=[...filesystemTools({roots:configured.filesystemRoots,permissions:configured.permissions,database:configured.database??DatabaseRuntime.activeDatabase(),onSearchProgress:configured.onSearchProgress,metric:configured.metric}),...systemTools(),...applicationTools(),...shellTools(),...browserTools(configured.browserSessions),...webReaderTools()];
+    const base=[...filesystemTools({roots:configured.filesystemRoots,permissions:configured.permissions,database:configured.database??DatabaseRuntime.activeDatabase(),onSearchProgress:configured.onSearchProgress,metric:configured.metric}),...systemTools(),...applicationTools(),...shellTools(),...browserTools(configured.browserSessions),...webReaderTools({metric:configured.metric})];
     const mem=configured.memory?memoryTools(configured.memory):[];
     this.register(...base,...mem,...(configured.email?emailTools(configured.email):[]),...(configured.calendar?calendarTools(configured.calendar):[]),...(configured.browserAgent?browserAgentTools(configured.browserAgent):[]),...(configured.documents&&configured.documentAssistant?documentTools(configured.documents,configured.documentAssistant,undefined,configured.filesystemRoots):[]));
     activeToolRegistry=this;
