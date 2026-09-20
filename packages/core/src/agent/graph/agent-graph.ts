@@ -12,6 +12,8 @@ import { executeNode } from "./nodes/execute.js";
 import { observeNode } from "./nodes/observe.js";
 import {verifyStepGoalNode} from "./nodes/verify-step-goal.js";
 import {verifyFinalGoalNode} from "./nodes/verify-final-goal.js";
+import {verifyGoalNode} from "./nodes/verify-goal.js";
+import {intentFeatureFlags} from "../../intent/feature-flags.js";
 import { reconcileNode } from "./nodes/reconcile.js";
 import { loopGuardNode } from "./nodes/loop-guard.js";
 import { finalizeNode } from "./nodes/finalize.js";
@@ -22,6 +24,9 @@ export class AgentGraph {
   constructor(private readonly checkpointer?: BaseCheckpointSaver,private readonly outcomeVerifier:OutcomeVerifier=new OutcomeVerifier()) {}
 
   async invoke(runId: string, handler: AgentTurnNodeHandler, previous?: AgentLoopState): Promise<AgentLoopState> {
+    const refinedProgress=intentFeatureFlags().outcomeProgressVerifierEnabled;
+    const stepVerifier=refinedProgress?verifyStepGoalNode(this.outcomeVerifier):verifyGoalNode(this.outcomeVerifier);
+    const finalVerifier=refinedProgress?verifyFinalGoalNode():async(state:any)=>({stage:"VERIFY_FINAL_GOAL" as const,loopState:state.loopState,error:state.error});
     const graph = new StateGraph(AgentGraphAnnotation)
       .addNode("bootstrap", bootstrapNode)
       .addNode("agent_turn", agentTurnNode(handler))
@@ -30,8 +35,8 @@ export class AgentGraph {
       .addNode("approval", approvalNode)
       .addNode("execute", executeNode)
       .addNode("observe", observeNode)
-      .addNode("verify_step_goal",verifyStepGoalNode(this.outcomeVerifier))
-      .addNode("verify_final_goal",verifyFinalGoalNode())
+      .addNode("verify_step_goal",stepVerifier)
+      .addNode("verify_final_goal",finalVerifier)
       .addNode("reconcile", reconcileNode)
       .addNode("loop_guard", loopGuardNode)
       .addNode("finalize", finalizeNode)
