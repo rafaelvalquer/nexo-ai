@@ -23,6 +23,9 @@ import {semanticMutationAllowed} from "./security/semantic-mutation-guard.js";
 import {ContextResolver} from "./context/context-resolver.js";
 import {contextSnapshotFromActionState} from "./context/context-snapshot.js";
 import {EntityResolverV2} from "../intent/entities/resolver.js";
+import type {GoalOutcome} from "./outcome/types.js";
+import {IntentLearningCoordinator} from "./intent-memory/learning-coordinator.js";
+import {isUserCorrection} from "./intent-memory/correction-capture.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata;executionId?:string};
 export type PlanOrigin="fast"|"llm";
@@ -30,13 +33,17 @@ export type Plan={tool?:string;input?:Record<string,unknown>;explanation?:string
 
 const fastRouter=new LegacyIntentRouter();
 const DETERMINISTIC_SAFE_TOOLS=new Set(["list_files","largest_files","search_files","find_file","memory_usage","disk_usage","system_info","process_list"]);
-const MUTATION_INTENTS=new Set<AgentIntent["intent"]>(["create","send","update","delete","move"]);
 let defaultIntentMemory:IntentMemoryStore|undefined;
 let defaultIntentLearningEnabled:()=>boolean=()=>true;
 let defaultIntentMetrics:LocalMetricsService|undefined;
+let defaultLearningCoordinator:IntentLearningCoordinator|undefined;
+let defaultLearningV2Enabled:()=>boolean=()=>false;
 
 export function configureDefaultIntentLearning(store:IntentMemoryStore,enabled:()=>boolean,metrics?:LocalMetricsService){
   defaultIntentMemory=store;defaultIntentLearningEnabled=enabled;defaultIntentMetrics=metrics;
+}
+export function configureVerifiedIntentLearning(coordinator:IntentLearningCoordinator,enabled:()=>boolean){
+  defaultLearningCoordinator=coordinator;defaultLearningV2Enabled=enabled;
 }
 
 export class AgentPlanner{
@@ -75,12 +82,18 @@ export class AgentPlanner{
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult){
-    const next=observeConversationActionContext(previous,userRequest,plan.intent,step,result),store=this.activeIntentMemory();
-    if(result.ok&&plan.intent?.status==="ready"&&store&&this.isIntentLearningEnabled()){
-      const tool=this.registry.get(step.tool),toolMutates=tool ? (tool.mutatesState ?? tool.risk!=="READ") : false,intentMutates=MUTATION_INTENTS.has(plan.intent.intent);
-      if(!intentMutates||toolMutates)store.remember(userRequest,plan.intent,toolMutates?"confirmed_execution":"successful_execution");
-      if(previous?.lastQuery&&/^\s*(n[aã]o\b|quis\s+dizer\b|corrigindo\b)/i.test(userRequest)&&(!intentMutates||toolMutates)){store.remember(previous.lastQuery,plan.intent,"user_correction");this.activeMetrics()?.record("intent.user_correction",1,{domain:plan.intent.domain});}
-    }return next;
+    return observeConversationActionContext(previous,userRequest,plan.intent,step,result);
+  }
+  recordVerifiedLearning(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult,outcome:GoalOutcome,confirmed=false){
+    const coordinator=defaultLearningCoordinator;
+    if(!coordinator||!defaultLearningV2Enabled()||!plan.intent||plan.intent.status!=="ready")return;
+    const unresolvedAmbiguity=Boolean(plan.intent.missing?.length);
+    const source=confirmed?"confirmed_execution":"successful_execution";
+    coordinator.recordVerified({utterance:userRequest,intent:plan.intent,source,outcome,unresolvedAmbiguity,resolverVersion:"accuracy-context-learning-v1"});
+    if(outcome.status==="success"&&previous?.lastQuery&&isUserCorrection(userRequest)){
+      coordinator.recordVerified({utterance:previous.lastQuery,intent:plan.intent,source:"user_correction",outcome,resolverVersion:"accuracy-context-learning-v1"});
+      this.activeMetrics()?.record("intent.memory.user_correction_saved",1,{domain:plan.intent.domain,operation:plan.intent.operation});
+    }
   }
   async synthesize(userText:string,results:ToolResult[],signal?:AbortSignal){return this.synthesizer.synthesize(userText,results,signal);}
   async streamDirectAnswer(userText:string,onToken:(token:string)=>void,context:LLMMessage[]=[],signal?:AbortSignal){const prompt=["Você é o Nexo AI, um assistente local.","Responda em português de forma clara e objetiva.","Responda somente ao pedido do usuário.","Não exponha raciocínio interno ou cadeia de pensamento.","Não afirme que executou ações no computador nesta resposta.","Quando uma solicitação exigir ferramenta ou alteração, ela será tratada pelo orquestrador e pelo Core; não finja que executou nada."].join("\n");return this.llm.stream([{role:"system",content:prompt},...context,{role:"user",content:userText}],onToken,signal);}

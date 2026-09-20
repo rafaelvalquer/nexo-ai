@@ -7,8 +7,10 @@ import { EmailSearchPreferenceService } from "../../email/preferences/service.js
 import { EmailComposeDraftRepository } from "../../email/compose/draft-repository.js";
 import { EmailComposeDraftService } from "../../email/compose/draft-service.js";
 import type { ConversationActionContextState } from "../context/conversation-action-context.js";
-import { configureDefaultIntentLearning, type PlanStep } from "../planner.js";
+import { configureDefaultIntentLearning,configureVerifiedIntentLearning, type PlanStep } from "../planner.js";
 import { IntentMemoryStore } from "../intent-memory/store.js";
+import {IntentLearningEventStore} from "../intent-memory/learning-events.js";
+import {IntentLearningCoordinator} from "../intent-memory/learning-coordinator.js";
 import type { PendingClarification } from "../clarification/types.js";
 import type { AgentRun, AgentRunStatus, PersistedAgentState } from "./state.js";
 import type { AgentLoopState } from "../loop/types.js";
@@ -19,16 +21,19 @@ type ClarificationRow={id:string;conversation_id:string;domain:PendingClarificat
 export type AgentRuntimeContext={conversationId?:string;taskId?:string;agentId?:string};
 export class AgentRuntime{
   private readonly intentMemory:IntentMemoryStore;
+  private readonly intentLearningCoordinator:IntentLearningCoordinator;
   readonly emailPreferences:EmailSearchPreferenceService;
   readonly emailDrafts:EmailComposeDraftService;
   readonly entities:ConversationEntityLedger;
   constructor(private db:NexoDatabase, metrics?:LocalMetricsService){
     this.intentMemory=new IntentMemoryStore(db);
+    this.intentLearningCoordinator=new IntentLearningCoordinator(new IntentLearningEventStore(db),this.intentMemory,metrics);
     this.emailPreferences=new EmailSearchPreferenceService(new EmailSearchPreferenceRepository(db));
     this.emailDrafts=new EmailComposeDraftService(new EmailComposeDraftRepository(db));
     this.entities=new ConversationEntityLedger(db);
     this.ensureClarificationSchema();
     configureDefaultIntentLearning(this.intentMemory,()=>this.intentLearningEnabled(),metrics);
+    configureVerifiedIntentLearning(this.intentLearningCoordinator,()=>this.intentLearningV2Enabled());
   }
   start(userRequest:string,steps:PlanStep[],context:AgentRuntimeContext={},metadata:Partial<Pick<PersistedAgentState,"intent"|"deferredAction"|"responseMode">>={}):AgentRun{const id=randomUUID(),now=new Date().toISOString(),state:PersistedAgentState={userRequest,steps,nextStep:0,results:[],iteration:0,...metadata};this.db.run("INSERT INTO agent_runs(id,user_request,status,state_json,created_at,updated_at,conversation_id,task_id,agent_id) VALUES(?,?,?,?,?,?,?,?,?)",[id,userRequest,"RUNNING",JSON.stringify(state),now,now,context.conversationId??null,context.taskId??null,context.agentId??null]);return{id,status:"RUNNING",state,createdAt:now,updatedAt:now};}
   get(id:string){const row=this.db.get<RunRow>("SELECT * FROM agent_runs WHERE id=?",[id]);return row&&this.toRun(row);}
@@ -56,6 +61,7 @@ export class AgentRuntime{
   clearIntentLearning(){this.intentMemory.clear();}
   intentLearningCount(){return this.intentMemory.count();}
   private intentLearningEnabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return true;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}}
+  private intentLearningV2Enabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return false;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean;intentLearningV2Enabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false&&settings.intentLearningV2Enabled===true;}catch{return false;}}
   private ensureClarificationSchema(){this.db.run(`CREATE TABLE IF NOT EXISTS pending_clarifications (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
