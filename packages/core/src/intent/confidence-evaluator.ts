@@ -40,7 +40,7 @@ export function evaluateIntentConfidence(intent:CanonicalIntent,semantic:Semanti
     conflictCount:0,
     mutatesState:["create","update","delete"].includes(intent.intent)
   });
-  return{schema:1,semantic:round(decision.validation),entities:round(entityScore),ambiguity:round(Math.max(0,1-decision.ambiguityPenalty)),overall:decision.overall};
+  return{schema:1,semantic:round(decision.validation),entities:round(entityScore),ambiguity:ambiguityCount?0:round(Math.max(0,1-decision.ambiguityPenalty)),overall:decision.overall};
 }
 function contextScore(intent:CanonicalIntent){
   const entities=Object.values(intent.entities);if(!entities.length)return 1;
