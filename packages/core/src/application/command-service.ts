@@ -473,3 +473,28 @@ function compatibleDomain(expected:string,actual:string){
   if((left==="web"&&right==="browser")||(left==="browser"&&right==="web"))return true;
   return false;
 }
+
+function expectedDomainFromEvidence(evidence:DomainEvidenceSnapshot){
+  const [first,second]=evidence.items;
+  if(!first)return undefined;
+  if(first.score>=.75&&first.score-(second?.score??0)>=.12)return first.domain;
+  if(evidence.strongFilesystem&&!evidence.explicitWeb)return"filesystem";
+  if(evidence.explicitWeb&&first.score>=.55)return first.domain==="browser"?"browser":"web";
+  return undefined;
+}
+function domainEvidenceConfidenceForCandidate(evidence:DomainEvidenceSnapshot,candidate:DecisionCandidate){
+  const domain=candidate.domain==="browser"?"web":candidate.domain;
+  return evidence.items.find(item=>(item.domain==="browser"?"web":item.domain)===domain)?.score??0;
+}
+function decisionKey(candidate:DecisionCandidate){return`${candidate.source}:${candidate.proposedTool??candidate.operation}`;}
+function sameDecision(left:DecisionCandidate,right:DecisionCandidate){
+  return left.source===right.source&&(left.proposedTool??left.operation)===(right.proposedTool??right.operation)&&left.operation===right.operation&&JSON.stringify(left.entities)===JSON.stringify(right.entities);
+}
+function candidateChoiceQuestion(first:DecisionCandidate,second:DecisionCandidate){
+  const a=humanOperation(first.operation),b=humanOperation(second.operation);
+  return `O pedido pode significar “${a}” ou “${b}”. Qual dessas ações você quer executar?`;
+}
+function humanOperation(operation:string){
+  const names:Record<string,string>={write_text_file:"alterar o conteúdo do arquivo",create_text_file:"criar um arquivo",create_folder:"criar uma pasta",find_file:"procurar um arquivo",search_files:"pesquisar arquivos",web_research:"pesquisar informações na web",browser_open:"abrir uma página",email_send:"enviar um e-mail",calendar_create:"agendar um compromisso"};
+  return names[operation]??operation.replace(/_/g," ");
+}
