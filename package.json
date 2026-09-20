@@ -30,7 +30,12 @@
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",
-    "smoke:web-research": "pnpm --filter @nexo/core build && node scripts/smoke-web-research.mjs"
+    "smoke:web-research": "pnpm --filter @nexo/core build && node scripts/smoke-web-research.mjs",
+    "eval:intents:domain": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs domain",
+    "eval:intents:context": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs context",
+    "eval:intents:goal": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs goal",
+    "eval:intents:learning": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs learning",
+    "eval:agent:accuracy": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs all"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",

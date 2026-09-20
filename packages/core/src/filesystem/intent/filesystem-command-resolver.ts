@@ -25,8 +25,8 @@ export class FilesystemCommandResolver {
     if (folder) return folder;
 
     const priorFile=previousFiles.length===1?previousFiles[0]:undefined;
-    if(priorFile&&/\b(?:abra|abrir|abre|open)\b/i.test(text)&&/\b(?:esse|este|essa|esta|anterior|encontrado)\b/i.test(text)&&/\barquivo\b/i.test(text))return{kind:"open_file",path:priorFile.path,confidence:1};
-    if(priorFile&&/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text)&&/\b(?:esse|este|essa|esta|anterior|encontrado)\b/i.test(text)&&/\barquivo\b/i.test(text))return{kind:"analyze_file",path:priorFile.path,confidence:1};
+    if(priorFile&&/\b(?:abra|abrir|abre|open)\b/i.test(text)&&/\b(?:ele|ela|isso|esse|este|essa|esta|anterior|encontrado|arquivo)\b/i.test(text))return{kind:"open_file",path:priorFile.path,confidence:1};
+    if(priorFile&&/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text)&&/\b(?:ele|ela|isso|esse|este|essa|esta|anterior|encontrado|arquivo)\b/i.test(text))return{kind:"analyze_file",path:priorFile.path,confidence:1};
 
     const find = this.resolveFind(text, allowedRoots, locationRegistry);
     if (find) return find;

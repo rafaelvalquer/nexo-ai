@@ -1,0 +1,66 @@
+[
+  {
+    "text": "procure o relatório em Downloads",
+    "domain": "filesystem"
+  },
+  {
+    "text": "procure notícias no InfoMoney",
+    "domain": "web"
+  },
+  {
+    "text": "procure o e-mail do João",
+    "domain": "email"
+  },
+  {
+    "text": "procure o compromisso com João",
+    "domain": "calendar"
+  },
+  {
+    "text": "resuma relatório.pdf",
+    "domain": "documents"
+  },
+  {
+    "text": "liste os arquivos em Documents",
+    "domain": "filesystem"
+  },
+  {
+    "text": "mostre minha agenda de amanhã",
+    "domain": "calendar"
+  },
+  {
+    "text": "quais são meus últimos e-mails",
+    "domain": "email"
+  },
+  {
+    "text": "pesquise as principais notícias no terra.com.br",
+    "domain": "web"
+  },
+  {
+    "text": "abra https://example.com",
+    "domain": "web"
+  },
+  {
+    "text": "entre no site e clique em login",
+    "domain": "browser"
+  },
+  {
+    "text": "analise documento.docx",
+    "domain": "documents"
+  },
+  {
+    "text": "quanto de memória RAM estou usando",
+    "domain": "system"
+  },
+  {
+    "text": "lembre que meu projeto se chama Nexo",
+    "domain": "memory"
+  },
+  {
+    "text": "explique o que é RAG",
+    "domain": "conversation"
+  },
+  {
+    "text": "procure João",
+    "domain": "unknown"
+  }
+]

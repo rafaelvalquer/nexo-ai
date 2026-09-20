@@ -4,7 +4,7 @@ import type { AgentIntent } from "../orchestrator/intent-schema.js";
 export type PendingClarification = {
   id: string;
   conversationId: string;
-  domain: "filesystem" | "email" | "calendar" | "general";
+  domain: "filesystem" | "email" | "calendar" | "document" | "browser" | "system" | "memory" | "general";
   intent: string;
   operation: string;
   originalRequest: string;

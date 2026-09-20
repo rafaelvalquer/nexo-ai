@@ -1,0 +1,121 @@
+[
+  {
+    "operation": "create_folder",
+    "text": "crie pasta teste em Documents",
+    "llm": {
+      "name": "teste"
+    },
+    "context": {
+      "folder": {
+        "value": "Downloads",
+        "source": "entity_ledger",
+        "confidence": 0.8
+      }
+    },
+    "current": {
+      "name": "teste"
+    },
+    "expect": {
+      "folder": "Documents",
+      "name": "teste"
+    }
+  },
+  {
+    "operation": "create_folder",
+    "text": "crie pasta projeto em Downloads",
+    "llm": {
+      "name": "projeto"
+    },
+    "context": {
+      "folder": {
+        "value": "Documents",
+        "source": "conversation_history",
+        "confidence": 0.7
+      }
+    },
+    "current": {
+      "name": "projeto"
+    },
+    "expect": {
+      "folder": "Downloads",
+      "name": "projeto"
+    }
+  },
+  {
+    "operation": "web_research",
+    "text": "pesquise notícias em https://www.infomoney.com.br",
+    "llm": {},
+    "expect": {
+      "url": "https://www.infomoney.com.br/"
+    }
+  },
+  {
+    "operation": "email_send",
+    "text": "envie para joao@example.com",
+    "llm": {},
+    "expect": {
+      "to": "joao@example.com"
+    }
+  },
+  {
+    "operation": "trash_file",
+    "text": "apague ele",
+    "memory": {
+      "path": "C:/Secret/file.txt"
+    },
+    "reject": [
+      "path"
+    ]
+  },
+  {
+    "operation": "email_send",
+    "text": "envie a mensagem",
+    "memory": {
+      "to": "joao@example.com"
+    },
+    "reject": [
+      "to"
+    ]
+  },
+  {
+    "operation": "web_fetch",
+    "text": "resuma isso",
+    "memory": {
+      "url": "https://example.com/x"
+    },
+    "reject": [
+      "url"
+    ]
+  },
+  {
+    "operation": "move_file",
+    "text": "mova ele",
+    "memory": {
+      "source": "C:/Temp/a.txt"
+    },
+    "reject": [
+      "source"
+    ]
+  },
+  {
+    "operation": "rename_file",
+    "text": "renomeie ele",
+    "memory": {
+      "path": "C:/Temp/a.txt"
+    },
+    "reject": [
+      "path"
+    ]
+  },
+  {
+    "operation": "create_folder",
+    "text": "crie pasta demo em Desktop",
+    "llm": {
+      "name": "demo"
+    },
+    "expect": {
+      "folder": "Desktop",
+      "name": "demo"
+    }
+  }
+]

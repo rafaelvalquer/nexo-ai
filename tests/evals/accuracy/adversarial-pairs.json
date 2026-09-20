@@ -1,0 +1,32 @@
+[
+  {
+    "a": "abra o InfoMoney",
+    "aOperation": "navigate",
+    "b": "abra o InfoMoney e traga notícias",
+    "bOperation": "research"
+  },
+  {
+    "a": "liste Downloads",
+    "aNotOperation": "create_folder",
+    "b": "crie uma lista em Downloads",
+    "bNotOperation": "list_files"
+  },
+  {
+    "a": "abra relatório.pdf",
+    "aDomain": "filesystem",
+    "b": "resuma relatório.pdf",
+    "bDomain": "documents"
+  },
+  {
+    "a": "procure João",
+    "aDomain": "unknown",
+    "b": "procure o e-mail do João",
+    "bDomain": "email"
+  },
+  {
+    "a": "procure João",
+    "aDomain": "unknown",
+    "b": "procure o arquivo João.xlsx",
+    "bDomain": "filesystem"
+  }
+]

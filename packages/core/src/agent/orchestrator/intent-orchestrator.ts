@@ -172,7 +172,9 @@ function buildIntentPrompt(domain: IntentDomain, tools: AgentToolDescriptor[], c
     lastTool: context.previous.lastTool,
     lastQuery: context.previous.lastQuery,
     emailResults: context.previous.emails?.slice(0, 20).map((item, index) => ({ index: index + 1, from: item.from, subject: item.subject, receivedAt: item.receivedAt })),
-    calendarResults: context.previous.events?.slice(0, 20).map((item, index) => ({ index: index + 1, title: item.title, start: item.start, end: item.end }))
+    calendarResults: context.previous.events?.slice(0, 20).map((item, index) => ({ index: index + 1, title: item.title, start: item.start, end: item.end })),
+    fileResults: context.previous.files?.slice(0,20).map((item,index)=>({index:index+1,name:item.name,path:item.path})),
+    webResults: context.previous.pages?.slice(0,20).map((item,index)=>({index:index+1,title:item.title,url:item.url,fullyRead:item.fullyRead}))
   } : null;
   const learned = (context.learnedExamples ?? [])
     .filter(example => example.intent.domain === domain)

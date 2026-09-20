@@ -1,0 +1,232 @@
+[
+  {
+    "text": "abra ele",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "a",
+          "path": "C:/Downloads/a.txt",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "path",
+    "value": "C:/Downloads/a.txt"
+  },
+  {
+    "text": "abra o segundo",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "a",
+          "path": "C:/Downloads/a.txt",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        },
+        {
+          "kind": "file",
+          "id": "b",
+          "path": "C:/Downloads/b.txt",
+          "ordinal": 2,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "path",
+    "value": "C:/Downloads/b.txt"
+  },
+  {
+    "text": "resuma a primeira notícia",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "page",
+          "id": "https://site/a",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        },
+        {
+          "kind": "page",
+          "id": "https://site/b",
+          "ordinal": 2,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "url",
+    "value": "https://site/a"
+  },
+  {
+    "text": "responda o segundo e-mail",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "email",
+          "id": "m1",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        },
+        {
+          "kind": "email",
+          "id": "m2",
+          "ordinal": 2,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "messageId",
+    "value": "m2"
+  },
+  {
+    "text": "abra o último arquivo",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "a",
+          "path": "C:/Downloads/a.txt",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        },
+        {
+          "kind": "file",
+          "id": "b",
+          "path": "C:/Downloads/b.txt",
+          "ordinal": 2,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "path",
+    "value": "C:/Downloads/b.txt"
+  },
+  {
+    "text": "abra ele",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "old",
+          "path": "C:/Downloads/old.txt",
+          "ordinal": 1,
+          "turnAge": 3,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "path",
+    "value": null
+  },
+  {
+    "text": "abra esse arquivo",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "x",
+          "path": "C:/Documents/x.pdf",
+          "ordinal": 1,
+          "turnAge": 2,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "path",
+    "value": "C:/Documents/x.pdf"
+  },
+  {
+    "text": "abra esse arquivo",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "x",
+          "path": "C:/Documents/x.pdf",
+          "ordinal": 1,
+          "turnAge": 6,
+          "source": "entity_ledger",
+          "confidence": 0.9
+        }
+      ]
+    },
+    "field": "path",
+    "value": null
+  },
+  {
+    "text": "use na mesma pasta",
+    "snapshot": {
+      "conversationId": "c",
+      "turn": 2,
+      "recentMessages": [],
+      "memoryCandidates": [],
+      "recentEntities": [
+        {
+          "kind": "file",
+          "id": "x",
+          "path": "C:/Documents/x.pdf",
+          "ordinal": 1,
+          "turnAge": 0,
+          "source": "previous_result",
+          "confidence": 1
+        }
+      ]
+    },
+    "field": "folder",
+    "value": "C:/Documents"
+  }
+]

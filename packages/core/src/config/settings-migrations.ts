@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 6;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 7;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -50,6 +50,18 @@ const migrations: SettingsMigration[] = [{
       webIntentShadowMode: settings.webIntentShadowMode ?? false,
       webResearchEnabled: settings.webResearchEnabled ?? true,
       settingsSchemaVersion: 6 };
+  }
+}, {
+  version: 7,
+  migrate(settings) {
+    return { ...settings,
+      decisionRefinerEnabled: settings.decisionRefinerEnabled ?? true,
+      decisionRefinerShadowMode: settings.decisionRefinerShadowMode ?? true,
+      contextResolverV2Enabled: settings.contextResolverV2Enabled ?? false,
+      goalSatisfactionEnabled: settings.goalSatisfactionEnabled ?? false,
+      outcomeVerifierEnabled: settings.outcomeVerifierEnabled ?? false,
+      intentLearningV2Enabled: settings.intentLearningV2Enabled ?? false,
+      settingsSchemaVersion: 7 };
   }
 }];
 

@@ -212,6 +212,39 @@ CREATE TABLE IF NOT EXISTS dashboard_gadget_preferences (
   gadget_id TEXT PRIMARY KEY, auto_provisioned INTEGER NOT NULL DEFAULT 0,
   dismissed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL
 );
+`], [20, `
+CREATE TABLE IF NOT EXISTS decision_traces (
+  request_id TEXT PRIMARY KEY,
+  conversation_id TEXT,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_traces_conversation_created ON decision_traces(conversation_id,created_at);
+CREATE TABLE IF NOT EXISTS intent_learning_events (
+  id TEXT PRIMARY KEY,
+  utterance_pattern TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  entities_signature TEXT NOT NULL,
+  source TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  resolver_version TEXT NOT NULL,
+  model_id TEXT,
+  success_count INTEGER NOT NULL DEFAULT 0,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  last_verified_at TEXT,
+  failure_type TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_intent_learning_events_lookup ON intent_learning_events(domain,operation,source,last_verified_at);
+CREATE INDEX IF NOT EXISTS idx_intent_learning_events_pattern ON intent_learning_events(utterance_pattern,domain,operation);
+ALTER TABLE intent_examples ADD COLUMN success_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE intent_examples ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE intent_examples ADD COLUMN last_verified_at TEXT;
+ALTER TABLE intent_examples ADD COLUMN resolver_version TEXT;
+ALTER TABLE intent_examples ADD COLUMN model_id TEXT;
+UPDATE intent_examples SET last_verified_at=COALESCE(last_verified_at,last_used_at,created_at),resolver_version=COALESCE(resolver_version,'legacy-v1');
 `]];
 
 export class NexoDatabase {

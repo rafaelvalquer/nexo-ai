@@ -1,0 +1,50 @@
+[
+  {
+    "text": "acesse o InfoMoney e traga notícias",
+    "tool": "browser_open",
+    "mutates": false,
+    "status": "unsatisfied"
+  },
+  {
+    "text": "acesse o InfoMoney e traga notícias",
+    "tool": "web_research",
+    "mutates": false,
+    "status": "satisfied"
+  },
+  {
+    "text": "crie pasta teste",
+    "tool": "list_files",
+    "mutates": false,
+    "status": "unsatisfied"
+  },
+  {
+    "text": "crie pasta teste",
+    "tool": "create_folder",
+    "mutates": true,
+    "status": "satisfied"
+  },
+  {
+    "text": "entre no site e clique em login",
+    "tool": "browser_open",
+    "mutates": false,
+    "status": "unsatisfied"
+  },
+  {
+    "text": "entre no site e clique em login",
+    "tool": "browser_agent_run",
+    "mutates": false,
+    "status": "satisfied"
+  },
+  {
+    "text": "resuma uma página",
+    "tool": "web_fetch",
+    "mutates": false,
+    "status": "satisfied"
+  },
+  {
+    "text": "envie o e-mail",
+    "tool": "email_send",
+    "mutates": true,
+    "status": "satisfied"
+  }
+]

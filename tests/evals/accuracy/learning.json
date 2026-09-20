@@ -1,0 +1,44 @@
+[
+  {
+    "source": "user_correction",
+    "outcome": "success",
+    "successCount": 1,
+    "failureCount": 0,
+    "promote": true
+  },
+  {
+    "source": "confirmed_execution",
+    "outcome": "success",
+    "successCount": 1,
+    "failureCount": 0,
+    "promote": true
+  },
+  {
+    "source": "successful_execution",
+    "outcome": "success",
+    "successCount": 1,
+    "failureCount": 0,
+    "promote": false
+  },
+  {
+    "source": "successful_execution",
+    "outcome": "success",
+    "successCount": 2,
+    "failureCount": 0,
+    "promote": true
+  },
+  {
+    "source": "successful_execution",
+    "outcome": "success",
+    "successCount": 3,
+    "failureCount": 1,
+    "promote": false
+  },
+  {
+    "source": "user_correction",
+    "outcome": "failed",
+    "successCount": 0,
+    "failureCount": 1,
+    "promote": false
+  }
+]

@@ -17,6 +17,7 @@ export type ActionContextCalendar = {
   end?: string;
 };
 export type ActionContextFile = { name:string; path:string; root?:string; size?:number; modifiedAt?:string };
+export type ActionContextPage = { id:string; url:string; title?:string; snippet?:string; fullyRead?:boolean };
 
 export type ConversationActionContextState = {
   updatedAt: string;
@@ -27,6 +28,7 @@ export type ConversationActionContextState = {
   emails?: ActionContextEmail[];
   events?: ActionContextCalendar[];
   files?: ActionContextFile[];
+  pages?: ActionContextPage[];
   emailConnectionId?: string;
   calendarConnectionId?: string;
 };
@@ -57,6 +59,13 @@ export function observeConversationActionContext(
     const matches=Array.isArray(data?.matches)?data.matches:[];
     next.lastDomain="filesystem";
     next.files=matches.filter((item:any)=>typeof item?.name==="string"&&typeof item?.path==="string").slice(0,50).map((item:any)=>({name:String(item.name),path:String(item.path),...(typeof item.root==="string"?{root:item.root}:{}),...(typeof item.size==="number"?{size:item.size}:{}),...(typeof item.modifiedAt==="string"?{modifiedAt:item.modifiedAt}:{})}));
+  }
+
+  if (step.tool === "web_research") {
+    const data=result.data as any;
+    const candidates=[...(Array.isArray(data?.headlines)?data.headlines:[]),...(Array.isArray(data?.articles)?data.articles:[])];
+    const seen=new Set<string>();
+    next.pages=candidates.filter((item:any)=>typeof item?.url==="string"&&!seen.has(item.url)&&seen.add(item.url)).slice(0,50).map((item:any)=>({id:String(item.url),url:String(item.url),title:typeof item.title==="string"?item.title:undefined,snippet:typeof item.snippet==="string"?item.snippet.slice(0,600):undefined,fullyRead:item.fullyRead===true||Boolean(item.text)}));
   }
 
   // Any mailbox mutation makes the previous selection unsafe to reuse. A later

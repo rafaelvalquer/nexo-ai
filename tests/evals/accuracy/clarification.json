@@ -1,0 +1,44 @@
+[
+  {
+    "tool": "create_folder",
+    "missing": [
+      "folder"
+    ],
+    "expected": "Em qual pasta"
+  },
+  {
+    "tool": "move_file",
+    "missing": [
+      "destination"
+    ],
+    "expected": "Para qual destino"
+  },
+  {
+    "tool": "email_send",
+    "missing": [
+      "recipient"
+    ],
+    "expected": "destinatário"
+  },
+  {
+    "tool": "email_reply",
+    "missing": [
+      "messageId"
+    ],
+    "expected": "mensagem"
+  },
+  {
+    "tool": "calendar_update",
+    "missing": [
+      "eventId"
+    ],
+    "expected": "compromisso"
+  },
+  {
+    "tool": "write_text_file",
+    "missing": [
+      "file"
+    ],
+    "expected": "nome do arquivo"
+  }
+]

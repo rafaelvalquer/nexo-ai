@@ -45,6 +45,11 @@ export function buildClarificationQuestion(field: string, intent: AgentIntent): 
     };
   }
 
+  if(field==="destination")return{id:"destination",field,prompt:"Para qual destino devo mover ou copiar o item?",type:"text",allowCustomValue:true,required:true,submitLabel:"Continuar"};
+  if(field==="name")return{id:"name",field,prompt:"Qual nome você quer usar?",type:"text",allowCustomValue:true,required:true,submitLabel:"Continuar"};
+  if(field==="messageId")return{id:"messageId",field,prompt:"Qual e-mail você quer usar? Informe a posição ou selecione o e-mail.",type:"text",allowCustomValue:true,required:true,submitLabel:"Continuar"};
+  if(field==="eventId")return{id:"eventId",field,prompt:"Qual compromisso você quer usar?",type:"text",allowCustomValue:true,required:true,submitLabel:"Continuar"};
+
   return {
     id: field,
     field,

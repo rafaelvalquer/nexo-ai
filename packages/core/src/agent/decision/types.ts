@@ -1,0 +1,30 @@
+export type DecisionCandidateSource="exact"|"filesystem"|"hybrid"|"web"|"legacy"|"planner"|"intent_memory";
+export type ContextEvidenceSource="user"|"clarification"|"current_turn"|"previous_result"|"entity_ledger"|"conversation_history"|"intent_memory";
+export type ContextEvidence={field?:string;value?:unknown;source:ContextEvidenceSource;confidence:number;turnAge?:number};
+export type DecisionCandidate={
+  source:DecisionCandidateSource;
+  domain:string;
+  operation:string;
+  entities:Record<string,unknown>;
+  missing:string[];
+  ambiguities:string[];
+  confidence:number;
+  proposedTool?:string;
+  mutatesState:boolean;
+  evidence:string[];
+};
+export type DecisionOutcomeStatus="success"|"partial"|"failed"|"needs_clarification"|"unknown";
+export type DecisionTrace={
+  requestId:string;
+  conversationId?:string;
+  normalizedInput:string;
+  domainCandidates:DecisionCandidate[];
+  intentCandidates:DecisionCandidate[];
+  selected?:DecisionCandidate;
+  rejected:Array<{candidate:DecisionCandidate;reason:string}>;
+  contextUsed:ContextEvidence[];
+  finalTool?:string;
+  confidence?:number;
+  outcome?:{status:DecisionOutcomeStatus};
+  createdAt:string;
+};
