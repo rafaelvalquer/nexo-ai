@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractWebDocument, isPublicAddress, parseSearchResults, webReaderTools } from "../../packages/core/src/tools/web";
+import { extractWebDocument, formatResearchSummary, isPublicAddress, parseSearchResults, webReaderTools } from "../../packages/core/src/tools/web";
 import { ToolRegistry } from "../../packages/core/src/tools/registry";
 
 describe("Web Reader",()=>{
@@ -21,6 +21,24 @@ describe("Web Reader",()=>{
   it("rejects private destinations before making a request",async()=>{
     const fetch=webReaderTools().find(item=>item.name==="web_fetch")!;
     await expect(fetch.execute({url:"http://127.0.0.1/"})).rejects.toThrow(/privado|reservado/i);
+  });
+  it("formats actual headlines instead of returning only a source count",()=>{
+    const summary=formatResearchSummary({
+      query:"principais notícias",
+      source:{name:"InfoMoney",domain:"infomoney.com.br",url:"https://infomoney.com.br/"},
+      articles:[],
+      headlines:[
+        {title:"Mercados avançam nesta manhã",url:"https://infomoney.com.br/mercados/a",snippet:"Bolsas e juros no radar.",source:"InfoMoney",discoveredFrom:"search",fullyRead:false},
+        {title:"Economia tem novo indicador",url:"https://infomoney.com.br/economia/b",snippet:"Dados foram divulgados hoje.",source:"InfoMoney",discoveredFrom:"search",fullyRead:false}
+      ],
+      failedSources:[{url:"https://infomoney.com.br/mercados/a",error:"HTTP 403"}],
+      partial:true,
+      untrustedExternalContent:true
+    });
+    expect(summary).toContain("Mercados avançam nesta manhã");
+    expect(summary).toContain("https://infomoney.com.br/mercados/a");
+    expect(summary).toContain("indexação pública");
+    expect(summary).not.toMatch(/\b2 fonte\(s\)/);
   });
   it("registers reader tools as read-only web tools with untrusted output",()=>{
     const registry=new ToolRegistry();
