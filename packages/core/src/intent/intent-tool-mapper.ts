@@ -138,7 +138,7 @@ function toAgentIntent(intent:CanonicalIntent):AgentIntent{
   const mutation=new Set(["create","update","delete"]);
   const mappedIntent:intentName=intent.intent==="find"?"search":intent.intent==="open"?"read":intent.intent==="execute"?"read":intent.intent==="unknown"?"read":intent.intent;
   const entities=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
-  const domain:AgentIntent["domain"]=intent.domain==="documents"?"document":intent.domain==="unknown"||intent.domain==="chat"||intent.domain==="conversation"||intent.domain==="web"?"general":intent.domain;
+  const domain:AgentIntent["domain"]=intent.domain==="documents"?"document":intent.domain==="unknown"||intent.domain==="chat"||intent.domain==="conversation"||intent.domain==="web"||intent.domain==="macro"?"general":intent.domain;
   return{
     schemaVersion:1,status:"ready",domain,intent:mappedIntent,operation:intent.operation,entities,
     referencesPreviousResult:intent.referencesPreviousResult,requiresDataLookup:["find","list","read","update","delete"].includes(intent.intent),
