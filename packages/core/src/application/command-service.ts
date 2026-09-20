@@ -102,6 +102,7 @@ export class CommandService {
   private lastTrace?:DecisionTrace;
   private readonly domainEvidenceBuilder=new DomainEvidenceBuilder();
   private readonly globalArbiter=new GlobalDecisionArbiter();
+  private readonly goalEvaluator=new GoalSatisfactionEvaluator();
   private readonly conversationTurns=new Map<string,number>();
   private readonly contextObservedAt=new Map<string,{updatedAt:string;turn:number}>();
   private readonly contextSnapshotBuilder=new ContextSnapshotBuilder();
@@ -219,7 +220,7 @@ export class CommandService {
 
     if(entries.length){
       const goals=new Map<string,GoalSatisfaction>();
-      for(const entry of entries){const goal=this.accuracy?.goalEvaluator.evaluate(text,entry.candidate)??{status:"unknown",score:.7} as GoalSatisfaction;goals.set(decisionKey(entry.candidate),goal);}
+      for(const entry of entries){const goal=(this.accuracy?.goalEvaluator??this.goalEvaluator).evaluate(text,entry.candidate);goals.set(decisionKey(entry.candidate),goal);}
       const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
       const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates,domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
