@@ -2,7 +2,7 @@ import { END, START, StateGraph } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import type { AgentLoopState } from "../loop/types.js";
 import { AgentGraphAnnotation } from "./graph-state.js";
-import { routeAfterGuard, routeAfterTurn } from "./graph-router.js";
+import { routeAfterGuard, routeAfterTurn,routeAfterVerifyGoal } from "./graph-router.js";
 import { bootstrapNode } from "./nodes/bootstrap.js";
 import { agentTurnNode, type AgentTurnNodeHandler } from "./nodes/agent-turn.js";
 import { validateCallNode } from "./nodes/validate-call.js";
@@ -10,6 +10,7 @@ import { preflightNode } from "./nodes/preflight.js";
 import { approvalNode } from "./nodes/approval.js";
 import { executeNode } from "./nodes/execute.js";
 import { observeNode } from "./nodes/observe.js";
+import {verifyGoalNode} from "./nodes/verify-goal.js";
 import { reconcileNode } from "./nodes/reconcile.js";
 import { loopGuardNode } from "./nodes/loop-guard.js";
 import { finalizeNode } from "./nodes/finalize.js";
@@ -27,6 +28,7 @@ export class AgentGraph {
       .addNode("approval", approvalNode)
       .addNode("execute", executeNode)
       .addNode("observe", observeNode)
+      .addNode("verify_goal",verifyGoalNode)
       .addNode("reconcile", reconcileNode)
       .addNode("loop_guard", loopGuardNode)
       .addNode("finalize", finalizeNode)
@@ -36,7 +38,8 @@ export class AgentGraph {
       .addEdge("validate_call", "preflight")
       .addEdge("preflight", "execute")
       .addEdge("execute", "observe")
-      .addEdge("observe", "loop_guard")
+      .addEdge("observe", "verify_goal")
+      .addConditionalEdges("verify_goal",routeAfterVerifyGoal)
       .addEdge("reconcile", "finalize")
       .addEdge("approval", "finalize")
       .addConditionalEdges("loop_guard", routeAfterGuard)
