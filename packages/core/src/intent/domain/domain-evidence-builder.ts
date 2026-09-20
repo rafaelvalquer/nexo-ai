@@ -26,7 +26,7 @@ export class DomainEvidenceBuilder{
     if(/\b(clique|preencha|login|navegador)\b/.test(folded))add("browser",.65,"browser_interaction");
     if(/\b(e-?mail|emails|gmail|caixa de entrada|remetente|destinatario)\b/.test(folded))add("email",.85,"email_marker");
     if(/\b(agenda|calendario|reuniao|compromisso|evento|convite)\b/.test(folded))add("calendar",.85,"calendar_marker");
-    if(/\b(resuma|resumir|analise|analisar|extraia|extrair|leia|ler)\b/.test(folded)&&/\b(documento|pdf|docx)\b|\.(pdf|docx?|txt)\b/.test(folded))add("documents",.72,"document_content_goal");
+    if(/\b(resuma|resumir|analise|analisar|extraia|extrair|leia|ler)\b/.test(folded)&&/\b(documento|pdf|docx)\b|\.(pdf|docx?|txt)\b/.test(folded))add("documents",.92,"document_content_goal");
     if(/\b(cpu|processos?|memoria ram|disco|servico|sistema)\b/.test(folded))add("system",.75,"system_marker");
     if(/\b(lembre|memorize|memoria do nexo|guarde que)\b/.test(folded))add("memory",.75,"memory_marker");
     const items=[...scores.entries()].map(([domain,row])=>({domain,score:round(row.score),evidence:row.evidence})).sort((a,b)=>b.score-a.score);
