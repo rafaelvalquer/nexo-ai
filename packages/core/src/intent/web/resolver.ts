@@ -49,7 +49,7 @@ export function deterministicWebIntent(text:string):CanonicalWebIntent|undefined
   if(operation==="unknown")return undefined;
   const query=operation==="research"?extractResearchQuery(text,sourceName,domain,url):undefined;
   const requestedAction=operation==="interact"?text.trim():undefined;
-  return{schemaVersion:1,domain:"web",operation,entities:{...(sourceName?{sourceName}:{}),...(domain?{domain}:{}),...(url?{url}:{}),...(query?{query}:{}),...(requestedAction?{requestedAction}:{})},requiresInformation:operation==="research"||operation==="fetch"||operation==="search",requiresInteraction:operation==="interact",confidence:.92,ambiguities:[],missing:operation==="research"&&!query?["query"]:[]};
+  return{schemaVersion:1,domain:"web",operation,entities:{...(sourceName?{sourceName}:{}),...(domain?{domain}:{}),...(url?{url}:{}),...(query?{query}:{}),...(requestedAction?{requestedAction}:{})},requiresInformation:operation==="research"||operation==="fetch",requiresInteraction:operation==="interact",confidence:.92,ambiguities:[],missing:operation==="research"&&!query?["query"]:[]};
 }
 
 function explicitUrl(text:string){return text.match(/https?:\/\/[^\s<>"\x27)]+/i)?.[0];}
