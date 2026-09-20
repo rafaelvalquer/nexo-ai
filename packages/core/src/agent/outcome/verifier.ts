@@ -21,6 +21,13 @@ export class OutcomeVerifier{
     const target=firstString(data,["createdPath","path","destination","newPath"]);
     if(!target)return{status:"failed",verified:true,reason:"A ferramenta não retornou o caminho produzido."};
     if(isPhysicalPath(target)&&!fs.existsSync(target))return{status:"failed",verified:true,reason:"O caminho retornado não existe após a execução.",evidence:[target]};
+    if(toolName==="write_text_file"&&isPhysicalPath(target)){
+      const expected=firstString(data,["content","writtenContent"])??expectedWrittenContent(userRequest);
+      if(expected!==undefined){
+        try{const actual=fs.readFileSync(target,"utf8");if(actual!==expected)return{status:"failed",verified:true,reason:"O arquivo existe, mas o conteúdo gravado não corresponde ao solicitado.",evidence:[target]};}
+        catch{return{status:"failed",verified:true,reason:"Não foi possível verificar o conteúdo do arquivo após a escrita.",evidence:[target]};}
+      }
+    }
     return{status:"success",verified:true,evidence:[target]};
   }
   if(/^email_(?:send|send_composed|reply)$/.test(toolName)){
@@ -68,3 +75,5 @@ function requestedCount(text:string){const m=text.match(/\b(?:traga|mostre|pesqu
 function hasAlternative(data:any,expr:string){return expr.split("|").some(key=>{const value=data?.[key];return Array.isArray(value)?value.length>0:value!==undefined&&value!==null&&value!=="";});}
 function firstString(data:any,keys:string[]){for(const key of keys){const value=data?.[key];if(typeof value==="string"&&value.trim())return value.trim();}return undefined;}
 function isPhysicalPath(value:string){return /^[A-Za-z]:[\\/]|^\//.test(value);}
+
+function expectedWrittenContent(text:string){const match=text.match(/\b(?:e\s+coloque|por|para(?:\s+conter)?|com\s+(?:o\s+)?conte[uú]do)\s+([\s\S]+)$/iu);return match?.[1];}
