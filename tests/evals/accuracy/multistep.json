@@ -1,0 +1,62 @@
+[
+  {
+    "turn1": {
+      "tool": "find_file",
+      "files": [
+        {
+          "name": "teste.txt",
+          "path": "C:/Downloads/teste.txt"
+        }
+      ]
+    },
+    "turn2": "abra ele",
+    "field": "path",
+    "value": "C:/Downloads/teste.txt"
+  },
+  {
+    "turn1": {
+      "tool": "email_search",
+      "emails": [
+        {
+          "id": "m1",
+          "subject": "A"
+        },
+        {
+          "id": "m2",
+          "subject": "B"
+        }
+      ]
+    },
+    "turn2": "responda o segundo e-mail",
+    "field": "messageId",
+    "value": "m2"
+  },
+  {
+    "turn1": {
+      "tool": "web_research",
+      "pages": [
+        {
+          "id": "https://site/a",
+          "url": "https://site/a",
+          "title": "A"
+        },
+        {
+          "id": "https://site/b",
+          "url": "https://site/b",
+          "title": "B"
+        }
+      ]
+    },
+    "turn2": "resuma a primeira notícia",
+    "field": "url",
+    "value": "https://site/a"
+  },
+  {
+    "turn1": {
+      "tool": "create_folder",
+      "files": []
+    },
+    "turn2": "agora crie outra em Documents",
+    "expectExplicitFolder": "Documents"
+  }
+]

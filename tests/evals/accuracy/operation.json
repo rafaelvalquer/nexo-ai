@@ -1,0 +1,429 @@
+[
+  {
+    "text": "abra o InfoMoney",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "acesse o site infomoney.com.br",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "pesquise as principais notícias no InfoMoney",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "acesse o InfoMoney e traga notícias",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "procure notícias recentes no G1",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "consulte as manchetes no Terra",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "traga os destaques do UOL",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "mostre notícias no CNN",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "resuma https://example.com/noticia",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "leia https://example.com/artigo",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "explique https://example.com/pagina",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "entre no site https://example.com e clique em login",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "acesse example.com e preencha o formulário",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o site e baixe o relatório",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o InfoMoney agora",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "acesse o site infomoney.com.br agora",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "pesquise as principais notícias no InfoMoney agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "acesse o InfoMoney e traga notícias agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "procure notícias recentes no G1 agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "consulte as manchetes no Terra agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "traga os destaques do UOL agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "mostre notícias no CNN agora",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "resuma https://example.com/noticia agora",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "leia https://example.com/artigo agora",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "explique https://example.com/pagina agora",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "entre no site https://example.com e clique em login agora",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "acesse example.com e preencha o formulário agora",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o site e baixe o relatório agora",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o InfoMoney por favor",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "acesse o site infomoney.com.br por favor",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "pesquise as principais notícias no InfoMoney por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "acesse o InfoMoney e traga notícias por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "procure notícias recentes no G1 por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "consulte as manchetes no Terra por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "traga os destaques do UOL por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "mostre notícias no CNN por favor",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "resuma https://example.com/noticia por favor",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "leia https://example.com/artigo por favor",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "explique https://example.com/pagina por favor",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "entre no site https://example.com e clique em login por favor",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "acesse example.com e preencha o formulário por favor",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o site e baixe o relatório por favor",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o InfoMoney para mim",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "acesse o site infomoney.com.br para mim",
+    "domain": "web",
+    "operation": "navigate",
+    "tool": "browser_open",
+    "mutates": false
+  },
+  {
+    "text": "pesquise as principais notícias no InfoMoney para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "acesse o InfoMoney e traga notícias para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "procure notícias recentes no G1 para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "consulte as manchetes no Terra para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "traga os destaques do UOL para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "mostre notícias no CNN para mim",
+    "domain": "web",
+    "operation": "research",
+    "tool": "web_research",
+    "mutates": false
+  },
+  {
+    "text": "resuma https://example.com/noticia para mim",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "leia https://example.com/artigo para mim",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "explique https://example.com/pagina para mim",
+    "domain": "web",
+    "operation": "fetch",
+    "tool": "web_fetch",
+    "mutates": false
+  },
+  {
+    "text": "entre no site https://example.com e clique em login para mim",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "acesse example.com e preencha o formulário para mim",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "abra o site e baixe o relatório para mim",
+    "domain": "web",
+    "operation": "interact",
+    "tool": "browser_agent_run",
+    "mutates": false
+  },
+  {
+    "text": "liste os arquivos em Downloads",
+    "domain": "filesystem",
+    "operation": "list_files",
+    "tool": "list_files",
+    "mutates": false
+  },
+  {
+    "text": "mostre os arquivos em Documents",
+    "domain": "filesystem",
+    "operation": "list_files",
+    "tool": "list_files",
+    "mutates": false
+  },
+  {
+    "text": "veja os 10 arquivos mais recentes em Desktop",
+    "domain": "filesystem",
+    "operation": "list_files",
+    "tool": "list_files",
+    "mutates": false
+  },
+  {
+    "text": "crie uma pasta teste em Downloads",
+    "domain": "filesystem",
+    "operation": "create_folder",
+    "tool": "create_folder",
+    "mutates": true
+  },
+  {
+    "text": "crie pasta projetos em Documents",
+    "domain": "filesystem",
+    "operation": "create_folder",
+    "tool": "create_folder",
+    "mutates": true
+  }
+]
