@@ -195,7 +195,7 @@ export class CommandService {
       }
       if(decision.selectedCandidate){
         const chosen=entries.find(entry=>sameDecision(entry.candidate,decision.selectedCandidate!));
-        if(chosen){this.hybrid?.metrics?.record("intent.route.global_arbiter.selected",1,{route:chosen.route.tool,source:chosen.source});return finish(chosen.route,"global-arbiter");}
+        if(chosen){this.hybrid?.metrics?.record("intent.route.global_arbiter.selected",1,{route:chosen.route.tool,source:chosen.source});return finish(chosen.route,chosen.source);}
       }
     }
 
