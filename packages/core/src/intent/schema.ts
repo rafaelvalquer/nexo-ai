@@ -1,19 +1,25 @@
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { CanonicalIntent, IntentEntity, IntentEntityValue } from "./types.js";
+import { filesystemOperations, type CanonicalIntent, type IntentEntity, type IntentEntityValue } from "./types.js";
 
 const primitiveEntitySchema=z.union([z.string(),z.number(),z.boolean(),z.array(z.string())]);
-const ambiguitySchema=z.object({code:z.string().min(1),field:z.string().optional(),message:z.string().min(1),critical:z.boolean().optional()});
+const ambiguitySchema=z.object({
+  code:z.string().min(1),
+  field:z.string().optional(),
+  message:z.string().min(1),
+  critical:z.boolean().optional()
+});
+const phase1Operations=[...filesystemOperations,"unknown"] as const;
 
 export const modelIntentSchema=z.object({
   schemaVersion:z.literal(1).default(1),
-  domain:z.enum(["filesystem","system","web","email","calendar","documents","macro","chat","unknown"]),
-  intent:z.enum(["create","read","update","delete","find","list","open","execute","unknown"]),
-  operation:z.string().min(1),
-  entities:z.record(primitiveEntitySchema).default({}),
+  domain:z.enum(["filesystem","unknown"]).describe("Use filesystem para operações de arquivos/pastas e unknown apenas quando o pedido não for executável no domínio filesystem."),
+  intent:z.enum(["create","read","update","delete","find","list","open","execute","unknown"]).describe("Ação semântica geral correspondente à operation."),
+  operation:z.enum(phase1Operations).describe("Escolha somente uma operação filesystem da allowlist ou unknown quando nenhuma se aplicar."),
+  entities:z.record(primitiveEntitySchema).default({}).describe("Entidades literais do pedido. Preserve nomes, conteúdo e escopos informados pelo usuário."),
   referencesPreviousResult:z.boolean().default(false),
-  ambiguities:z.array(ambiguitySchema).default([]),
-  missing:z.array(z.string()).default([]),
+  ambiguities:z.array(ambiguitySchema).default([]).describe("Ambiguidades reais que exigem clarificação; não invente ambiguidades quando o pedido estiver claro."),
+  missing:z.array(z.string()).default([]).describe("Campos obrigatórios ausentes para a operação escolhida."),
   modelConfidence:z.number().min(0).max(1).default(.8)
 });
 
