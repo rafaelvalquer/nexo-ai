@@ -18,12 +18,12 @@ export type IdleLifeState = {
 };
 
 const REGION_ORIGINS: ReadonlyArray<readonly [number, number, number]> = [
-  [-0.62, 0.42, 0.05],
-  [0.62, 0.42, -0.04],
-  [-0.68, 0.02, 0.08],
-  [0.68, 0.02, -0.06],
-  [-0.58, -0.42, -0.02],
-  [0.58, -0.42, 0.06]
+  [-1.02, 0.18, 0],
+  [-0.25, 0.52, 0],
+  [-0.38, -0.25, 0],
+  [1.04, 0.18, 0],
+  [0.20, 0.12, 0],
+  [0.66, -0.50, 0]
 ];
 
 const between = (random: () => number, min: number, max: number) => min + random() * (max - min);
@@ -103,9 +103,9 @@ export function createIdleLife(random: () => number) {
       state.burst = Math.max(state.burst, between(random, 0.28, 0.52) * intensity);
       state.shimmer = Math.max(state.shimmer, between(random, 0.22, 0.45) * intensity);
       if (state.lastEvent === "cascade") state.cascade = Math.max(state.cascade, between(random, 0.55, 0.85) * intensity);
-      state.rotationBiasX = (random() - 0.5) * 0.032 * intensity;
-      state.rotationBiasY = (random() - 0.5) * 0.045 * intensity;
-      state.rotationBiasZ = (random() - 0.5) * 0.018 * intensity;
+      state.rotationBiasX = (random() - 0.5) * 0.008 * intensity;
+      state.rotationBiasY = (random() - 0.5) * 0.012 * intensity;
+      state.rotationBiasZ = (random() - 0.5) * 0.004 * intensity;
       nextCluster = time + between(random, 3, 7);
     }
 

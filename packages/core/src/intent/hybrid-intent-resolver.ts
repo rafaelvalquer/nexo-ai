@@ -4,7 +4,7 @@ import type { IntentParser } from "./llm-intent-parser.js";
 import type { IntentParserFailureKind } from "./parser-result.js";
 import { validateCanonicalIntent } from "./intent-validator.js";
 import { validateIntentSemantics } from "./semantic-validator.js";
-import type { IntentResolutionInput, IntentResolutionResult } from "./types.js";
+import type { CanonicalIntent, IntentResolutionInput, IntentResolutionResult } from "./types.js";
 
 export type HybridResolverDiagnostics={
   input:string;
@@ -45,7 +45,9 @@ export class HybridIntentResolver{
     this.metrics?.record("intent.resolve.total",1,{domain:"filesystem"});
     if(Date.now()<this.circuitOpenUntil)return this.finish(input,"unknown",started,{status:"unknown",reason:"HYBRID_INTENT_CIRCUIT_OPEN"},{parserMs:0,validationMs:0});
 
-    const parsed=await this.parser.parse(input);
+    const parserStarted=Date.now();
+    const rawParsed=await this.parser.parse(input) as unknown;
+    const parsed=normalizeParserResult(rawParsed,Date.now()-parserStarted,this.parser.modelName?.());
     const parserMs=parsed.latencyMs;
     if(parsed.status==="failure"){
       if(parsed.kind!=="ABORTED")this.registerFailure();
@@ -175,4 +177,15 @@ function parserMetric(kind:IntentParserFailureKind){
 
 function parserReason(kind:IntentParserFailureKind){
   return`LLM_INTENT_${kind}`;
+}
+
+function normalizeParserResult(value:unknown,latencyMs:number,model?:string){
+  if(value&&typeof value==="object"&&"status" in value){
+    const status=(value as any).status;
+    if(status==="success"||status==="failure")return value as import("./parser-result.js").IntentParserResult;
+  }
+  if(value&&typeof value==="object"&&(value as CanonicalIntent).schemaVersion===1&&typeof (value as CanonicalIntent).operation==="string"){
+    return{status:"success" as const,intent:value as CanonicalIntent,latencyMs,model};
+  }
+  return{status:"failure" as const,kind:"UNKNOWN_ERROR" as const,latencyMs,model,diagnosticCode:"LEGACY_PARSER_EMPTY_RESULT"};
 }

@@ -2,9 +2,9 @@ import type { AgentVisualState } from "../../../design/tokens";
 import type { NeuralQuality, NeuralQualityProfile } from "./types";
 
 export const neuralQualityProfiles: Record<NeuralQuality, NeuralQualityProfile> = {
-  low: {nodeCount: 220, maxConnections: 4, particleCount: 80, maxPulses: 12, dpr: 1},
-  balanced: {nodeCount: 320, maxConnections: 5, particleCount: 130, maxPulses: 22, dpr: 1.25},
-  high: {nodeCount: 420, maxConnections: 6, particleCount: 180, maxPulses: 30, dpr: 1.5}
+  low: {nodeCount: 220, maxConnections: 4, particleCount: 28, maxPulses: 12, dpr: 1},
+  balanced: {nodeCount: 320, maxConnections: 5, particleCount: 42, maxPulses: 22, dpr: 1.25},
+  high: {nodeCount: 420, maxConnections: 5, particleCount: 58, maxPulses: 30, dpr: 1.5}
 };
 
 export function initialNeuralQuality(width = 1000, hardwareConcurrency = 8): NeuralQuality {

@@ -6,7 +6,7 @@ let server:ViteDevServer;let url:string;
 test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("apps/desktop/vite.config.ts"),root:path.resolve("apps/desktop/renderer"),server:{host:"127.0.0.1",port:0},logLevel:"error"});await server.listen();const address=server.httpServer!.address();if(!address||typeof address==="string")throw new Error("Prévia indisponível");url=`http://127.0.0.1:${address.port}`;});
 test.afterAll(async()=>{await server?.close();});
 
-test("Dashboard mantém fallback neural acessível e cinco atalhos",async({page})=>{
+test("Dashboard mantém a mesma topologia cerebral em reduced motion",async({page},testInfo)=>{
   await page.emulateMedia({reducedMotion:"reduce"});
   let neuralSceneRequested=false;
   page.on("request",request=>{if(request.url().includes("/components/ai/neural/NeuralScene.tsx"))neuralSceneRequested=true;});
@@ -14,10 +14,15 @@ test("Dashboard mantém fallback neural acessível e cinco atalhos",async({page}
   const palette=await page.locator(".dashboardPage").evaluate(node=>({violet:getComputedStyle(node).getPropertyValue("--dash-violet").trim(),token:getComputedStyle(document.documentElement).getPropertyValue("--nexo-violet").trim(),hero:getComputedStyle(document.querySelector(".dashboardHero")!).backgroundImage}));
   expect(palette.violet).toBe(palette.token);expect(palette.hero).toContain("radial-gradient");
   await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();
-  await expect(page.locator(".neuralFallback")).toBeVisible();
+  await expect(page.locator(".neuralCoreStaticFrame")).toBeVisible();
   await expect(page.locator(".nucleusCanvas")).toHaveCount(0);
   expect(neuralSceneRequested).toBe(false);
-  const core=page.locator(".nexoNeuralCore");await expect(core).toHaveCSS("--nucleus-core","#765cff");
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".neuralCoreStaticFrame")).toHaveAttribute("data-topology-version","brain-v1");
+  await page.locator(".neuralCoreStaticFrame svg").screenshot({path:testInfo.outputPath("neural-core-brain-reduced.png"),animations:"disabled"});
+  await expect(core).toHaveCSS("--nucleus-core","#765cff");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
   await expect(core).toHaveCSS("--nucleus-core","#3bd89f");await expect(core).toHaveCSS("--nucleus-ring","#8cfdca");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
@@ -38,8 +43,31 @@ test("Dashboard mantém o Neural Core WebGL ativo em idle quando suportado",asyn
   const core=page.locator(".nexoNeuralCore");
   await expect(core).toHaveAttribute("data-webgl","ready",{timeout:10_000});
   await expect(core).toHaveAttribute("data-state","idle");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
   await expect(page.locator(".nucleusCanvas")).toBeVisible();
-  await expect(page.locator(".neuralFallback")).toHaveCount(0);
+  await expect(page.locator(".neuralCoreVisualStack")).toHaveClass(/isSceneReady/);
+  await expect(page.locator(".neuralCoreStaticFrame")).toHaveAttribute("data-topology-version","brain-v1");
+});
+
+test("Dashboard usa a mesma topologia quando WebGL está indisponível",async({page})=>{
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.addInitScript(()=>{
+    const original=HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext=function(type:any,...args:any[]){
+      if(type==="webgl"||type==="experimental-webgl")return null;
+      return (original as any).call(this,type,...args);
+    } as any;
+  });
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-webgl","unavailable");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".neuralFallback")).toBeVisible();
+  await expect(page.locator(".neuralFallback")).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".nucleusCanvas")).toHaveCount(0);
 });
 
 test("a troca para uma rota lazy mostra skeleton contextual e acessível",async({page})=>{
