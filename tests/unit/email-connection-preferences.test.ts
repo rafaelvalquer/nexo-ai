@@ -7,7 +7,9 @@ import { NexoCore } from "../../packages/core/src/index.js";
 import { seedConnectedAccount } from "../helpers/connection-fixture.js";
 
 const tempDirs: string[] = [];
-afterEach(() => {
+const cores: NexoCore[] = [];
+afterEach(async () => {
+  await Promise.all(cores.splice(0).map(core => core.shutdown()));
   tempDirs.splice(0).forEach(dir => fs.rmSync(dir, { recursive: true, force: true }));
 });
 
@@ -18,6 +20,7 @@ async function coreWithAccount(id: string, provider: "google" | "microsoft") {
   await db.ready();
   seedConnectedAccount({ db, id, provider, capabilities: ["email.read"] });
   const core = new NexoCore({ dataDir: dir });
+  cores.push(core);
   await core.ready();
   core.updateSettings({ connectionsEnabled: true });
   await core.ensureConnections();
