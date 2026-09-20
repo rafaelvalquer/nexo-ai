@@ -17,7 +17,7 @@ const [{HybridIntentResolver,LLMIntentParser,IntentToolMapper,filesystemOperatio
 ]);
 
 const baseUrl=(process.env.NEXO_MODEL_EVAL_URL??process.env.NEXO_OLLAMA_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
-const model=process.env.NEXO_MODEL_EVAL_MODEL??process.env.NEXO_MODEL??"qwen3:0.6b";
+const model=process.env.NEXO_MODEL_EVAL_MODEL??process.env.NEXO_MODEL??"qwen3:4b";
 const intentModel=process.env.NEXO_INTENT_MODEL??model;
 const gateMode=process.env.NEXO_INTENT_GATE_MODE??"quality";
 const technicalTimeoutMs=Number(process.env.NEXO_INTENT_TIMEOUT_MS??10_000);
@@ -110,7 +110,7 @@ console.log(`Cold start: ${Math.round(coldStartMs)} ms; Warm P50/P90/P95/max: ${
 console.log(`Parser/model P95: ${Math.round(parserStats.p95)} ms; validation P95: ${Math.round(validationStats.p95)} ms; mapper P95: ${Math.round(mapperStats.p95)} ms`);console.log(`Report: ${reportPath}`);
 if(failures.length){console.log(`\nFailures: ${failures.length}`);console.log(JSON.stringify(failures.slice(0,40),null,2));}
 
-const qualitySuccess=operationAccuracy>=.98&&entityAccuracy>=.97&&wrongToolRate<=.005&&schemaInvalidRate<=.01&&ambiguitySafety===1&&unsafePathResolution===0&&totalStats.p95<=hostedP95Max;
+const qualitySuccess=operationAccuracy>=.99&&entityAccuracy>=.985&&wrongToolRate<=.002&&schemaInvalidRate<=.01&&ambiguitySafety===1&&unsafePathResolution===0&&totalStats.p95<=hostedP95Max;
 const performanceSuccess=timeoutRate===0&&modelErrorRate===0&&totalStats.p95<=productionP95Max;
 const success=gateMode==="benchmark"?true:gateMode==="performance"?performanceSuccess:qualitySuccess;
 process.exit(success?0:1);
