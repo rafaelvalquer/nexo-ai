@@ -14,10 +14,11 @@ import {verifyGoalNode} from "./nodes/verify-goal.js";
 import { reconcileNode } from "./nodes/reconcile.js";
 import { loopGuardNode } from "./nodes/loop-guard.js";
 import { finalizeNode } from "./nodes/finalize.js";
+import {OutcomeVerifier} from "../outcome/verifier.js";
 
 /** Durable orchestration graph. Nodes enforce protocol and persisted state invariants. */
 export class AgentGraph {
-  constructor(private readonly checkpointer?: BaseCheckpointSaver) {}
+  constructor(private readonly checkpointer?: BaseCheckpointSaver,private readonly outcomeVerifier:OutcomeVerifier=new OutcomeVerifier()) {}
 
   async invoke(runId: string, handler: AgentTurnNodeHandler, previous?: AgentLoopState): Promise<AgentLoopState> {
     const graph = new StateGraph(AgentGraphAnnotation)
@@ -28,7 +29,7 @@ export class AgentGraph {
       .addNode("approval", approvalNode)
       .addNode("execute", executeNode)
       .addNode("observe", observeNode)
-      .addNode("verify_goal",verifyGoalNode)
+      .addNode("verify_goal",verifyGoalNode(this.outcomeVerifier))
       .addNode("reconcile", reconcileNode)
       .addNode("loop_guard", loopGuardNode)
       .addNode("finalize", finalizeNode)
