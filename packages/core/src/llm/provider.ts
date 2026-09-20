@@ -11,6 +11,7 @@ export type StructuredPlanRequest<T> = {
   parse: (value: unknown) => T;
   schemaName?: string;
   model?: string;
+  maxAttempts?: 1 | 2;
 };
 
 export interface LLMProvider {
