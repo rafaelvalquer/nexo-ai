@@ -65,8 +65,6 @@ export class AgentPlanner{
     if(filesystemIntent){
       const built=buildIntentPlan(filesystemIntent,tools,previous);
       if(built.steps?.length||built.direct&&!isUnavailableToolPlan(built.direct))return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
-      const fallback=fastRouter.route(userText,{allowedRoots:this.authorizedRoots()});
-      if(fallback)return withPresentationPolicy({...fallback,origin:"fast",intent:filesystemIntent},filesystemIntent);
       return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent:filesystemIntent},filesystemIntent);
     }
     const hint=resolveDomainHint(userText);
