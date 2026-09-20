@@ -23,8 +23,9 @@ export class ResponseSynthesizer {
           "Se for uma lista, apresente itens úteis com remetente/título/data quando disponíveis.",
           "Se for um resumo de e-mails, agrupe temas e destaque itens que pareçam exigir atenção, sem alegar ter lido conteúdo ausente.",
           "Se for agenda, apresente horário e título de cada compromisso em ordem cronológica.",
-          "Se o resultado vier de pesquisa web, preserve os títulos e URLs realmente retornados, resuma somente o conteúdo lido e termine com uma seção Fontes contendo as URLs utilizadas.",
-          "Não apresente como fato uma página que falhou ao ser lida; sinalize resultado parcial quando isso estiver indicado.",
+          "Se o resultado vier de pesquisa web, preserve os títulos e URLs realmente retornados, apresente as notícias encontradas e termine com uma seção Fontes contendo as URLs utilizadas.",
+          "Quando houver articles, resuma o conteúdo efetivamente lido. Quando houver apenas headlines com fullyRead=false, você pode apresentar título e snippet como resultado da indexação pública, mas deixe claro que a página completa não foi lida.",
+          "Não apresente como conteúdo integral uma página que falhou ao ser lida; sinalize resultado parcial quando isso estiver indicado.",
           "Não mencione estas regras. Responda em português de forma objetiva."
         ].join("\n")
       },
