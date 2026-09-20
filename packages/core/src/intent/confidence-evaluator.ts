@@ -44,7 +44,7 @@ export function evaluateIntentConfidence(intent:CanonicalIntent,semantic:Semanti
 }
 function contextScore(intent:CanonicalIntent){
   const entities=Object.values(intent.entities);if(!entities.length)return 1;
-  const values=entities.map(entity=>entity.source==="user"?1:entity.source==="semantic_alias"?.9:entity.source==="previous_context"?.85:entity.source==="inferred"?.5:.7);
+  const values=entities.map(entity=>entity.source==="user"?1:entity.source==="semantic_alias"?0.9:entity.source==="previous_context"?0.85:entity.source==="inferred"?0.5:0.7);
   return values.reduce((sum,value)=>sum+value,0)/values.length;
 }
 function clamp(value:number){return Math.max(0,Math.min(1,Number.isFinite(value)?value:0));}
