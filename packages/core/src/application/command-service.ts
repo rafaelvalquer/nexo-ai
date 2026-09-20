@@ -119,7 +119,7 @@ export class CommandService {
       diagnostics.latency.webMs=Date.now()-webStarted;
       if(resolution.status==="resolved"){
         const intent=resolution.intent;
-        diagnostics.webIntent={...diagnostics.webIntent,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query};
+        diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),overrideReason:webOverrideReason,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query};
         const mapped=this.web!.mapper.map(intent,text);
         if(mapped.type==="tool"){
           diagnostics.webIntent.finalRoute=mapped.tool;
