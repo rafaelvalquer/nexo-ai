@@ -146,6 +146,9 @@ function applyOperationEntities(intent:CanonicalIntent,text:string):CanonicalInt
   const parsed=parseOperationEntities(intent.operation,text).entities;
   if(!Object.keys(parsed).length)return intent;
   const entities={...intent.entities};
-  for(const [key,value] of Object.entries(parsed))entities[key]={value:value as any,source:"user",confidence:1};
+  for(const [key,value] of Object.entries(parsed)){
+    const source:IntentEntitySource=key==="folder"&&typeof value==="string"&&!containsLiteral(fold(text),value)&&locationAliasMentioned(text,value)?"semantic_alias":"user";
+    entities[key]={value:value as any,source,confidence:1};
+  }
   return{...intent,entities};
 }
