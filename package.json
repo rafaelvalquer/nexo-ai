@@ -19,6 +19,7 @@
     "browser:stability": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/browser-agent build && pnpm --filter @nexo/core build && node scripts/browser-stability.mjs",
     "eval:intents": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-intents.mjs",
     "eval:intents:hybrid": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-hybrid-intents.mjs",
+    "eval:intents:models": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/benchmark-intent-models.mjs",
     "eval:agent": "vitest run --config vitest.agent-evals.config.ts",
     "eval:agent:model": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node scripts/eval-agent-model-backed.mjs",
     "eval:models": "pnpm --filter @nexo/shared build && pnpm --filter @nexo/core build && node tests/model-evals/run-model-benchmark.mjs",
@@ -28,7 +29,8 @@
     "setup": "node scripts/setup.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "release:major": "node scripts/release.mjs major",
+    "smoke:web-research": "pnpm --filter @nexo/core build && node scripts/smoke-web-research.mjs"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",

@@ -1,4 +1,6 @@
 export * from "./types.js";
+export * from "./parser-result.js";
+export * from "./operation-requirements.js";
 export * from "./schema.js";
 export * from "./input-normalizer.js";
 export * from "./llm-intent-parser.js";
@@ -9,3 +11,4 @@ export * from "./hybrid-intent-resolver.js";
 export * from "./intent-tool-mapper.js";
 export * from "./deterministic-intent-adapter.js";
 export * from "./intent-result.js";
+export * from "./web/index.js";

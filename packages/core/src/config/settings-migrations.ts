@@ -1,6 +1,6 @@
 import type { NexoSettings } from "@nexo/shared";
 
-export const CURRENT_SETTINGS_SCHEMA_VERSION = 5;
+export const CURRENT_SETTINGS_SCHEMA_VERSION = 6;
 export interface SettingsMigration { version: number; migrate(settings: NexoSettings): NexoSettings; }
 
 const migrations: SettingsMigration[] = [{
@@ -41,6 +41,15 @@ const migrations: SettingsMigration[] = [{
     return { ...settings,
       hybridIntentRoutingV2Enabled: settings.hybridIntentRoutingV2Enabled ?? true,
       settingsSchemaVersion: 5 };
+  }
+}, {
+  version: 6,
+  migrate(settings) {
+    return { ...settings,
+      webIntentResolverEnabled: settings.webIntentResolverEnabled ?? true,
+      webIntentShadowMode: settings.webIntentShadowMode ?? false,
+      webResearchEnabled: settings.webResearchEnabled ?? true,
+      settingsSchemaVersion: 6 };
   }
 }];
 

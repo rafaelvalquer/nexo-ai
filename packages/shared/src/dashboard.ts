@@ -6,5 +6,5 @@ export type GadgetDefinition = { id: DashboardGadgetId; title: string; descripti
 export type DashboardGadgetInstance = { instanceId: string; gadgetId: DashboardGadgetId; size: GadgetSize; configuration: Record<string, unknown>; enabled: boolean };
 export type DashboardSnapshot = { gadgets: DashboardGadgetInstance[]; updatedAt: string };
 export type DashboardEmailMessage = {id:string;threadId?:string;from:{name?:string;email:string};subject:string;snippet?:string;receivedAt:string;isUnread:boolean;hasAttachments:boolean};
-export type DashboardEmailData = {available:false;unreadCount:number;messages:DashboardEmailMessage[]} | {available:true;connectionId:string;provider:"google"|"microsoft";unreadCount:number;messages:DashboardEmailMessage[]};
+export type DashboardEmailData = {available:false;unreadCount:number;messages:DashboardEmailMessage[]} | {available:true;connectionId:string;provider:"google"|"microsoft";canModify:boolean;unreadCount:number;messages:DashboardEmailMessage[]};
 export type DashboardAgendaData = {available:false;events:[]} | {available:true;connectionId:string;events:Array<{id:string;title:string;start:string;end:string;allDay:boolean;location?:string;meetingUrl?:string}>};

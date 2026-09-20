@@ -6,19 +6,68 @@ let server:ViteDevServer;let url:string;
 test.beforeAll(async()=>{server=await createServer({configFile:path.resolve("apps/desktop/vite.config.ts"),root:path.resolve("apps/desktop/renderer"),server:{host:"127.0.0.1",port:0},logLevel:"error"});await server.listen();const address=server.httpServer!.address();if(!address||typeof address==="string")throw new Error("Prévia indisponível");url=`http://127.0.0.1:${address.port}`;});
 test.afterAll(async()=>{await server?.close();});
 
-test("Dashboard usa fallback neural sem átomo e mostra cinco atalhos",async({page})=>{
-  let orbSceneRequested=false;
-  page.on("request",request=>{if(request.url().includes("/components/ai/orb/OrbScene.tsx"))orbSceneRequested=true;});
+test("Dashboard mantém a mesma topologia cerebral em reduced motion",async({page},testInfo)=>{
+  await page.emulateMedia({reducedMotion:"reduce"});
+  let neuralSceneRequested=false;
+  page.on("request",request=>{if(request.url().includes("/components/ai/neural/NeuralScene.tsx"))neuralSceneRequested=true;});
   await page.goto(url);await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
   const palette=await page.locator(".dashboardPage").evaluate(node=>({violet:getComputedStyle(node).getPropertyValue("--dash-violet").trim(),token:getComputedStyle(document.documentElement).getPropertyValue("--nexo-violet").trim(),hero:getComputedStyle(document.querySelector(".dashboardHero")!).backgroundImage}));
   expect(palette.violet).toBe(palette.token);expect(palette.hero).toContain("radial-gradient");
-  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();await expect(page.locator(".nucleusFallback")).toHaveCount(0);await expect(page.locator(".neuralFallback")).toBeVisible();await expect(page.locator(".nucleusCanvas")).toHaveCount(0);expect(orbSceneRequested).toBe(false);
-  const orb=page.locator(".nexoNucleus");await expect(orb).toHaveCSS("--nucleus-core","#765cff");
+  await expect(page.getByText("NEXO CORE",{exact:false}).first()).toBeVisible();
+  await expect(page.locator(".neuralCoreStaticFrame")).toBeVisible();
+  await expect(page.locator(".nucleusCanvas")).toHaveCount(0);
+  expect(neuralSceneRequested).toBe(false);
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".neuralCoreStaticFrame")).toHaveAttribute("data-topology-version","brain-v1");
+  await page.locator(".neuralCoreStaticFrame svg").screenshot({path:testInfo.outputPath("neural-core-brain-reduced.png"),animations:"disabled"});
+  await expect(core).toHaveCSS("--nucleus-core","#765cff");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("success");});
-  await expect(orb).toHaveCSS("--nucleus-core","#3bd89f");await expect(orb).toHaveCSS("--nucleus-ring","#8cfdca");
+  await expect(core).toHaveCSS("--nucleus-core","#3bd89f");await expect(core).toHaveCSS("--nucleus-ring","#8cfdca");
   await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
-  await page.getByRole("button",{name:"Explorar núcleo"}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
+  await page.getByRole("button",{name:"Explorar núcleo do Nexo",exact:true}).click();await expect(page.locator(".nucleusSatellites button")).toHaveCount(5);
   for(const className of ["satelliteAssistant","satelliteDocuments","satelliteOffice","satelliteMacros","satelliteSettings"])await expect(page.locator(`.${className}`)).toHaveCount(1);
+});
+
+test("Dashboard mantém o Neural Core WebGL ativo em idle quando suportado",async({page})=>{
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const webglSupported=await page.evaluate(()=>{
+    const canvas=document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl"));
+  });
+  test.skip(!webglSupported,"WebGL indisponível no runner");
+  await page.evaluate(async()=>{const {useVisualStore}=await import("/stores/visual.ts");useVisualStore.getState().set("idle");});
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-webgl","ready",{timeout:10_000});
+  await expect(core).toHaveAttribute("data-state","idle");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".nucleusCanvas")).toBeVisible();
+  await expect(page.locator(".neuralCoreVisualStack")).toHaveClass(/isSceneReady/);
+  await expect(page.locator(".neuralCoreStaticFrame")).toHaveAttribute("data-topology-version","brain-v1");
+});
+
+test("Dashboard usa a mesma topologia quando WebGL está indisponível",async({page})=>{
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.addInitScript(()=>{
+    const original=HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext=function(type:any,...args:any[]){
+      if(type==="webgl"||type==="experimental-webgl")return null;
+      return (original as any).call(this,type,...args);
+    } as any;
+  });
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  const core=page.locator(".nexoNeuralCore");
+  await expect(core).toHaveAttribute("data-webgl","unavailable");
+  await expect(core).toHaveAttribute("data-visual","brain-network");
+  await expect(core).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".neuralFallback")).toBeVisible();
+  await expect(page.locator(".neuralFallback")).toHaveAttribute("data-topology-version","brain-v1");
+  await expect(page.locator(".nucleusCanvas")).toHaveCount(0);
 });
 
 test("a troca para uma rota lazy mostra skeleton contextual e acessível",async({page})=>{
@@ -164,7 +213,7 @@ test("email gadget opens its message in the shared drawer and sends only after e
   await page.evaluate(()=>{
     const api=(window as any).nexo.dashboard;
     api.getLayout=async()=>[{instanceId:"mail-home",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
-    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",unreadCount:1,messages:[{id:"mail-1",threadId:"thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Resumo da semana",snippet:"Resumo curto da mensagem.",receivedAt:"2026-09-17T12:00:00.000Z",isUnread:true,hasAttachments:false}]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:1,messages:[{id:"mail-1",threadId:"thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Resumo da semana",snippet:"Resumo curto da mensagem.",receivedAt:"2026-09-17T12:00:00.000Z",isUnread:true,hasAttachments:false}]},fetchedAt:new Date().toISOString(),stale:false});
     api.getEmailMessage=async()=>({id:"mail-1",subject:"Resumo da semana",bodyText:"Conteúdo completo da mensagem para revisão.",snippet:"Resumo curto da mensagem."});
     api.replyEmail=async(request:any)=>{(window as any).__draftEmailReply=request;return{approvalId:"email-approval-1"};};
     (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__emailApprovalResolution={id,approved};return{ok:true};};
@@ -183,4 +232,67 @@ test("email gadget opens its message in the shared drawer and sends only after e
   await drawer.getByRole("button",{name:"Aprovar e enviar resposta"}).click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__emailApprovalResolution)).toEqual({id:"email-approval-1",approved:true});
   await expect(drawer).not.toBeVisible();
+});
+
+
+test("email gadget moves a message to trash only after approval and refreshes the gadget",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Assistente",exact:true}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({timeout:15000});
+  await page.evaluate(()=>{
+    const api=(window as any).nexo.dashboard;
+    const message={id:"trash-mail-1",threadId:"trash-thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Mensagem para excluir",snippet:"Conteúdo que será movido.",receivedAt:"2026-09-20T12:00:00.000Z",isUnread:true,hasAttachments:false};
+    api.getLayout=async()=>[{instanceId:"mail-trash-home",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:1,messages:[message]},fetchedAt:new Date().toISOString(),stale:false});
+    api.refreshGadget=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:0,messages:[]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getEmailMessage=async()=>({...message,bodyText:"Conteúdo completo da mensagem."});
+    let trashAttempt=0;
+    api.trashEmail=async(request:any)=>{trashAttempt++;(window as any).__trashEmailRequest=request;return{approvalId:`trash-approval-${trashAttempt}`};};
+    (window as any).__trashApprovalResolutions=[];
+    (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__trashApprovalResolutions.push({id,approved});return{ok:true};};
+  });
+
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  await page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"}).click();
+  const drawer=page.getByRole("dialog",{name:"Mensagem para excluir"});
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button",{name:/Excluir/}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashEmailRequest)).toEqual({connectionId:"mail-account",messageId:"trash-mail-1"});
+  await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([]);
+
+  await drawer.getByRole("button",{name:"Cancelar",exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([{id:"trash-approval-1",approved:false}]);
+  await expect(drawer).toBeVisible();
+  await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(1);
+
+  await drawer.getByRole("button",{name:/Excluir/}).click();
+  await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
+  await drawer.getByRole("button",{name:/Mover para a lixeira/}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([
+    {id:"trash-approval-1",approved:false},
+    {id:"trash-approval-2",approved:true}
+  ]);
+  await expect(drawer).not.toBeVisible();
+  await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(0);
+});
+
+test("email gadget disables trash when email.modify is unavailable",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Assistente",exact:true}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({timeout:15000});
+  await page.evaluate(()=>{
+    const api=(window as any).nexo.dashboard;
+    const message={id:"read-only-mail",from:{email:"sender@example.com"},subject:"Conta somente leitura",snippet:"Sem permissão de alteração.",receivedAt:"2026-09-20T12:00:00.000Z",isUnread:false,hasAttachments:false};
+    api.getLayout=async()=>[{instanceId:"mail-read-only",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"read-only-account",provider:"google",canModify:false,unreadCount:0,messages:[message]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getEmailMessage=async()=>({...message,bodyText:"Mensagem somente leitura."});
+  });
+
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  await page.locator(".emailGadgetRow").filter({hasText:"Conta somente leitura"}).click();
+  const drawer=page.getByRole("dialog",{name:"Conta somente leitura"});
+  const trash=drawer.getByRole("button",{name:/Excluir/});
+  await expect(trash).toBeDisabled();
+  await expect(trash).toHaveAttribute("title","Ative a permissão Alterar e-mails nas conexões.");
 });

@@ -1,39 +1,42 @@
+import { intentOperationContracts } from "../operation-contracts.js";
 import type { NormalizedIntentInput } from "../types.js";
 
-export function filesystemIntentPrompt(input:NormalizedIntentInput,operations:string[]){
-  const literalContent=input.literalSegments.find(segment=>segment.type==="content")?.value;
+function operationRulesForPrompt(operations: string[]) {
+  return operations
+    .map(op => {
+      const contract = intentOperationContracts[op];
+      if (!contract || op === "unknown") return undefined;
+      return `- ${op}: permitidas: ${contract.allowedEntities.join(", ")}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function filesystemIntentPrompt(input: NormalizedIntentInput, operations: string[]) {
+  const literalContent = input.literalSegments.find(segment => segment.type === "content")?.value;
   return [
-    "Domínio executável permitido nesta fase: filesystem. Se não for filesystem, use domain=unknown, intent=unknown, operation=unknown.",
+    "Classifique o pedido em UMA intenção de filesystem usando somente o schema fornecido.",
     `Operações permitidas: ${operations.join(", ")}.`,
-    "Classifique somente a intenção. Não execute nada e não produza argumentos físicos de Tool.",
-    "Entidades usuais: name, file, folder, path, content, query, source, destination, newName.",
-    "Regras de operação:",
-    "- create_folder: criar pasta/diretório; required name + folder.",
-    "- create_text_file: criar arquivo textual; required name + folder; content é opcional.",
-    "- find_file: localizar arquivo específico pelo nome; required name; folder é opcional.",
-    "- list_files: listar/mostrar conteúdo de uma pasta; required folder.",
-    "- search_files: pesquisar por critério/termo; required query; folder é opcional.",
-    "- write_text_file: alterar/substituir conteúdo de arquivo; required file + content; folder é opcional.",
-    "Alteração de conteúdo NUNCA termina em find_file. Retorne write_text_file; find_file será planejado posteriormente pelo Core quando necessário.",
-    "Locais lógicos podem ser aliases simples como downloads, documents ou desktop.",
-    "Se o usuário mencionar um escopo explícito desconhecido, preserve exatamente esse texto em folder para o Core rejeitar/clarificar; nunca descarte o escopo.",
-    "Preserve nomes, extensões e content. Não corrija, resuma nem reescreva conteúdo.",
-    literalContent!==undefined?`Conteúdo literal extraído pelo Core (copie exatamente para entities.content quando aplicável): ${JSON.stringify(literalContent)}`:"Nenhum segmento literal de conteúdo foi extraído pelo Core.",
-    "Se faltar entidade obrigatória, inclua o campo em missing.",
-    "Se disser apenas 'crie teste em downloads' sem tipo/extensão, declare ambiguity resource_type.",
-    "Se disser 'faz um teste aí nos downloads' e não houver tipo claro, declare ambiguity resource_type/action_type.",
-    "Pergunta informacional ou ação negada => intent=unknown, operation=unknown.",
-    "Exemplos:",
-    "'faz uma pastinha chamada teste nos meus downloads' => create_folder; name=teste; folder=downloads.",
-    "'será que dá pra fazer uma pastinha chamada Experimentos lá nos meus downloads?' => create_folder; name=Experimentos; folder=downloads.",
-    "'procure teste.txt' => find_file; name=teste.txt.",
-    "'procure teste.txt na minha pasta documentos secretos' => find_file; name=teste.txt; folder=documentos secretos.",
-    "'liste downloads' => list_files; folder=downloads.",
-    "'crie teste.txt em downloads com conteúdo abc' => create_text_file; name=teste.txt; folder=downloads; content=abc.",
-    "'troque o conteúdo do teste123.txt por abc 123' => write_text_file; file=teste123.txt; content=abc 123.",
-    "'edite teste123.txt e coloque Cliente XPTO' => write_text_file; file=teste123.txt; content=Cliente XPTO.",
-    "modelConfidence mede somente confiança semântica entre 0 e 1.",
-    `Routing text: ${input.routingText}`,
-    `Original text: ${input.original}`
+    "Use somente as entidades permitidas para a operação selecionada. Não preencha entidades não relacionadas à operação.",
+    "Regras de entidades por operação:",
+    operationRulesForPrompt(operations),
+    "Não invente entidades obrigatórias ausentes. Se faltar name, folder, file, content, path, source ou destination: omita a entidade e liste o campo em missing.",
+    "O Core calcula missing novamente; sua função é preservar somente o que está no pedido.",
+    "Mapa:",
+    "- criar pasta/diretório/pastinha => create_folder.",
+    "- criar arquivo textual => create_text_file.",
+    "- editar/alterar/trocar/substituir conteúdo => write_text_file.",
+    "- procurar/localizar/encontrar nome de arquivo explícito => find_file.",
+    "- pesquisar/buscar por termo ou critério => search_files.",
+    "- listar/mostrar conteúdo de uma pasta => list_files.",
+    "Aliases: download/downloads/meus downloads => downloads; documento/documentos/meus documentos => documents; área de trabalho/desktop => desktop.",
+    "Escopo explícito desconhecido deve ser preservado literalmente em folder. Não o converta em alias conhecido.",
+    "NUNCA invente path/source/destination. Caminho físico só pode aparecer se estiver literalmente no pedido.",
+    "Pergunta informacional ou ação negada => unknown.",
+    "Se o tipo do recurso não estiver claro entre arquivo e pasta, registre ambiguity e não adivinhe.",
+    literalContent !== undefined ? `Conteúdo literal extraído pelo Core; copie exatamente para entities.content: ${JSON.stringify(literalContent)}` : "Nenhum conteúdo literal pré-extraído.",
+    "Preserve nomes, extensões, números, pontuação, moeda, acentos e conteúdo sem traduzir ou reescrever.",
+    `Pedido normalizado: ${input.routingText}`,
+    `Pedido original: ${input.original}`
   ].join("\n");
 }

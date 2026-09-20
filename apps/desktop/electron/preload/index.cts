@@ -39,7 +39,8 @@ const api={
     getGadgetData:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:data",id,configuration),
     refreshGadget:(id:string,configuration:Record<string,unknown>={})=>ipcRenderer.invoke("nexo:dashboard:refresh",id,configuration),
     getEmailMessage:(connectionId:string,messageId:string)=>ipcRenderer.invoke("nexo:dashboard:email-message",connectionId,messageId),
-    replyEmail:(input:{connectionId:string;messageId:string;threadId?:string;bodyText:string})=>ipcRenderer.invoke("nexo:dashboard:email-reply",input)
+    replyEmail:(input:{connectionId:string;messageId:string;threadId?:string;bodyText:string})=>ipcRenderer.invoke("nexo:dashboard:email-reply",input),
+    trashEmail:(input:{connectionId:string;messageId:string})=>ipcRenderer.invoke("nexo:dashboard:email-trash",input)
   },
   loadMoreChatBlock:(conversationId:string,messageId:string,blockId:string)=>ipcRenderer.invoke("nexo:chat:more",conversationId,messageId,blockId),
   executeChatAction:(request:ChatActionRequest):Promise<ChatActionOutcome>=>ipcRenderer.invoke("nexo:chat:action",request),
@@ -73,6 +74,8 @@ const api={
   addConnectionCapabilities:(id:string,capabilities:string[])=>ipcRenderer.invoke("nexo:connections:add-capabilities",id,capabilities),
   setConnectionCapabilities:(id:string,capabilities:string[])=>ipcRenderer.invoke("nexo:connections:set-capabilities",id,capabilities),
   connectionDiagnostics:(id:string)=>ipcRenderer.invoke("nexo:connections:diagnostics",id),
+  getEmailSearchPreferences:(id:string)=>ipcRenderer.invoke("nexo:connections:email-preferences:get",id),
+  saveEmailSearchPreferences:(id:string,categories:string[])=>ipcRenderer.invoke("nexo:connections:email-preferences:save",id,categories),
   chooseDocument:()=>ipcRenderer.invoke("nexo:documents:choose"),
   importDroppedDocument:(file:File)=>ipcRenderer.invoke("nexo:documents:import-dropped",webUtils.getPathForFile(file)),
   listRecentDocuments:()=>ipcRenderer.invoke("nexo:documents:list-recent"),

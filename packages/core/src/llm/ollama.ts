@@ -2,10 +2,10 @@ import type { AgentModelMessage, AgentModelTurn, AgentTurnRequest, LLMMessage, L
 import { structuredAgentTurn } from "./agent/structured-agent-turn.js";
 import { sanitizeAssistantContent } from "./agent/sanitize-assistant-content.js";
 import { DEFAULT_TIMEOUTS } from "../config/defaults.js";
-import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, OllamaInvalidResponseError } from "./errors.js";
+import { OllamaConnectionError, OllamaTimeoutError, OllamaUnavailableError, OllamaInvalidResponseError, OllamaModelNotFoundError } from "./errors.js";
 import { LLM_STREAM_CONTENT_STARTED, LLM_STREAM_THINKING_STARTED } from "./stream-events.js";
 import type { ResourceManager } from "../runtime/resource-manager.js";
-import { parseStructuredJson } from "./structured-response-parser.js";
+import { parseStructuredJson, StructuredOutputError } from "./structured-response-parser.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 
 const DEFAULT_KEEP_ALIVE = "10m";
@@ -111,6 +111,7 @@ export class OllamaProvider implements LLMProvider {
 
   private handleError(e: any, phase: string, timeoutMs: number, external?: AbortSignal): never {
     if (external?.aborted) throw external.reason ?? new DOMException("Cancelado", "AbortError");
+    if (e instanceof OllamaTimeoutError || e instanceof OllamaConnectionError || e instanceof OllamaUnavailableError || e instanceof OllamaInvalidResponseError || e instanceof OllamaModelNotFoundError || e instanceof StructuredOutputError || e?.name === "ZodError") throw e;
     if (e?.name === "AbortError" || e?.name === "TimeoutError") throw new OllamaTimeoutError(phase, this.model, Math.round(timeoutMs / 1000));
     if (e?.cause?.code === "ECONNREFUSED" || e?.message?.includes("fetch failed")) throw new OllamaConnectionError();
     throw new OllamaUnavailableError(e instanceof Error ? e.message : String(e));
@@ -278,7 +279,9 @@ export class OllamaProvider implements LLMProvider {
             throw secondError;
           }
         }
-      } catch (e) {
+      } catch (e: any) {
+        if (e?.status === 404) throw new OllamaModelNotFoundError(preferredModel);
+        if (e instanceof StructuredOutputError || e instanceof OllamaInvalidResponseError || e?.name === "ZodError") throw e;
         return this.handleError(e, `planejamento estruturado${request.schemaName ? ` (${request.schemaName})` : ""}`, DEFAULT_TIMEOUTS.planner, signal);
       }
     }, signal);

@@ -5,7 +5,10 @@ import {pathToFileURL} from "node:url";
 
 const root=process.cwd(),coreDist=path.join(root,"packages/core/dist"),artifactsDir=path.join(root,"artifacts");
 await fs.mkdir(artifactsDir,{recursive:true});
-const reportPath=path.join(artifactsDir,"hybrid-intent-eval.json");
+const reportPath=process.env.NEXO_INTENT_REPORT_PATH
+  ? path.resolve(process.env.NEXO_INTENT_REPORT_PATH)
+  : path.join(artifactsDir,"hybrid-intent-eval.json");
+await fs.mkdir(path.dirname(reportPath),{recursive:true});
 
 const [{HybridIntentResolver,LLMIntentParser,IntentToolMapper,filesystemOperations},{OllamaProvider},{ToolRegistry}]=await Promise.all([
   import(pathToFileURL(path.join(coreDist,"intent/index.js"))),
@@ -15,9 +18,13 @@ const [{HybridIntentResolver,LLMIntentParser,IntentToolMapper,filesystemOperatio
 
 const baseUrl=(process.env.NEXO_MODEL_EVAL_URL??process.env.NEXO_OLLAMA_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
 const model=process.env.NEXO_MODEL_EVAL_MODEL??process.env.NEXO_MODEL??"qwen3:0.6b";
-const intentModel=process.env.NEXO_INTENT_MODEL??model,maxP95=Number(process.env.NEXO_INTENT_P95_MAX_MS??1500);
+const intentModel=process.env.NEXO_INTENT_MODEL??model;
+const gateMode=process.env.NEXO_INTENT_GATE_MODE??"quality";
+const technicalTimeoutMs=Number(process.env.NEXO_INTENT_TIMEOUT_MS??10_000);
+const hostedP95Max=Number(process.env.NEXO_INTENT_HOSTED_P95_MAX_MS??5_000);
+const productionP95Max=Number(process.env.NEXO_INTENT_P95_MAX_MS??1_500);
 const provider=new OllamaProvider(baseUrl,model,undefined,intentModel),health=await provider.health();
-if(!health.ok){await writeReport({model:intentModel,error:`Ollama indisponível: ${health.detail}`});console.error(`Ollama indisponível: ${health.detail}`);process.exit(2);}
+if(!health.ok){await writeReport({model:intentModel,gateMode,error:`Ollama indisponível: ${health.detail}`});console.error(`Ollama indisponível: ${health.detail}`);process.exit(2);}
 
 const datasetFiles=["filesystem-create-folder.json","filesystem-create-file.json","filesystem-find-file.json","filesystem-list.json","filesystem-write-file.json","ambiguous-cases.json","filesystem-real-world-regressions.json","filesystem-manual-regressions-v2.json"];
 const byInput=new Map();
@@ -27,12 +34,20 @@ for(const file of datasetFiles){
     if(!existing||(!existing.operation&&row.operation))byInput.set(row.input,row);
   }
 }
-const rows=[...byInput.values()],resolver=new HybridIntentResolver(new LLMIntentParser(provider)),registry=new ToolRegistry(),evalRoot=path.join(root,".hybrid-eval","Downloads"),mapper=new IntentToolMapper(registry,()=>[evalRoot]);
+const rows=[...byInput.values()],registry=new ToolRegistry(),evalRoot=path.join(root,".hybrid-eval","Downloads"),mapper=new IntentToolMapper(registry,()=>[evalRoot]);
 const request=text=>({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations]});
-const warmups=["procure teste.txt","crie uma pasta teste em downloads","troque o conteúdo do teste.txt por abc"];
-for(const text of warmups){const result=await resolver.resolve(request(text));if(result.status==="resolved")mapper.map(result.intent);}
+const resolver=new HybridIntentResolver(new LLMIntentParser(provider,technicalTimeoutMs),undefined,rows.length+20,0);
 
-let operationOk=0,entityChecks=0,entityOk=0,wrongTool=0,schemaInvalid=0,unsafePathResolution=0,safeNonExecutable=0;
+const warmups=["procure teste.txt","crie uma pasta teste em downloads","troque o conteúdo do teste.txt por abc"];
+const coldStarted=performance.now();
+const coldResult=await resolver.resolve(request(warmups[0]));
+const coldStartMs=performance.now()-coldStarted;
+if(coldResult.status==="resolved")mapper.map(coldResult.intent);
+for(const text of warmups.slice(1)){const result=await resolver.resolve(request(text));if(result.status==="resolved")mapper.map(result.intent);}
+
+let operationOk=0,entityChecks=0,entityOk=0,wrongTool=0,unsafePathResolution=0,safeNonExecutable=0;
+let schemaInvalid=0,semanticInvalid=0,resolverUnknown=0;
+const parserFailures={TIMEOUT:0,ABORTED:0,MODEL_UNAVAILABLE:0,MODEL_NOT_FOUND:0,TRANSPORT_ERROR:0,INVALID_JSON:0,STRUCTURED_OUTPUT_ERROR:0,SCHEMA_VALIDATION_ERROR:0,UNKNOWN_ERROR:0};
 const totalLatencies=[],resolverLatencies=[],parserLatencies=[],validationLatencies=[],mapperLatencies=[],failures=[];
 const executableRows=rows.filter(row=>row.operation),nonExecutableRows=rows.filter(row=>!row.operation);
 
@@ -41,29 +56,64 @@ for(const [index,row] of rows.entries()){
   let mapperElapsed=0,mapped;
   if(result.status==="resolved"){const mapperStarted=performance.now();mapped=mapper.map(result.intent);mapperElapsed=performance.now()-mapperStarted;}
   const totalElapsed=performance.now()-totalStarted,diagnostics=resolver.diagnostics();
-  totalLatencies.push(totalElapsed);resolverLatencies.push(resolverElapsed);parserLatencies.push(diagnostics?.parserMs??0);validationLatencies.push(diagnostics?.validationMs??0);mapperLatencies.push(mapperElapsed);
+  totalLatencies.push(totalElapsed);resolverLatencies.push(resolverElapsed);parserLatencies.push(diagnostics?.parser?.latencyMs??diagnostics?.parserMs??0);validationLatencies.push(diagnostics?.validationMs??0);mapperLatencies.push(mapperElapsed);
+  if(diagnostics?.parser?.status==="failure"&&diagnostics.parser.failureKind)parserFailures[diagnostics.parser.failureKind]=(parserFailures[diagnostics.parser.failureKind]??0)+1;
+  if(diagnostics?.validation?.structural==="invalid")schemaInvalid++;
+  if(diagnostics?.validation?.semantic==="invalid")semanticInvalid++;
+  if(result.status==="unknown")resolverUnknown++;
 
   if(row.operation){
     const operation=result.status==="resolved"&&result.intent.operation===row.operation;if(operation)operationOk++;
     if(result.status==="resolved"&&result.intent.operation!==row.operation)wrongTool++;
-    if(result.status==="unknown"&&["LLM_INTENT_PARSE_FAILED","INVALID_INTENT_SCHEMA"].includes(result.reason))schemaInvalid++;
     for(const [key,expected] of Object.entries(row.entities??{})){entityChecks++;const actual=result.status!=="unknown"?result.intent.entities?.[key]?.value:undefined;if(entityEquivalent(key,actual,expected))entityOk++;}
     if(result.status==="resolved"&&hasUnsafeInventedPath(result.intent,row.input))unsafePathResolution++;
-    if(!operation||!entitiesMatch(result,row.entities??{}))failures.push({input:row.input,file:row.file,expected:{operation:row.operation,entities:row.entities},actual:summarize(result),mapped:summarizeMapped(mapped)});
+    const entitiesOk=entitiesMatch(result,row.entities??{});
+    if(!operation||!entitiesOk)failures.push({
+      category:failureCategory(row,result,diagnostics,operation,entitiesOk),
+      input:row.input,file:row.file,expected:{operation:row.operation,entities:row.entities},
+      actual:summarize(result),mapped:summarizeMapped(mapped)
+    });
   }else{
-    const safe=result.status==="clarification"||result.status==="unknown";if(safe)safeNonExecutable++;else failures.push({input:row.input,file:row.file,expected:row.expectedStatus??"clarification_or_unknown",actual:summarize(result),mapped:summarizeMapped(mapped)});
+    const safe=result.status==="clarification"||result.status==="unknown";if(safe)safeNonExecutable++;
+    else failures.push({category:"SAFETY_ERROR",input:row.input,file:row.file,expected:row.expectedStatus??"clarification_or_unknown",actual:summarize(result),mapped:summarizeMapped(mapped)});
   }
   process.stdout.write(`\rHybrid Intent Evaluation ${index+1}/${rows.length}`);
 }
 process.stdout.write("\n");
 
-const operationAccuracy=ratio(operationOk,executableRows.length),entityAccuracy=ratio(entityOk,entityChecks),wrongToolRate=ratio(wrongTool,executableRows.length),schemaInvalidRate=ratio(schemaInvalid,rows.length),ambiguitySafety=ratio(safeNonExecutable,nonExecutableRows.length);
+const operationAccuracy=ratio(operationOk,executableRows.length),entityAccuracy=ratio(entityOk,entityChecks),wrongToolRate=ratio(wrongTool,executableRows.length),schemaInvalidRate=ratio(schemaInvalid,rows.length),semanticInvalidRate=ratio(semanticInvalid,rows.length),resolverUnknownRate=ratio(resolverUnknown,rows.length),ambiguitySafety=ratio(safeNonExecutable,nonExecutableRows.length);
+const timeoutRate=ratio(parserFailures.TIMEOUT,rows.length);
+const modelErrorRate=ratio(parserFailures.MODEL_UNAVAILABLE+parserFailures.MODEL_NOT_FOUND+parserFailures.TRANSPORT_ERROR,rows.length);
+const invalidJsonRate=ratio(parserFailures.INVALID_JSON,rows.length);
+const structuredOutputErrorRate=ratio(parserFailures.STRUCTURED_OUTPUT_ERROR,rows.length);
+const schemaValidationErrorRate=ratio(parserFailures.SCHEMA_VALIDATION_ERROR,rows.length);
 const totalStats=stats(totalLatencies),resolverStats=stats(resolverLatencies),parserStats=stats(parserLatencies),validationStats=stats(validationLatencies),mapperStats=stats(mapperLatencies);
-const report={model:intentModel,cases:rows.length,executableCases:executableRows.length,nonExecutableCases:nonExecutableRows.length,operationAccuracy,entityAccuracy,wrongToolRate,schemaInvalidRate,ambiguitySafety,unsafeInventedPaths:unsafePathResolution,latency:{totalMs:totalStats,resolverMs:resolverStats,parserModelMs:parserStats,validationMs:validationStats,mapperMs:mapperStats},p50Ms:Math.round(totalStats.p50),p90Ms:Math.round(totalStats.p90),p95Ms:Math.round(totalStats.p95),maxMs:Math.round(totalStats.max),maxP95Ms:maxP95,warmupCases:warmups.length,failures:failures.slice(0,75)};
+const report={
+  model:intentModel,gateMode,cases:rows.length,executableCases:executableRows.length,nonExecutableCases:nonExecutableRows.length,
+  operationAccuracy,entityAccuracy,wrongToolRate,schemaInvalidRate,semanticInvalidRate,resolverUnknownRate,
+  timeoutRate,modelErrorRate,invalidJsonRate,structuredOutputErrorRate,schemaValidationErrorRate,
+  ambiguitySafety,unsafeInventedPaths:unsafePathResolution,parserFailures,
+  coldStartMs:Math.round(coldStartMs),
+  warmP50:Math.round(totalStats.p50),warmP90:Math.round(totalStats.p90),warmP95:Math.round(totalStats.p95),warmMax:Math.round(totalStats.max),
+  latency:{total:totalStats,resolver:resolverStats,parserModel:parserStats,validation:validationStats,mapper:mapperStats},
+  p50Ms:Math.round(totalStats.p50),p90Ms:Math.round(totalStats.p90),p95Ms:Math.round(totalStats.p95),maxMs:Math.round(totalStats.max),
+  hostedP95MaxMs:hostedP95Max,productionP95MaxMs:productionP95Max,technicalTimeoutMs,warmupCases:warmups.length,
+  failures:failures.slice(0,100)
+};
 await writeReport(report);
-console.log(`Model: ${intentModel}`);console.log(`Cases: ${rows.length}`);console.log(`Operation accuracy: ${pct(operationAccuracy)}`);console.log(`Entity accuracy: ${pct(entityAccuracy)}`);console.log(`Wrong tool rate: ${pct(wrongToolRate)}`);console.log(`Schema invalid rate: ${pct(schemaInvalidRate)}`);console.log(`Ambiguity/negative safety: ${pct(ambiguitySafety)}`);console.log(`Unsafe invented paths: ${unsafePathResolution}`);console.log(`Latency total P50/P90/P95/max: ${Math.round(totalStats.p50)}/${Math.round(totalStats.p90)}/${Math.round(totalStats.p95)}/${Math.round(totalStats.max)} ms`);console.log(`Parser/model P95: ${Math.round(parserStats.p95)} ms; validation P95: ${Math.round(validationStats.p95)} ms; mapper P95: ${Math.round(mapperStats.p95)} ms`);console.log(`Report: ${reportPath}`);
+console.log(`Model: ${intentModel}`);console.log(`Gate mode: ${gateMode}`);console.log(`Cases: ${rows.length}`);
+console.log(`Operation accuracy: ${pct(operationAccuracy)}`);console.log(`Entity accuracy: ${pct(entityAccuracy)}`);console.log(`Wrong tool rate: ${pct(wrongToolRate)}`);
+console.log(`Schema invalid rate: ${pct(schemaInvalidRate)}`);console.log(`Semantic invalid rate: ${pct(semanticInvalidRate)}`);console.log(`Timeout rate: ${pct(timeoutRate)}`);
+console.log(`Model/transport error rate: ${pct(modelErrorRate)}`);console.log(`Invalid JSON rate: ${pct(invalidJsonRate)}`);console.log(`Structured output error rate: ${pct(structuredOutputErrorRate)}`);
+console.log(`Ambiguity/negative safety: ${pct(ambiguitySafety)}`);console.log(`Unsafe invented paths: ${unsafePathResolution}`);
+console.log(`Cold start: ${Math.round(coldStartMs)} ms; Warm P50/P90/P95/max: ${Math.round(totalStats.p50)}/${Math.round(totalStats.p90)}/${Math.round(totalStats.p95)}/${Math.round(totalStats.max)} ms`);
+console.log(`Parser/model P95: ${Math.round(parserStats.p95)} ms; validation P95: ${Math.round(validationStats.p95)} ms; mapper P95: ${Math.round(mapperStats.p95)} ms`);console.log(`Report: ${reportPath}`);
 if(failures.length){console.log(`\nFailures: ${failures.length}`);console.log(JSON.stringify(failures.slice(0,40),null,2));}
-const success=operationAccuracy>=.98&&entityAccuracy>=.97&&wrongToolRate<=.005&&schemaInvalidRate<=.01&&ambiguitySafety===1&&unsafePathResolution===0&&totalStats.p95<=maxP95;process.exit(success?0:1);
+
+const qualitySuccess=operationAccuracy>=.98&&entityAccuracy>=.97&&wrongToolRate<=.005&&schemaInvalidRate<=.01&&ambiguitySafety===1&&unsafePathResolution===0&&totalStats.p95<=hostedP95Max;
+const performanceSuccess=timeoutRate===0&&modelErrorRate===0&&totalStats.p95<=productionP95Max;
+const success=gateMode==="benchmark"?true:gateMode==="performance"?performanceSuccess:qualitySuccess;
+process.exit(success?0:1);
 
 function normalizeRow(row){
   if(row.expectedOperation&&!row.operation)row.operation=row.expectedOperation;
@@ -82,5 +132,20 @@ function canonicalAlias(value){const normalized=String(value??"").normalize("NFD
 function entityEquivalent(key,actual,expected){if(key==="folder")return canonicalAlias(actual)===canonicalAlias(expected);if(Array.isArray(actual)||Array.isArray(expected))return JSON.stringify(actual)===JSON.stringify(expected);return String(actual??"").normalize("NFKC").trim()===String(expected??"").normalize("NFKC").trim();}
 function entitiesMatch(result,expected){if(result.status==="unknown")return Object.keys(expected).length===0;return Object.entries(expected).every(([key,value])=>entityEquivalent(key,result.intent.entities?.[key]?.value,value));}
 function hasUnsafeInventedPath(intent,input){const normalized=input.replace(/\//g,"\\").replace(/[\\]+/g,"\\").toLowerCase();for(const key of["path","source","destination"]){const value=intent.entities?.[key]?.value;if(typeof value!=="string")continue;if(!/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value))continue;const candidate=value.replace(/\//g,"\\").replace(/[\\]+/g,"\\").toLowerCase();if(!normalized.includes(candidate))return true;}return false;}
-function summarize(result){if(result.status==="unknown")return{status:result.status,reason:result.reason};return{status:result.status,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),confidence:result.confidence.overall};}
+function summarize(result){if(result.status==="unknown")return{status:result.status,reason:result.reason,...(result.intent?{domain:result.intent.domain,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),confidence:result.confidence?.overall}: {})};return{status:result.status,domain:result.intent.domain,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),missing:result.intent.missing,confidence:result.confidence.overall};}
 function summarizeMapped(mapped){if(!mapped)return undefined;return mapped.type==="tool"?{type:mapped.type,tool:mapped.tool,deferredAction:mapped.deferredAction?.kind}:mapped.type==="clarification"?{type:mapped.type,question:mapped.question}:{type:mapped.type,reason:mapped.reason};}
+function failureCategory(row,result,diagnostics,operationOk,entitiesOk){
+  if(diagnostics?.parser?.status==="failure")return diagnostics.parser.failureKind??"UNKNOWN";
+  if(diagnostics?.validation?.structural==="invalid")return"SCHEMA_INVALID";
+  if(result.status==="resolved"&&!operationOk)return"WRONG_OPERATION";
+  if(result.status==="resolved"&&!entitiesOk){
+    for(const [key,expected] of Object.entries(row.entities??{})){
+      const actual=result.intent.entities?.[key]?.value;
+      if(typeof expected==="string"&&row.input.includes(expected)&&actual!==expected)return"TRANSLATED_LITERAL";
+      if(actual!==undefined&&!row.input.toLocaleLowerCase().includes(String(actual).toLocaleLowerCase())&&key!=="folder")return"INVENTED_ENTITY";
+    }
+    return"WRONG_ENTITY";
+  }
+  if(result.status==="unknown"||result.status==="clarification")return"UNKNOWN";
+  return"WRONG_TOOL";
+}

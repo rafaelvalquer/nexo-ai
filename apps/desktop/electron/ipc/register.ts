@@ -2,6 +2,8 @@ import { validateConversationPageOptions } from "@nexo/shared";
 import { BrowserWindow,ipcMain } from "electron";
 import path from "node:path";
 import type { NexoCore } from "@nexo/core";
+import { registerDashboardEmailIpc } from "./dashboard-email.js";
+import { registerEmailPreferencesIpc } from "./email-preferences.js";
 function requireString(value:unknown,name:string){if(typeof value!=="string"||!value.trim())throw new Error(`${name} inválido.`);return value.trim();}
 function requireBoolean(value:unknown,name:string){if(typeof value!=="boolean")throw new Error(`${name} inválido.`);return value;}
 function requireModel(value:unknown){const model=requireString(value,"Modelo");if(model.length>120||!/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/.test(model))throw new Error("Modelo inválido.");return model;}
@@ -13,14 +15,14 @@ function validateOAuthConfiguration(value:unknown){if(!value||typeof value!=="ob
 function validateCapabilities(value:unknown){if(!Array.isArray(value)||!value.length||!value.every(x=>["email.read","email.send","email.modify","calendar.read","calendar.write"].includes(String(x))))throw new Error("Capacidades inválidas.");return[...new Set(value)] as any;}
 export function registerIpc(core:NexoCore,desktop:{chooseFolder:()=>Promise<string|null>;chooseDocument:()=>Promise<string|null>;saveDocument:(name:string)=>Promise<string|null>;openPath:(p:string)=>Promise<string>;openExternal:(u:string)=>Promise<void>;trashItem:(p:string)=>Promise<void>;}){
   const dashboardConfig=(value:unknown)=>{if(value===undefined)return{};if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("Configuração do gadget inválida.");return value as Record<string,unknown>;};
+  registerDashboardEmailIpc(core);
+  registerEmailPreferencesIpc(core);
   ipcMain.handle("nexo:dashboard:catalog",()=>core.dashboardCatalog());ipcMain.handle("nexo:dashboard:layout",()=>core.dashboardLayout());
   ipcMain.handle("nexo:dashboard:add",(_,id,configuration,size)=>core.dashboardAdd(requireString(id,"Gadget") as any,dashboardConfig(configuration),size===undefined?undefined:requireString(size,"Tamanho") as any));
   ipcMain.handle("nexo:dashboard:remove",(_,id)=>core.dashboardRemove(requireString(id,"Instância do gadget")));
   ipcMain.handle("nexo:dashboard:configure",(_,id,configuration,size)=>core.dashboardConfigure(requireString(id,"Instância do gadget"),dashboardConfig(configuration),size===undefined?undefined:requireString(size,"Tamanho") as any));
   ipcMain.handle("nexo:dashboard:save-layout",(_,items)=>{if(!Array.isArray(items))throw new Error("Layout inválido.");return core.dashboardSaveLayout(items.map(item=>{if(!item||typeof item!=="object")throw new Error("Item do layout inválido.");const row=item as Record<string,unknown>;return{instanceId:requireString(row.instanceId,"Instância"),size:requireString(row.size,"Tamanho") as any,position:row.position};}) as any);});
   ipcMain.handle("nexo:dashboard:data",(_,id,configuration)=>core.dashboardGadgetData(requireString(id,"Gadget") as any,dashboardConfig(configuration)));
-  ipcMain.handle("nexo:dashboard:email-message",(_,connectionId,messageId)=>core.dashboardEmailMessage(requireString(connectionId,"Conexão"),requireString(messageId,"Mensagem")));
-  ipcMain.handle("nexo:dashboard:email-reply",(_,input)=>{if(!input||typeof input!=="object")throw new Error("Dados de resposta inválidos.");const value=input as Record<string,unknown>;return core.dashboardEmailReply({connectionId:requireString(value.connectionId,"Conexão"),messageId:requireString(value.messageId,"Mensagem"),threadId:typeof value.threadId==="string"?value.threadId:undefined,bodyText:requireString(value.bodyText,"Resposta")});});
   ipcMain.handle("nexo:dashboard:refresh",(_,id,configuration)=>core.dashboardRefresh(requireString(id,"Gadget") as any,dashboardConfig(configuration)));
   ipcMain.handle("nexo:chat:more",(_,conversationId,messageId,blockId)=>core.chatActions.loadMore(requireString(conversationId,"Conversa"),requireString(messageId,"Mensagem"),requireString(blockId,"Bloco")));
   core.chatActions.subscribe(event=>{for(const window of BrowserWindow.getAllWindows())if(!window.isDestroyed())window.webContents.send("nexo:chat:resource",event);});

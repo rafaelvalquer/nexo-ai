@@ -1,6 +1,7 @@
 import type { ConnectionService } from "../connections/service.js";
 import type { EmailDraft, EmailDraftInput, EmailMessage, EmailSearchQuery, EmailSearchResult, EmailModifyAction, EmailAttachment, EmailMailboxStats, EmailReplyInput } from "./types.js";
 import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "./preferences/types.js";
+import { defaultMailboxCategories } from "./preferences/category-resolver.js";
 import { buildGmailSearchQuery } from "./google/query-builder.js";
 import { GoogleApiClient } from "../google/api-client.js";
 import { randomUUID } from "node:crypto";
@@ -156,7 +157,20 @@ export class EmailService {
   }
 
   private requireAccount(connectionId:string){const account=this.connections.get(connectionId);if(!account)throw new Error("Conexão não encontrada.");return account;}
-  private resolveCategories(connectionId:string,explicit?:EmailMailboxCategory[]){const resolved=this.preferenceResolver?.resolveCategories(connectionId,explicit)??explicit;if(resolved?.includes("inbox"))return undefined;return resolved as EmailMailboxCategory[]|undefined;}
+  private resolveCategories(connectionId:string,explicit?:EmailMailboxCategory[]){
+    const resolved=this.preferenceResolver?.resolveCategories(connectionId,explicit)??explicit;
+    if(resolved&&resolved.length>0){
+      if(resolved.includes("inbox"))return undefined;
+      return resolved as EmailMailboxCategory[];
+    }
+    const account=this.connections?.get(connectionId);
+    if(account){
+      const defaults=defaultMailboxCategories(account.provider);
+      if(defaults.includes("inbox"))return undefined;
+      return defaults as EmailMailboxCategory[];
+    }
+    return undefined;
+  }
 }
 
 async function searchGoogle(client:GoogleApiClient,input:EmailSearchQuery,signal?:AbortSignal):Promise<EmailSearchResult>{

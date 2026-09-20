@@ -1,0 +1,674 @@
+import { useEffect, useRef } from "react";
+import { buildAdjacencyMap } from "./neuralConnections";
+import { generateBrainTopology } from "./brainTopology";
+import { createSeededRandom, generateAmbientParticles, NEURAL_SEED } from "./neuralGeometry";
+import { createIdleLife } from "./neuralIdleLife";
+import { decayInteraction } from "./neuralInteraction";
+import { exponentialApproach, getAutonomousDrift, getAutonomousRotation, hexColor } from "./neuralPhysics";
+import { getTargetFrameInterval, lowerNeuralQuality, neuralQualityProfiles } from "./neuralPerformance";
+import { neuralStates } from "./neuralStates";
+import { ambientFragmentShader, ambientVertexShader, edgeFragmentShader, edgeVertexShader, nodeFragmentShader, nodeVertexShader, pulseFragmentShader, pulseVertexShader } from "./neuralShaders";
+import type { NeuralEdge, NeuralNode, NeuralSceneProps, SynapticPulse } from "./types";
+
+type ProgramInfo = {
+  program: WebGLProgram;
+  attributes: Record<string, number>;
+  uniforms: Record<string, WebGLUniformLocation | null>;
+};
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Não foi possível criar o shader do Neural Core.");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const message = gl.getShaderInfoLog(shader) ?? "Shader inválido.";
+    gl.deleteShader(shader);
+    throw new Error(message);
+  }
+  return shader;
+}
+
+function createProgram(gl: WebGLRenderingContext, vertex: string, fragment: string, attributes: string[], uniforms: string[]): ProgramInfo {
+  const program = gl.createProgram();
+  if (!program) throw new Error("Não foi possível criar o programa do Neural Core.");
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertex);
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragment);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const message = gl.getProgramInfoLog(program) ?? "Programa WebGL inválido.";
+    gl.deleteProgram(program);
+    throw new Error(message);
+  }
+  return {
+    program,
+    attributes: Object.fromEntries(attributes.map(name => [name, gl.getAttribLocation(program, name)])),
+    uniforms: Object.fromEntries(uniforms.map(name => [name, gl.getUniformLocation(program, name)]))
+  };
+}
+
+const identity = () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+
+function multiply(a: Float32Array, b: Float32Array) {
+  const out = new Float32Array(16);
+  for (let column = 0; column < 4; column++) for (let row = 0; row < 4; row++) {
+    out[column * 4 + row] =
+      a[row] * b[column * 4] +
+      a[4 + row] * b[column * 4 + 1] +
+      a[8 + row] * b[column * 4 + 2] +
+      a[12 + row] * b[column * 4 + 3];
+  }
+  return out;
+}
+
+function rotateX(angle: number) {
+  const c=Math.cos(angle),s=Math.sin(angle);
+  return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);
+}
+function rotateY(angle: number) {
+  const c=Math.cos(angle),s=Math.sin(angle);
+  return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+}
+function rotateZ(angle: number) {
+  const c=Math.cos(angle),s=Math.sin(angle);
+  return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);
+}
+function scaleMatrix(value: number) {
+  return new Float32Array([value,0,0,0, 0,value,0,0, 0,0,value,0, 0,0,0,1]);
+}
+function translation(x: number, y: number, z: number) {
+  const matrix=identity();
+  matrix[12]=x;
+  matrix[13]=y;
+  matrix[14]=z;
+  return matrix;
+}
+function perspective(fov: number, aspect: number, near: number, far: number) {
+  const f=1/Math.tan(fov/2),range=1/(near-far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(near+far)*range,-1, 0,0,2*near*far*range,0]);
+}
+
+function bindAttribute(gl: WebGLRenderingContext, program: ProgramInfo, name: string, buffer: WebGLBuffer, size: number) {
+  const location=program.attributes[name];
+  if (location===undefined||location<0) return;
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribPointer(location,size,gl.FLOAT,false,0,0);
+}
+function setMatrix(gl: WebGLRenderingContext, program: ProgramInfo, name: string, value: Float32Array) {
+  const location=program.uniforms[name];
+  if (location) gl.uniformMatrix4fv(location,false,value);
+}
+function setFloat(gl: WebGLRenderingContext, program: ProgramInfo, name: string, value: number) {
+  const location=program.uniforms[name];
+  if (location) gl.uniform1f(location,value);
+}
+function setVec2(gl: WebGLRenderingContext, program: ProgramInfo, name: string, x: number, y: number) {
+  const location=program.uniforms[name];
+  if (location) gl.uniform2f(location,x,y);
+}
+function setVec3(gl: WebGLRenderingContext, program: ProgramInfo, name: string, x: number, y: number, z: number) {
+  const location=program.uniforms[name];
+  if (location) gl.uniform3f(location,x,y,z);
+}
+function setColor(gl: WebGLRenderingContext, program: ProgramInfo, name: string, value: number[]) {
+  const location=program.uniforms[name];
+  if (location) gl.uniform3fv(location,value);
+}
+
+function flattenNodes(nodes: NeuralNode[]) {
+  const positions=new Float32Array(nodes.length*3),phases=new Float32Array(nodes.length),weights=new Float32Array(nodes.length),regions=new Float32Array(nodes.length);
+  nodes.forEach((node,index)=>{
+    positions.set(node.position,index*3);
+    phases[index]=node.phase;
+    weights[index]=node.weight;
+    regions[index]=node.region;
+  });
+  return {positions,phases,weights,regions};
+}
+
+function flattenEdges(nodes: NeuralNode[], edges: NeuralEdge[]) {
+  const count=edges.length*2,positions=new Float32Array(count*3),phases=new Float32Array(count),weights=new Float32Array(count),regions=new Float32Array(count);
+  edges.forEach((edge,index)=>{
+    const a=nodes[edge.source],b=nodes[edge.target],offset=index*6,vertex=index*2;
+    positions.set(a.position,offset);
+    positions.set(b.position,offset+3);
+    phases[vertex]=a.phase+edge.phase*.15;
+    phases[vertex+1]=b.phase+edge.phase*.15;
+    weights[vertex]=weights[vertex+1]=edge.weight;
+    regions[vertex]=a.region;
+    regions[vertex+1]=b.region;
+  });
+  return {positions,phases,weights,regions};
+}
+
+function flattenAmbient(particles: ReturnType<typeof generateAmbientParticles>) {
+  const positions=new Float32Array(particles.length*3),phases=new Float32Array(particles.length),sizes=new Float32Array(particles.length);
+  particles.forEach((particle,index)=>{
+    positions.set(particle.position,index*3);
+    phases[index]=particle.phase;
+    sizes[index]=particle.size;
+  });
+  return {positions,phases,sizes};
+}
+
+function nodeRadius(position: [number,number,number]) {
+  return Math.hypot(position[0],position[1],position[2]);
+}
+
+export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQualityChange,onReady}: NeuralSceneProps) {
+  const canvasRef=useRef<HTMLCanvasElement>(null);
+  const propsRef=useRef({state,paused,onUnavailable,onQualityChange,onReady});
+  const redrawRef=useRef<(()=>void)|undefined>(undefined);
+  propsRef.current={state,paused,onUnavailable,onQualityChange,onReady};
+
+  useEffect(()=>{
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+
+    const gl=canvas.getContext("webgl",{
+      alpha:true,
+      antialias:true,
+      powerPreference:"low-power",
+      premultipliedAlpha:true
+    });
+
+    if(!gl){
+      propsRef.current.onUnavailable();
+      return;
+    }
+
+    const buffers:WebGLBuffer[]=[];
+    const programs:WebGLProgram[]=[];
+    let animationFrame=0;
+    let resizeObserver:ResizeObserver|undefined;
+    let elapsed=0;
+    let lastFrame=0;
+    let lastDraw=0;
+    let failed=false;
+    let readyReported=false;
+    let documentVisible=!document.hidden;
+
+    let currentPrimary=[.46,.36,1];
+    let currentSecondary=[.29,.84,1];
+    let currentNodeIntensity=.62;
+    let currentConnectionIntensity=.22;
+    let currentMotion=.58;
+    let currentSpread=.008;
+    let currentTwinkle=.32;
+    let currentShimmer=.20;
+    let currentAutonomousRotation=1;
+    let interactionInfluence=0;
+
+    let performanceStart=0;
+    let performanceFrames=0;
+    let qualityReported=false;
+
+    const pulseRandom=createSeededRandom(`${NEURAL_SEED}_PULSES`);
+    const idleRandom=createSeededRandom("NEXO_NEURAL_IDLE_LIFE_V1");
+    const idleLife=createIdleLife(idleRandom);
+    const profile=neuralQualityProfiles[quality];
+    const topology=generateBrainTopology(profile);
+    const nodes=topology.nodes;
+    const edges=topology.edges;
+    const adjacency=buildAdjacencyMap(edges,nodes.length);
+    const ambient=generateAmbientParticles(profile.particleCount);
+
+    const nodeData=flattenNodes(nodes);
+    const edgeData=flattenEdges(nodes,edges);
+    const ambientData=flattenAmbient(ambient);
+
+    const pulses:SynapticPulse[]=Array.from({length:profile.maxPulses},(_,index)=>({
+      edgeIndex:index%Math.max(1,edges.length),
+      progress:pulseRandom(),
+      speed:.55+pulseRandom()*.95,
+      intensity:.55+pulseRandom()*.45,
+      reverse:pulseRandom()>.5,
+      delay:pulseRandom()*1.1
+    }));
+
+    const pulsePositions=new Float32Array(profile.maxPulses*3);
+    const pulseIntensities=new Float32Array(profile.maxPulses);
+
+    const fail=()=>{
+      if(failed)return;
+      failed=true;
+      propsRef.current.onUnavailable();
+    };
+
+    const makeBuffer=(data:BufferSource,usage:number=gl.STATIC_DRAW)=>{
+      const buffer=gl.createBuffer();
+      if(!buffer)throw new Error("Buffer WebGL indisponível.");
+      buffers.push(buffer);
+      gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+      gl.bufferData(gl.ARRAY_BUFFER,data,usage);
+      return buffer;
+    };
+
+    try{
+      const commonUniforms=[
+        "uMvp","uModelView","uTime","uPointer","uPointerStrength","uPointerSpeed",
+        "uSpread","uMotionSpeed","uWave","uActiveRegion","uPrimary","uSecondary",
+        "uDpr","uNodeIntensity","uConnectionIntensity","uTwinkleStrength",
+        "uShimmerStrength","uIdleEnergy","uIdleBurst","uIdleFocusRegion",
+        "uIdleFocusIntensity","uIdleWave","uIdleWaveOrigin","uCascadeIntensity"
+      ];
+
+      const nodeProgram=createProgram(gl,nodeVertexShader,nodeFragmentShader,["aPosition","aPhase","aWeight","aRegion"],commonUniforms);
+      const edgeProgram=createProgram(gl,edgeVertexShader,edgeFragmentShader,["aPosition","aPhase","aWeight","aRegion"],commonUniforms);
+      const pulseProgram=createProgram(gl,pulseVertexShader,pulseFragmentShader,["aPosition","aIntensity"],commonUniforms);
+      const ambientProgram=createProgram(gl,ambientVertexShader,ambientFragmentShader,["aPosition","aPhase","aSize"],commonUniforms);
+      programs.push(nodeProgram.program,edgeProgram.program,pulseProgram.program,ambientProgram.program);
+
+      const nodePositionBuffer=makeBuffer(nodeData.positions);
+      const nodePhaseBuffer=makeBuffer(nodeData.phases);
+      const nodeWeightBuffer=makeBuffer(nodeData.weights);
+      const nodeRegionBuffer=makeBuffer(nodeData.regions);
+      const edgePositionBuffer=makeBuffer(edgeData.positions);
+      const edgePhaseBuffer=makeBuffer(edgeData.phases);
+      const edgeWeightBuffer=makeBuffer(edgeData.weights);
+      const edgeRegionBuffer=makeBuffer(edgeData.regions);
+      const ambientPositionBuffer=makeBuffer(ambientData.positions);
+      const ambientPhaseBuffer=makeBuffer(ambientData.phases);
+      const ambientSizeBuffer=makeBuffer(ambientData.sizes);
+      const pulsePositionBuffer=makeBuffer(pulsePositions,gl.DYNAMIC_DRAW);
+      const pulseIntensityBuffer=makeBuffer(pulseIntensities,gl.DYNAMIC_DRAW);
+
+      const view=translation(0,0,-5.1);
+      let width=1,height=1,dpr=1;
+
+      const resize=()=>{
+        const rect=canvas.getBoundingClientRect();
+        width=Math.max(1,rect.width);
+        height=Math.max(1,rect.height);
+        dpr=Math.min(globalThis.devicePixelRatio||1,profile.dpr);
+        const pixelWidth=Math.max(1,Math.round(width*dpr));
+        const pixelHeight=Math.max(1,Math.round(height*dpr));
+        if(canvas.width!==pixelWidth||canvas.height!==pixelHeight){
+          canvas.width=pixelWidth;
+          canvas.height=pixelHeight;
+          gl.viewport(0,0,pixelWidth,pixelHeight);
+        }
+      };
+
+      const recyclePulse=(pulse:SynapticPulse,stateName:typeof state,idleCascade:number)=>{
+        const currentEdge=edges[pulse.edgeIndex];
+        const endpoint=pulse.reverse?currentEdge.source:currentEdge.target;
+        const candidates=adjacency[endpoint]??[];
+        const connectedChance=
+          stateName==="idle"
+            ? Math.min(.9,.30+idleCascade*.65)
+            : 1;
+        const followConnected=
+          candidates.length>0&&pulseRandom()<connectedChance;
+
+        if(followConnected){
+          let pool=candidates;
+          if(stateName==="interpreting"||stateName==="responding"){
+            const currentRadius=nodeRadius(nodes[endpoint].position);
+            const preferred=candidates.filter(edgeIndex=>{
+              const edge=edges[edgeIndex];
+              const other=edge.source===endpoint?edge.target:edge.source;
+              const otherRadius=nodeRadius(nodes[other].position);
+              return stateName==="interpreting"
+                ? otherRadius<currentRadius
+                : otherRadius>currentRadius;
+            });
+            if(preferred.length)pool=preferred;
+          }
+          const nextIndex=pool[Math.floor(pulseRandom()*pool.length)];
+          const next=edges[nextIndex];
+          pulse.edgeIndex=nextIndex;
+          pulse.reverse=next.target===endpoint;
+        }else{
+          pulse.edgeIndex=Math.floor(pulseRandom()*edges.length);
+          pulse.reverse=pulseRandom()>.5;
+        }
+
+        pulse.progress=0;
+        pulse.speed=.55+pulseRandom()*.95;
+        pulse.intensity=.58+pulseRandom()*.42;
+        pulse.delay=
+          stateName==="idle"
+            ? pulseRandom()*1.2*(idleCascade>.2?.25:1)
+            : 0;
+      };
+
+      const updatePulses=(delta:number,activeCount:number,pulseSpeed:number,stateName:typeof state,idleCascade:number)=>{
+        const count=Math.min(activeCount,pulses.length);
+        for(let index=0;index<count;index++){
+          const pulse=pulses[index];
+
+          if(pulse.delay>0){
+            pulse.delay=Math.max(0,pulse.delay-delta);
+            pulseIntensities[index]=0;
+            continue;
+          }
+
+          pulse.progress+=delta*pulse.speed*pulseSpeed;
+          if(pulse.progress>=1)recyclePulse(pulse,stateName,idleCascade);
+
+          if(pulse.delay>0){
+            pulseIntensities[index]=0;
+            continue;
+          }
+
+          const edge=edges[pulse.edgeIndex];
+          const source=nodes[pulse.reverse?edge.target:edge.source].position;
+          const target=nodes[pulse.reverse?edge.source:edge.target].position;
+          const t=pulse.progress;
+
+          pulsePositions[index*3]=source[0]+(target[0]-source[0])*t;
+          pulsePositions[index*3+1]=source[1]+(target[1]-source[1])*t;
+          pulsePositions[index*3+2]=source[2]+(target[2]-source[2])*t;
+          pulseIntensities[index]=pulse.intensity;
+        }
+
+        gl.bindBuffer(gl.ARRAY_BUFFER,pulsePositionBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER,0,pulsePositions.subarray(0,count*3));
+        gl.bindBuffer(gl.ARRAY_BUFFER,pulseIntensityBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER,0,pulseIntensities.subarray(0,count));
+        return count;
+      };
+
+      const setShared=(
+        program:ProgramInfo,
+        mvp:Float32Array,
+        modelView:Float32Array,
+        primary:number[],
+        secondary:number[],
+        activeRegion:number,
+        wave:number,
+        isIdle:boolean
+      )=>{
+        const config=neuralStates[propsRef.current.state];
+        const life=idleLife.state;
+
+        setMatrix(gl,program,"uMvp",mvp);
+        setMatrix(gl,program,"uModelView",modelView);
+        setFloat(gl,program,"uTime",elapsed);
+        setVec2(gl,program,"uPointer",interaction.current.x,-interaction.current.y);
+        setFloat(gl,program,"uPointerStrength",interaction.current.hovering?config.interactionStrength:0);
+        setFloat(gl,program,"uPointerSpeed",Math.min(1,interaction.current.speed*7));
+        setFloat(gl,program,"uSpread",currentSpread+(interaction.current.expanded?.11:0));
+        setFloat(gl,program,"uMotionSpeed",currentMotion);
+        setFloat(gl,program,"uWave",wave);
+        setFloat(gl,program,"uActiveRegion",activeRegion);
+        setColor(gl,program,"uPrimary",primary);
+        setColor(gl,program,"uSecondary",secondary);
+        setFloat(gl,program,"uDpr",dpr);
+        setFloat(gl,program,"uNodeIntensity",currentNodeIntensity);
+        setFloat(gl,program,"uConnectionIntensity",currentConnectionIntensity);
+        setFloat(gl,program,"uTwinkleStrength",currentTwinkle);
+        setFloat(gl,program,"uShimmerStrength",currentShimmer);
+        setFloat(gl,program,"uIdleEnergy",isIdle?life.activity:1);
+        setFloat(gl,program,"uIdleBurst",isIdle?life.burst:0);
+        setFloat(gl,program,"uIdleFocusRegion",isIdle?life.focusRegion:-1);
+        setFloat(gl,program,"uIdleFocusIntensity",isIdle?life.focusIntensity:0);
+        setFloat(gl,program,"uIdleWave",isIdle?life.wave:0);
+        setVec3(gl,program,"uIdleWaveOrigin",life.waveOrigin[0],life.waveOrigin[1],life.waveOrigin[2]);
+        setFloat(gl,program,"uCascadeIntensity",isIdle?life.cascade:0);
+      };
+
+      const draw=(now:number)=>{
+        if(failed||!documentVisible)return;
+        resize();
+
+        const props=propsRef.current;
+        const delta=lastFrame?Math.min((now-lastFrame)/1000,.05):0;
+        lastFrame=now;
+        decayInteraction(interaction.current,delta);
+
+        if(!props.paused)elapsed+=delta;
+
+        const stateConfig=neuralStates[props.state];
+        const targetPrimary=hexColor(stateConfig.primary);
+        const targetSecondary=hexColor(stateConfig.secondary);
+        const mix=1-Math.exp(-delta*4);
+
+        for(let channel=0;channel<3;channel++){
+          currentPrimary[channel]+=(targetPrimary[channel]-currentPrimary[channel])*mix;
+          currentSecondary[channel]+=(targetSecondary[channel]-currentSecondary[channel])*mix;
+        }
+
+        currentNodeIntensity=exponentialApproach(currentNodeIntensity,stateConfig.nodeIntensity,delta,4);
+        currentConnectionIntensity=exponentialApproach(currentConnectionIntensity,stateConfig.connectionIntensity,delta,4);
+        currentMotion=exponentialApproach(currentMotion,stateConfig.motionSpeed,delta,3.5);
+        currentSpread=exponentialApproach(currentSpread,stateConfig.spread,delta,4);
+        currentTwinkle=exponentialApproach(currentTwinkle,stateConfig.twinkleStrength,delta,3.5);
+        currentShimmer=exponentialApproach(currentShimmer,stateConfig.shimmerStrength,delta,3.5);
+        currentAutonomousRotation=exponentialApproach(currentAutonomousRotation,stateConfig.autonomousRotation,delta,2.7);
+
+        const influenceTarget=interaction.current.hovering?1:0;
+        interactionInfluence=exponentialApproach(
+          interactionInfluence,
+          influenceTarget,
+          delta,
+          interaction.current.hovering?8:3.2
+        );
+
+        const isIdle=props.state==="idle";
+        idleLife.update(
+          elapsed,
+          props.paused?0:delta,
+          isIdle&&!props.paused,
+          stateConfig.spontaneousActivity
+        );
+
+        const autoRotation=getAutonomousRotation(elapsed);
+        const autoDrift=getAutonomousDrift(elapsed);
+        const autonomousStrength=
+          currentAutonomousRotation*
+          (1-interactionInfluence*.65);
+        const pointerX=interaction.current.x;
+        const pointerY=interaction.current.y;
+        const life=idleLife.state;
+        const errorJitter=props.state==="error"?Math.sin(elapsed*37)*.009:0;
+
+        const modelTranslation=translation(
+          autoDrift.x*autonomousStrength,
+          autoDrift.y*autonomousStrength,
+          autoDrift.z*autonomousStrength
+        );
+
+        const modelRotation=multiply(
+          multiply(
+            rotateZ(
+              -.035+
+              autoRotation.z*autonomousStrength+
+              (isIdle?life.rotationBiasZ:0)+
+              errorJitter
+            ),
+            rotateY(
+              autoRotation.y*autonomousStrength+
+              (isIdle?life.rotationBiasY:0)+
+              pointerX*.035
+            )
+          ),
+          rotateX(
+            autoRotation.x*autonomousStrength+
+            (isIdle?life.rotationBiasX:0)-
+            pointerY*.025
+          )
+        );
+
+        const model=multiply(
+          modelTranslation,
+          multiply(modelRotation,scaleMatrix(1.02))
+        );
+
+        const modelView=multiply(view,model);
+        const projection=perspective(40*Math.PI/180,width/height,.1,100);
+        const mvp=multiply(projection,modelView);
+
+        const activeRegion=
+          interaction.current.activeRegion>=0
+            ? interaction.current.activeRegion
+            : props.state==="planning"
+              ? Math.floor(elapsed*.78)%6
+              : props.state==="awaiting-approval"
+                ? 0
+                : -1;
+
+        const pointerWave=Math.min(
+          1,
+          interaction.current.wave+
+          (props.state==="success"?.34:props.state==="error"?.18:0)
+        );
+
+        gl.clearColor(0,0,0,0);
+        gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthFunc(gl.LEQUAL);
+        gl.enable(gl.BLEND);
+        gl.depthMask(false);
+
+        gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.useProgram(ambientProgram.program);
+        setShared(ambientProgram,mvp,modelView,currentPrimary,currentSecondary,activeRegion,pointerWave,isIdle);
+        bindAttribute(gl,ambientProgram,"aPosition",ambientPositionBuffer,3);
+        bindAttribute(gl,ambientProgram,"aPhase",ambientPhaseBuffer,1);
+        bindAttribute(gl,ambientProgram,"aSize",ambientSizeBuffer,1);
+        gl.drawArrays(gl.POINTS,0,ambient.length);
+
+        gl.useProgram(edgeProgram.program);
+        setShared(edgeProgram,mvp,modelView,currentPrimary,currentSecondary,activeRegion,pointerWave,isIdle);
+        bindAttribute(gl,edgeProgram,"aPosition",edgePositionBuffer,3);
+        bindAttribute(gl,edgeProgram,"aPhase",edgePhaseBuffer,1);
+        bindAttribute(gl,edgeProgram,"aWeight",edgeWeightBuffer,1);
+        bindAttribute(gl,edgeProgram,"aRegion",edgeRegionBuffer,1);
+        gl.drawArrays(gl.LINES,0,edges.length*2);
+
+        gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+
+        gl.useProgram(nodeProgram.program);
+        setShared(nodeProgram,mvp,modelView,currentPrimary,currentSecondary,activeRegion,pointerWave,isIdle);
+        bindAttribute(gl,nodeProgram,"aPosition",nodePositionBuffer,3);
+        bindAttribute(gl,nodeProgram,"aPhase",nodePhaseBuffer,1);
+        bindAttribute(gl,nodeProgram,"aWeight",nodeWeightBuffer,1);
+        bindAttribute(gl,nodeProgram,"aRegion",nodeRegionBuffer,1);
+        gl.drawArrays(gl.POINTS,0,nodes.length);
+
+        const idlePulseBoost=
+          isIdle
+            ? Math.floor(life.burst*2+life.cascade*4)
+            : 0;
+        const requestedPulseCount=
+          Math.min(
+            stateConfig.pulseCount+idlePulseBoost,
+            profile.maxPulses
+          );
+
+        const pulseCount=updatePulses(
+          props.paused?0:delta,
+          requestedPulseCount,
+          stateConfig.pulseSpeed,
+          props.state,
+          isIdle?life.cascade:0
+        );
+
+        if(pulseCount>0){
+          gl.useProgram(pulseProgram.program);
+          setShared(pulseProgram,mvp,modelView,currentPrimary,currentSecondary,activeRegion,pointerWave,isIdle);
+          bindAttribute(gl,pulseProgram,"aPosition",pulsePositionBuffer,3);
+          bindAttribute(gl,pulseProgram,"aIntensity",pulseIntensityBuffer,1);
+          gl.drawArrays(gl.POINTS,0,pulseCount);
+        }
+
+        gl.depthMask(true);
+        if(!readyReported){readyReported=true;propsRef.current.onReady?.();}
+
+        if(!props.paused&&getTargetFrameInterval(props.state,interaction.current.hovering,true)<=17){
+          if(!performanceStart)performanceStart=now;
+          performanceFrames++;
+          if(now-performanceStart>=3000&&!qualityReported){
+            const fps=performanceFrames/((now-performanceStart)/1000);
+            if(fps<45&&quality!=="low"){
+              qualityReported=true;
+              props.onQualityChange?.(lowerNeuralQuality(quality));
+            }
+            performanceStart=now;
+            performanceFrames=0;
+          }
+        }else{
+          performanceStart=0;
+          performanceFrames=0;
+        }
+      };
+
+      const schedule=()=>{
+        if(failed||!documentVisible)return;
+        if(animationFrame)cancelAnimationFrame(animationFrame);
+
+        animationFrame=requestAnimationFrame(function frame(now){
+          animationFrame=0;
+          const interval=getTargetFrameInterval(
+            propsRef.current.state,
+            interaction.current.hovering,
+            true
+          );
+
+          if(!lastDraw||now-lastDraw>=interval-1){
+            draw(now);
+            lastDraw=now;
+          }
+
+          if(!propsRef.current.paused&&documentVisible){
+            animationFrame=requestAnimationFrame(frame);
+          }
+        });
+      };
+
+      redrawRef.current=schedule;
+      resizeObserver=new ResizeObserver(()=>schedule());
+      resizeObserver.observe(canvas);
+
+      const contextLost=(event:Event)=>{
+        event.preventDefault();
+        fail();
+      };
+
+      canvas.addEventListener("webglcontextlost",contextLost);
+
+      const visibility=()=>{
+        documentVisible=!document.hidden;
+        if(documentVisible){
+          lastFrame=0;
+          lastDraw=0;
+          schedule();
+        }else if(animationFrame){
+          cancelAnimationFrame(animationFrame);
+          animationFrame=0;
+        }
+      };
+
+      document.addEventListener("visibilitychange",visibility);
+      schedule();
+
+      return()=>{
+        canvas.removeEventListener("webglcontextlost",contextLost);
+        document.removeEventListener("visibilitychange",visibility);
+        resizeObserver?.disconnect();
+        if(animationFrame)cancelAnimationFrame(animationFrame);
+        redrawRef.current=undefined;
+        buffers.forEach(buffer=>gl.deleteBuffer(buffer));
+        programs.forEach(program=>gl.deleteProgram(program));
+      };
+    }catch{
+      fail();
+      buffers.forEach(buffer=>gl.deleteBuffer(buffer));
+      programs.forEach(program=>gl.deleteProgram(program));
+    }
+  },[interaction,quality]);
+
+  useEffect(()=>{
+    redrawRef.current?.();
+  },[state,paused]);
+
+  return <canvas ref={canvasRef} className="neuralCoreCanvas nucleusCanvas" aria-hidden="true" data-quality={quality}/>;
+}

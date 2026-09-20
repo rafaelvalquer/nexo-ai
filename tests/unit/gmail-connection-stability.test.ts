@@ -130,16 +130,22 @@ describe("resilient Gmail requests",()=>{
     expect(value.get(account.id)?.status).toBe("reauthorization-required");
   });
 
-  it("returns real Gmail mailbox totals instead of the first page size",async()=>{
+  it("returns real Gmail mailbox totals using the default Primary preference",async()=>{
     const{value,account}=await connectReadAccount();
+    const queries:string[]=[];
     globalThis.fetch=vi.fn(async(input:string|URL)=>{
-      const url=String(input);
-      if(url.endsWith("/profile"))return new Response(JSON.stringify({messagesTotal:1250,threadsTotal:800}),{status:200});
-      if(url.endsWith("/labels/INBOX"))return new Response(JSON.stringify({messagesTotal:300,messagesUnread:12}),{status:200});
-      if(url.endsWith("/labels/UNREAD"))return new Response(JSON.stringify({messagesTotal:27}),{status:200});
+      const url=String(input),parsed=new URL(url);
+      if(parsed.pathname.endsWith("/profile"))return new Response(JSON.stringify({messagesTotal:1250,threadsTotal:800}),{status:200});
+      if(parsed.pathname.endsWith("/messages")){
+        const query=parsed.searchParams.get("q")??"";
+        queries.push(query);
+        if(query==="in:inbox category:primary")return new Response(JSON.stringify({resultSizeEstimate:300}),{status:200});
+        if(query==="in:inbox is:unread category:primary")return new Response(JSON.stringify({resultSizeEstimate:27}),{status:200});
+      }
       throw new Error(`Unexpected request ${url}`);
     }) as typeof fetch;
     await expect(new EmailService(value).stats(account.id)).resolves.toEqual({totalMessages:1250,totalThreads:800,inboxMessages:300,unreadMessages:27});
+    expect(queries).toEqual(expect.arrayContaining(["in:inbox category:primary","in:inbox is:unread category:primary"]));
   });
 
   it("marks only the affected capability unavailable when Gmail reports insufficient scopes",async()=>{

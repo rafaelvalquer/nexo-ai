@@ -44,6 +44,8 @@ export interface CanonicalIntent {
   source: "deterministic"|"llm";
   diagnostics?: {
     rawModelConfidence?: number;
+    modelDeclaredMissing?: string[];
+    coreDerivedMissing?: string[];
     resolverVersion: string;
   };
 }
