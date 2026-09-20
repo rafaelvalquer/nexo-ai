@@ -28,7 +28,6 @@ describe("Dashboard email preferences", () => {
     await core.ready();
     core.updateSettings({connectionsEnabled:true});
     await core.ensureConnections();
-    await core.saveEmailSearchPreferences("acc-google-dashboard",["primary","updates"]);
     (core as any).connections.accessToken=async()=>"fixture-token";
 
     const queries:string[]=[];
@@ -43,7 +42,9 @@ describe("Dashboard email preferences", () => {
       throw new Error(`Unexpected request ${parsed.toString()}`);
     }) as typeof fetch;
 
-    await core.dashboardGadgetData("email");
+    await core.saveEmailSearchPreferences("acc-google-dashboard",["primary","updates"]);
+    queries.length=0;
+    await core.dashboardRefresh("email");
 
     expect(queries).toContain("in:inbox {category:primary category:updates}");
     expect(queries).toContain("in:inbox is:unread {category:primary category:updates}");
