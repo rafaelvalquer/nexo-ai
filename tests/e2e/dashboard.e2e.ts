@@ -213,7 +213,7 @@ test("email gadget opens its message in the shared drawer and sends only after e
   await page.evaluate(()=>{
     const api=(window as any).nexo.dashboard;
     api.getLayout=async()=>[{instanceId:"mail-home",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
-    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",unreadCount:1,messages:[{id:"mail-1",threadId:"thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Resumo da semana",snippet:"Resumo curto da mensagem.",receivedAt:"2026-09-17T12:00:00.000Z",isUnread:true,hasAttachments:false}]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:1,messages:[{id:"mail-1",threadId:"thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Resumo da semana",snippet:"Resumo curto da mensagem.",receivedAt:"2026-09-17T12:00:00.000Z",isUnread:true,hasAttachments:false}]},fetchedAt:new Date().toISOString(),stale:false});
     api.getEmailMessage=async()=>({id:"mail-1",subject:"Resumo da semana",bodyText:"Conteúdo completo da mensagem para revisão.",snippet:"Resumo curto da mensagem."});
     api.replyEmail=async(request:any)=>{(window as any).__draftEmailReply=request;return{approvalId:"email-approval-1"};};
     (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__emailApprovalResolution={id,approved};return{ok:true};};
@@ -232,4 +232,67 @@ test("email gadget opens its message in the shared drawer and sends only after e
   await drawer.getByRole("button",{name:"Aprovar e enviar resposta"}).click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__emailApprovalResolution)).toEqual({id:"email-approval-1",approved:true});
   await expect(drawer).not.toBeVisible();
+});
+
+
+test("email gadget moves a message to trash only after approval and refreshes the gadget",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Assistente",exact:true}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({timeout:15000});
+  await page.evaluate(()=>{
+    const api=(window as any).nexo.dashboard;
+    const message={id:"trash-mail-1",threadId:"trash-thread-1",from:{name:"Equipe Nexo",email:"team@example.com"},subject:"Mensagem para excluir",snippet:"Conteúdo que será movido.",receivedAt:"2026-09-20T12:00:00.000Z",isUnread:true,hasAttachments:false};
+    api.getLayout=async()=>[{instanceId:"mail-trash-home",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:1,messages:[message]},fetchedAt:new Date().toISOString(),stale:false});
+    api.refreshGadget=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:0,messages:[]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getEmailMessage=async()=>({...message,bodyText:"Conteúdo completo da mensagem."});
+    let trashAttempt=0;
+    api.trashEmail=async(request:any)=>{trashAttempt++;(window as any).__trashEmailRequest=request;return{approvalId:`trash-approval-${trashAttempt}`};};
+    (window as any).__trashApprovalResolutions=[];
+    (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__trashApprovalResolutions.push({id,approved});return{ok:true};};
+  });
+
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  await page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"}).click();
+  const drawer=page.getByRole("dialog",{name:"Mensagem para excluir"});
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole("button",{name:/Excluir/}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashEmailRequest)).toEqual({connectionId:"mail-account",messageId:"trash-mail-1"});
+  await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
+  expect(await page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([]);
+
+  await drawer.getByRole("button",{name:"Cancelar",exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([{id:"trash-approval-1",approved:false}]);
+  await expect(drawer).toBeVisible();
+  await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(1);
+
+  await drawer.getByRole("button",{name:/Excluir/}).click();
+  await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
+  await drawer.getByRole("button",{name:/Mover para a lixeira/}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([
+    {id:"trash-approval-1",approved:false},
+    {id:"trash-approval-2",approved:true}
+  ]);
+  await expect(drawer).not.toBeVisible();
+  await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(0);
+});
+
+test("email gadget disables trash when email.modify is unavailable",async({page})=>{
+  await page.goto(url);
+  await page.locator(".sidebar").getByRole("button",{name:"Assistente",exact:true}).click();
+  await expect(page.locator(".assistantPage")).toBeVisible({timeout:15000});
+  await page.evaluate(()=>{
+    const api=(window as any).nexo.dashboard;
+    const message={id:"read-only-mail",from:{email:"sender@example.com"},subject:"Conta somente leitura",snippet:"Sem permissão de alteração.",receivedAt:"2026-09-20T12:00:00.000Z",isUnread:false,hasAttachments:false};
+    api.getLayout=async()=>[{instanceId:"mail-read-only",gadgetId:"email",enabled:true,size:"M",position:0,configuration:{}}];
+    api.getGadgetData=async()=>({data:{available:true,connectionId:"read-only-account",provider:"google",canModify:false,unreadCount:0,messages:[message]},fetchedAt:new Date().toISOString(),stale:false});
+    api.getEmailMessage=async()=>({...message,bodyText:"Mensagem somente leitura."});
+  });
+
+  await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
+  await page.locator(".emailGadgetRow").filter({hasText:"Conta somente leitura"}).click();
+  const drawer=page.getByRole("dialog",{name:"Conta somente leitura"});
+  const trash=drawer.getByRole("button",{name:/Excluir/});
+  await expect(trash).toBeDisabled();
+  await expect(trash).toHaveAttribute("title","Ative a permissão Alterar e-mails nas conexões.");
 });

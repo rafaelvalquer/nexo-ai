@@ -84,12 +84,13 @@ export function validateIntentSemantics(intent: CanonicalIntent, userText: strin
   }
 
   const uniqueMissing = [...new Set(missing)];
+  const modelDeclaredMissing = [...(intent.diagnostics?.modelDeclaredMissing ?? intent.missing)];
   const next: CanonicalIntent = {
     ...intent,
     missing: uniqueMissing,
     diagnostics: {
       ...intent.diagnostics,
-      modelDeclaredMissing: intent.missing,
+      modelDeclaredMissing,
       coreDerivedMissing: uniqueMissing,
       resolverVersion: intent.diagnostics?.resolverVersion ?? "hybrid-intent-v1"
     }

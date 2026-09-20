@@ -54,4 +54,37 @@ describe("HybridIntentResolver",()=>{
       expect(result.question).toContain("Em qual pasta");
     }
   });
+  it("records model_only when the model declares missing but Core finds the entity",async()=>{
+    const records:Array<{metric:string;tags?:Record<string,unknown>}>= [];
+    const intent=canonical("create_folder");
+    intent.missing=["folder"];
+    const resolver=new HybridIntentResolver(
+      {parse:async()=>success(intent)},
+      {record:(metric:string,_value:number,tags?:Record<string,unknown>)=>records.push({metric,tags})} as any
+    );
+
+    await resolver.resolve({text:"crie uma pasta teste em downloads",availableOperations:["create_folder"]});
+
+    expect(records).toContainEqual(expect.objectContaining({
+      metric:"intent.model_missing.disagreement",
+      tags:expect.objectContaining({field:"folder",direction:"model_only"})
+    }));
+  });
+
+  it("records core_only when Core derives a missing entity omitted by the model",async()=>{
+    const records:Array<{metric:string;tags?:Record<string,unknown>}>= [];
+    const intent=canonical("create_folder",.99,{name:{value:"teste",source:"user",confidence:.99}});
+    const resolver=new HybridIntentResolver(
+      {parse:async()=>success(intent)},
+      {record:(metric:string,_value:number,tags?:Record<string,unknown>)=>records.push({metric,tags})} as any
+    );
+
+    await resolver.resolve({text:"crie uma pasta teste",availableOperations:["create_folder"]});
+
+    expect(records).toContainEqual(expect.objectContaining({
+      metric:"intent.model_missing.disagreement",
+      tags:expect.objectContaining({field:"folder",direction:"core_only"})
+    }));
+  });
+
 });

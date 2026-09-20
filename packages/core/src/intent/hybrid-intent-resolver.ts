@@ -91,12 +91,13 @@ export class HybridIntentResolver{
     if(semantic.missing.length)this.metrics?.record("intent.entity.missing",semantic.missing.length,{operation:intent.operation});
     if(semantic.ambiguities.length)this.metrics?.record("intent.entity.ambiguous",semantic.ambiguities.length,{operation:intent.operation});
     if(!semantic.valid)this.metrics?.record("intent.validation.semantic_invalid",1,{reason:semantic.reason??"unknown"});
-    if(intent.diagnostics?.modelDeclaredMissing){
-      for(const field of intent.diagnostics.modelDeclaredMissing){
-        if(!semantic.missing.includes(field)){
-          this.metrics?.record("intent.model_missing.disagreement",1,{operation:intent.operation,field});
-        }
-      }
+    const modelDeclaredMissing=semantic.intent.diagnostics?.modelDeclaredMissing??intent.missing;
+    for(const disagreement of missingDisagreements(modelDeclaredMissing,semantic.missing)){
+      this.metrics?.record("intent.model_missing.disagreement",1,{
+        operation:intent.operation,
+        field:disagreement.field,
+        direction:disagreement.direction
+      });
     }
     const timing=()=>({
       parserMs,
@@ -170,6 +171,14 @@ export class HybridIntentResolver{
     };
     return result;
   }
+}
+
+function missingDisagreements(modelMissing:string[],coreMissing:string[]){
+  const model=new Set(modelMissing),core=new Set(coreMissing);
+  return[
+    ...[...model].filter(field=>!core.has(field)).map(field=>({field,direction:"model_only" as const})),
+    ...[...core].filter(field=>!model.has(field)).map(field=>({field,direction:"core_only" as const}))
+  ];
 }
 
 function parserMetric(kind:IntentParserFailureKind){
