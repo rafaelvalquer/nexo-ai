@@ -8,9 +8,11 @@ import { EmailService } from "../../packages/core/src/email/service.js";
 import { seedConnectedAccount } from "../helpers/connection-fixture.js";
 
 const tempDirs: string[] = [];
+const cores: NexoCore[] = [];
 const originalFetch = globalThis.fetch;
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(cores.splice(0).map(core => core.shutdown()));
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
   tempDirs.splice(0).forEach(dir => fs.rmSync(dir, { recursive: true, force: true }));
@@ -25,6 +27,7 @@ describe("Dashboard email preferences", () => {
     seedConnectedAccount({db,id:"acc-google-dashboard",provider:"google",capabilities:["email.read"]});
 
     const core=new NexoCore({dataDir:dir});
+    cores.push(core);
     await core.ready();
     core.updateSettings({connectionsEnabled:true});
     await core.ensureConnections();
