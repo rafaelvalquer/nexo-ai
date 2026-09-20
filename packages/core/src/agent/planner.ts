@@ -63,7 +63,7 @@ export class AgentPlanner{
     this.lastMemoryDecisionCandidates=[];
     const tools=availableTools??this.toolDescriptors();
     const deterministic=this.deterministicRouter.route(userText,{allowedRoots:this.authorizedRoots()});
-    if(deterministic.type==="tool"&&this.registry.get(deterministic.tool))return withPresentationPolicy({tool:deterministic.tool,input:deterministic.input,explanation:deterministic.explanation,origin:"fast"});
+    if(deterministic.type==="tool"&&(this.registry.get(deterministic.tool)||deterministic.tool.startsWith("memory_")))return withPresentationPolicy({tool:deterministic.tool,input:deterministic.input,explanation:deterministic.explanation,origin:"fast"});
     if(deterministic.type==="macro"){
       const tool=`macro_${deterministic.operation}`;
       if(this.registry.get(tool))return withPresentationPolicy({tool,input:deterministic.input,explanation:deterministic.explanation,origin:"fast"});
