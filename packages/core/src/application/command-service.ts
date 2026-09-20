@@ -14,6 +14,7 @@ import { FilesystemCommandResolver, filesystemCommandTool } from "../filesystem/
 import type { ActionContextFile } from "../agent/context/conversation-action-context.js";
 import { PreRoutingSafetyGuard } from "./pre-routing-safety-guard.js";
 import { RouteConflictGuard } from "./route-conflict-guard.js";
+import { WebGoalConflictGuard, WebIntentMapper, WebIntentResolver, mayBeWebRequest } from "../intent/web/index.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
@@ -31,9 +32,10 @@ export type HybridIntentDiagnosticsV2={
   safety?:{status:string;reason?:string};
   exactCandidate?:{source:string;route:string;accepted:boolean;rejectedReason?:string};
   hybrid?:{invoked:boolean;model?:string;status?:string;operation?:string;entities?:Record<string,unknown>;missing?:string[];ambiguities?:Array<{code:string;field?:string;message:string;critical?:boolean}>;confidence?:number};
+  webIntent?:{invoked:boolean;operation?:string;confidence?:number;sourceName?:string;domain?:string;query?:string;candidateRoute?:string;finalRoute?:string;overrideReason?:string};
   mapping?:{tool?:string;deferredAction?:string;resolvedScope?:string};
   finalRoute?:{source:string;type:string;tool?:string};
-  latency:{totalMs:number;hybridMs?:number;parserMs?:number;validationMs?:number;mappingMs?:number};
+  latency:{totalMs:number;webMs?:number;hybridMs?:number;parserMs?:number;validationMs?:number;mappingMs?:number};
 };
 
 export type HybridCommandOptions = {
@@ -47,14 +49,24 @@ export type HybridCommandOptions = {
   metrics?: LocalMetricsService;
 };
 
+export type WebCommandOptions={
+  resolver:WebIntentResolver;
+  mapper:WebIntentMapper;
+  enabled:()=>boolean;
+  shadowMode:()=>boolean;
+  researchEnabled:()=>boolean;
+  metrics?:LocalMetricsService;
+};
+
 export class CommandService {
   private readonly fastRouter = new DeterministicRouter();
   private readonly filesystemResolver = new FilesystemCommandResolver();
   private readonly safetyGuard = new PreRoutingSafetyGuard();
   private readonly conflictGuard = new RouteConflictGuard();
+  private readonly webGoalGuard = new WebGoalConflictGuard();
   private lastDiagnostics?:HybridIntentDiagnosticsV2;
 
-  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions) {}
+  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions) {}
 
   /** Canonical async routing entry point for AgentEngine in Routing V2. */
   async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
@@ -64,7 +76,7 @@ export class CommandService {
     }
 
     const started=Date.now(),requestId=randomUUID(),normalized=normalizeIntentInput(text);
-    const diagnostics:HybridIntentDiagnosticsV2={requestId,originalInput:text,normalizedInput:normalized.routingText,hybrid:{invoked:false},latency:{totalMs:0}};
+    const diagnostics:HybridIntentDiagnosticsV2={requestId,originalInput:text,normalizedInput:normalized.routingText,hybrid:{invoked:false},webIntent:{invoked:false},latency:{totalMs:0}};
     const finish=(route:CommandRoute,source:string)=>{
       diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:undefined};
       diagnostics.latency.totalMs=Date.now()-started;
@@ -80,16 +92,48 @@ export class CommandService {
     }
 
     const exact=this.routeExact(text,previous);
+    let webOverrideReason:string|undefined;
     if(exact.type!=="unknown"){
-      const conflict=this.conflictGuard.evaluate(text,exact);
-      diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
-      if(conflict.accepted){
-        this.hybrid?.metrics?.record("intent.route.exact.accepted",1,{route:routeLabel(exact)});
-        void this.evaluateShadow(text,exact,previous,signal).catch(()=>undefined);
-        return finish(exact,"exact");
+      const webConflict=this.web?.enabled()?this.webGoalGuard.evaluate(text,exact):{accepted:true as const};
+      if(!webConflict.accepted){
+        webOverrideReason=webConflict.reason;
+        diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:false,rejectedReason:webConflict.reason};
+        this.web?.metrics?.record("web.intent.route_override",1,{candidate:routeLabel(exact),reason:webConflict.reason??"web_goal"});
+        if(exact.type==="tool"&&exact.tool==="browser_open")this.web?.metrics?.record("web.intent.browser_open_false_positive",1);
+      }else{
+        const conflict=this.conflictGuard.evaluate(text,exact);
+        diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
+        if(conflict.accepted){
+          this.hybrid?.metrics?.record("intent.route.exact.accepted",1,{route:routeLabel(exact)});
+          void this.evaluateShadow(text,exact,previous,signal).catch(()=>undefined);
+          return finish(exact,"exact");
+        }
+        this.hybrid?.metrics?.record("intent.route.exact.rejected",1,{reason:conflict.reason});
+        this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(exact)});
       }
-      this.hybrid?.metrics?.record("intent.route.exact.rejected",1,{reason:conflict.reason});
-      this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(exact)});
+    }
+
+    if(this.shouldInvokeWeb(text)){
+      diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),overrideReason:webOverrideReason};
+      const webStarted=Date.now();
+      const resolution=await this.web!.resolver.resolve(text,signal);
+      diagnostics.latency.webMs=Date.now()-webStarted;
+      if(resolution.status==="resolved"){
+        const intent=resolution.intent;
+        diagnostics.webIntent={...diagnostics.webIntent,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query};
+        const mapped=this.web!.mapper.map(intent,text);
+        if(mapped.type==="tool"){
+          diagnostics.webIntent.finalRoute=mapped.tool;
+          if(intent.operation==="research"&&mapped.tool==="browser_open")this.web?.metrics?.record("web.intent.browser_open_false_positive",1);
+          if(this.web!.shadowMode()){
+            this.web?.metrics?.record("web.intent.route_disagreement",1,{old:exact.type==="unknown"?"unknown":routeLabel(exact),next:mapped.tool});
+            if(exact.type!=="unknown")return finish(exact,"exact-web-shadow");
+          }else{
+            if(intent.operation==="research"&&!this.web!.researchEnabled())return finish({type:"unknown"},"web-research-disabled");
+            return finish(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web-intent");
+          }
+        }
+      }
     }
 
     if(this.shouldInvokeHybrid(text)){
@@ -278,6 +322,10 @@ export class CommandService {
     // none of the command routers resolved. Only obvious conversation becomes
     // a direct chat stream here.
     return isLikelyConversation(text)?{type:"chat",stream:true}:{type:"unknown"};
+  }
+
+  private shouldInvokeWeb(text:string){
+    return Boolean(this.web?.enabled()&&mayBeWebRequest(text));
   }
 
   private shouldInvokeHybrid(text:string){
