@@ -1,13 +1,17 @@
+import { ZodError } from "zod";
 import type { LLMProvider } from "../llm/provider.js";
+import { OllamaConnectionError, OllamaInvalidResponseError, OllamaModelNotFoundError, OllamaTimeoutError, OllamaUnavailableError } from "../llm/errors.js";
+import { StructuredOutputError } from "../llm/structured-response-parser.js";
 import { stripCodeFence } from "../security/prompt.js";
 import { normalizeIntentInput } from "./input-normalizer.js";
+import type { IntentParserFailureKind, IntentParserResult } from "./parser-result.js";
 import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
 import { filesystemIntentPrompt } from "./prompts/filesystem.js";
 import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, NormalizedIntentInput } from "./types.js";
 
 export interface IntentParser {
-  parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>;
+  parse(input:IntentResolutionInput):Promise<IntentParserResult>;
   modelName?():string|undefined;
 }
 
@@ -15,7 +19,9 @@ export class LLMIntentParser implements IntentParser{
   constructor(private readonly llm:LLMProvider,private readonly timeoutMs=4_500){}
   modelName(){return (this.llm as LLMProvider & {intentModelName?:()=>string}).intentModelName?.();}
 
-  async parse(input:IntentResolutionInput):Promise<CanonicalIntent|undefined>{
+  async parse(input:IntentResolutionInput):Promise<IntentParserResult>{
+    const started=Date.now();
+    const model=this.modelName();
     const normalized=normalizeIntentInput(input.text);
     const signal=timeoutSignal(input.signal,this.timeoutMs);
     try{
@@ -23,6 +29,7 @@ export class LLMIntentParser implements IntentParser{
         {role:"system" as const,content:HYBRID_INTENT_SYSTEM_PROMPT},
         {role:"user" as const,content:filesystemIntentPrompt(normalized,input.availableOperations)}
       ];
+      let intent:CanonicalIntent;
       if(this.llm.planStructured){
         const parsed=await this.llm.planStructured({
           messages,
@@ -30,15 +37,50 @@ export class LLMIntentParser implements IntentParser{
           schemaName:"NexoHybridIntentV1",
           parse:value=>parseModelIntent(value)
         },signal);
-        return applyLiteralEntities(applyEntityProvenance(toCanonicalIntent(parsed),normalized.routingText),normalized);
+        intent=toCanonicalIntent(parsed);
+      }else{
+        const raw=await this.llm.plan(messages,signal);
+        let value:unknown;
+        try{value=JSON.parse(stripCodeFence(raw));}
+        catch(error){return failure("INVALID_JSON",started,model,error);}
+        intent=toCanonicalIntent(parseModelIntent(value));
       }
-      const raw=await this.llm.plan(messages,signal);
-      return applyLiteralEntities(applyEntityProvenance(toCanonicalIntent(parseModelIntent(JSON.parse(stripCodeFence(raw)))),normalized.routingText),normalized);
+      const normalizedIntent=applyLiteralEntities(applyEntityProvenance(intent,normalized.routingText),normalized);
+      return{status:"success",intent:normalizedIntent,latencyMs:Date.now()-started,model};
     }catch(error){
-      if(input.signal?.aborted)throw input.signal.reason??error;
-      return undefined;
+      return failure(classifyFailure(error,input.signal),started,model,error);
     }
   }
+}
+
+function failure(kind:IntentParserFailureKind,started:number,model:string|undefined,error:unknown):IntentParserResult{
+  return{
+    status:"failure",
+    kind,
+    latencyMs:Date.now()-started,
+    model,
+    diagnosticCode:diagnosticCode(error)
+  };
+}
+
+function classifyFailure(error:unknown,parent?:AbortSignal):IntentParserFailureKind{
+  if(parent?.aborted)return"ABORTED";
+  if(error instanceof OllamaTimeoutError)return"TIMEOUT";
+  if(error instanceof DOMException&&(error.name==="TimeoutError"||error.name==="AbortError"))return error.name==="TimeoutError"?"TIMEOUT":"ABORTED";
+  if(error instanceof OllamaModelNotFoundError)return"MODEL_NOT_FOUND";
+  if(error instanceof OllamaConnectionError)return"MODEL_UNAVAILABLE";
+  if(error instanceof OllamaUnavailableError)return"MODEL_UNAVAILABLE";
+  if(error instanceof StructuredOutputError)return error.rawKind==="json"?"INVALID_JSON":"STRUCTURED_OUTPUT_ERROR";
+  if(error instanceof OllamaInvalidResponseError)return"STRUCTURED_OUTPUT_ERROR";
+  if(error instanceof ZodError||error instanceof Error&&error.name==="ZodError")return"SCHEMA_VALIDATION_ERROR";
+  if(error instanceof SyntaxError)return"INVALID_JSON";
+  if(error instanceof TypeError||error instanceof Error&&/HTTP\s+\d+|fetch|network|socket|ECONN|EHOST|ETIMEDOUT/i.test(error.message))return"TRANSPORT_ERROR";
+  return"UNKNOWN_ERROR";
+}
+
+function diagnosticCode(error:unknown){
+  if(error instanceof Error)return error.name||"Error";
+  return typeof error==="string"?"StringError":undefined;
 }
 
 function timeoutSignal(parent:AbortSignal|undefined,timeoutMs:number){
@@ -52,7 +94,6 @@ function timeoutSignal(parent:AbortSignal|undefined,timeoutMs:number){
   controller.signal.addEventListener("abort",()=>clearTimeout(timer),{once:true});
   return controller.signal;
 }
-
 
 function applyEntityProvenance(intent:CanonicalIntent,input:string):CanonicalIntent{
   const comparable=fold(input);
@@ -91,7 +132,6 @@ function canonicalLocation(value:string){
 function fold(value:string){
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLocaleLowerCase().replace(/\s+/g," ").trim();
 }
-
 
 function applyLiteralEntities(intent:CanonicalIntent,input:NormalizedIntentInput):CanonicalIntent{
   if(intent.operation!=="write_text_file"&&intent.operation!=="create_text_file")return intent;
