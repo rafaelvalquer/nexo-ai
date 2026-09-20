@@ -35,7 +35,19 @@ export class GlobalDecisionArbiter{
 function deterministicScore(candidate:DecisionCandidate){if(candidate.source==="exact"||candidate.source==="filesystem")return 1;if(candidate.source==="web")return .85;if(candidate.source==="hybrid")return .65;if(candidate.source==="planner")return .5;if(candidate.source==="intent_memory")return .2;return .35;}
 function contextConfidence(context?:ContextEvidence[]){if(!context?.length)return 1;return context.reduce((sum,item)=>sum+item.confidence,0)/context.length;}
 function key(candidate:DecisionCandidate){return`${candidate.source}:${candidate.proposedTool??candidate.operation}`;}
-function dedupe(candidates:DecisionCandidate[]){const seen=new Set<string>();return candidates.filter(candidate=>{const id=`${candidate.source}:${candidate.domain}:${candidate.proposedTool??candidate.operation}:${JSON.stringify(candidate.entities)}`;if(seen.has(id))return false;seen.add(id);return true;});}
+function dedupe(candidates:DecisionCandidate[]){
+ const merged=new Map<string,DecisionCandidate>();
+ for(const candidate of candidates){
+  const id=`${candidate.domain}:${candidate.operation}:${candidate.proposedTool??candidate.operation}:${stableEntities(candidate.entities)}`;
+  const current=merged.get(id);
+  if(!current){merged.set(id,{...candidate,evidence:[...candidate.evidence]});continue;}
+  const preferred=sourceRank(candidate.source)>sourceRank(current.source)?candidate:current;
+  merged.set(id,{...preferred,confidence:Math.max(current.confidence,candidate.confidence),missing:[...new Set([...current.missing,...candidate.missing])],ambiguities:[...new Set([...current.ambiguities,...candidate.ambiguities])],evidence:[...new Set([...current.evidence,...candidate.evidence,`also:${current.source}`,`also:${candidate.source}`])]});
+ }
+ return[...merged.values()];
+}
+function sourceRank(source:DecisionCandidate["source"]){return source==="exact"?7:source==="filesystem"?6:source==="hybrid"?5:source==="web"?4:source==="planner"?3:source==="intent_memory"?2:1;}
+function stableEntities(entities:Record<string,unknown>){return JSON.stringify(Object.fromEntries(Object.entries(entities).sort(([a],[b])=>a.localeCompare(b))));}
 function round(value:number){return Math.round(value*1000)/1000;}
 
 function verifiedMemoryScore(candidate:DecisionCandidate,supporting?:DecisionCandidate[]){
