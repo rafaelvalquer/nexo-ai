@@ -5,9 +5,9 @@ import { StructuredOutputError } from "../llm/structured-response-parser.js";
 import { stripCodeFence } from "../security/prompt.js";
 import { normalizeIntentInput } from "./input-normalizer.js";
 import type { IntentParserFailureKind, IntentParserResult } from "./parser-result.js";
-import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
+import { modelIntentJsonSchemaFor, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
-import { filesystemIntentPrompt } from "./prompts/filesystem.js";
+import { unifiedIntentPrompt } from "./prompts/unified.js";
 import {parseOperationEntities} from "./entities/operation-parser.js";
 import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, NormalizedIntentInput } from "./types.js";
 
@@ -28,14 +28,14 @@ export class LLMIntentParser implements IntentParser{
     try{
       const messages=[
         {role:"system" as const,content:HYBRID_INTENT_SYSTEM_PROMPT},
-        {role:"user" as const,content:filesystemIntentPrompt(normalized,input.availableOperations)}
+        {role:"user" as const,content:unifiedIntentPrompt(normalized,input.availableOperations,input.allowedDomains)}
       ];
       let intent:CanonicalIntent;
       if(this.llm.planStructured){
         const parsed=await this.llm.planStructured({
           messages,
-          schema:modelIntentJsonSchema,
-          schemaName:"NexoHybridIntentV1",
+          schema:modelIntentJsonSchemaFor(input.availableOperations,input.allowedDomains),
+          schemaName:"NexoStructuredIntentV2",
           parse:value=>parseModelIntent(value)
         },signal);
         intent=toCanonicalIntent(parsed);
