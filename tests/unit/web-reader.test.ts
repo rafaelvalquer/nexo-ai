@@ -24,7 +24,7 @@ describe("Web Reader",()=>{
   });
   it("registers reader tools as read-only web tools with untrusted output",()=>{
     const registry=new ToolRegistry();
-    for(const name of ["web_search","web_fetch","web_extract"]){
+    for(const name of ["web_search","web_fetch","web_research","web_extract"]){
       expect(registry.get(name)).toMatchObject({risk:"READ",domain:"web",mutatesState:false,agent:{outputTrust:"untrusted_external"}});
     }
   });

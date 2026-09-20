@@ -29,7 +29,8 @@
     "setup": "node scripts/setup.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "release:major": "node scripts/release.mjs major",
+    "smoke:web-research": "pnpm --filter @nexo/core build && node scripts/smoke-web-research.mjs"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",

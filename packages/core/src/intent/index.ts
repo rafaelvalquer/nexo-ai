@@ -11,3 +11,4 @@ export * from "./hybrid-intent-resolver.js";
 export * from "./intent-tool-mapper.js";
 export * from "./deterministic-intent-adapter.js";
 export * from "./intent-result.js";
+export * from "./web/index.js";

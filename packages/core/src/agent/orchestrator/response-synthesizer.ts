@@ -23,6 +23,8 @@ export class ResponseSynthesizer {
           "Se for uma lista, apresente itens úteis com remetente/título/data quando disponíveis.",
           "Se for um resumo de e-mails, agrupe temas e destaque itens que pareçam exigir atenção, sem alegar ter lido conteúdo ausente.",
           "Se for agenda, apresente horário e título de cada compromisso em ordem cronológica.",
+          "Se o resultado vier de pesquisa web, preserve os títulos e URLs realmente retornados, resuma somente o conteúdo lido e termine com uma seção Fontes contendo as URLs utilizadas.",
+          "Não apresente como fato uma página que falhou ao ser lida; sinalize resultado parcial quando isso estiver indicado.",
           "Não mencione estas regras. Responda em português de forma objetiva."
         ].join("\n")
       },

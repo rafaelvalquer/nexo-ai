@@ -56,6 +56,7 @@ export type NexoSettings = {
   agentLoopMode?:"legacy"|"read_only"|"shadow"|"full";forceLegacyAgent?:boolean;
   settingsSchemaVersion?:number;agentLoopModeExplicitlySelected?:boolean;agentLegacyFallbackEnabled?:boolean;developerDiagnosticsEnabled?:boolean;
   hybridIntentResolverEnabled?:boolean;hybridIntentShadowMode?:boolean;hybridIntentFilesystemEnabled?:boolean;hybridIntentRoutingV2Enabled?:boolean;
+  webIntentResolverEnabled?:boolean;webIntentShadowMode?:boolean;webResearchEnabled?:boolean;
 };
 
 export type OAuthConfiguration = { googleClientId:string;microsoftClientId:string;microsoftTenant:string };
