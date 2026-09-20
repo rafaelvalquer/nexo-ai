@@ -27,9 +27,12 @@ for(const file of datasetFiles){
     if(!existing||(!existing.operation&&row.operation))byInput.set(row.input,row);
   }
 }
-const rows=[...byInput.values()],resolver=new HybridIntentResolver(new LLMIntentParser(provider)),registry=new ToolRegistry(),evalRoot=path.join(root,".hybrid-eval","Downloads"),mapper=new IntentToolMapper(registry,()=>[evalRoot]);
+const rows=[...byInput.values()],registry=new ToolRegistry(),evalRoot=path.join(root,".hybrid-eval","Downloads"),mapper=new IntentToolMapper(registry,()=>[evalRoot]);
 const request=text=>({text,allowedDomains:["filesystem"],availableOperations:[...filesystemOperations]});
 const warmups=["procure teste.txt","crie uma pasta teste em downloads","troque o conteúdo do teste.txt por abc"];
+// O gate precisa medir todos os casos reais. O circuit breaker continua ativo em produção,
+// mas não pode transformar cinco erros iniciais em 100+ resultados HYBRID_INTENT_CIRCUIT_OPEN.
+const resolver=new HybridIntentResolver(new LLMIntentParser(provider),undefined,rows.length+warmups.length+10,0);
 for(const text of warmups){const result=await resolver.resolve(request(text));if(result.status==="resolved")mapper.map(result.intent);}
 
 let operationOk=0,entityChecks=0,entityOk=0,wrongTool=0,schemaInvalid=0,unsafePathResolution=0,safeNonExecutable=0;
@@ -82,5 +85,5 @@ function canonicalAlias(value){const normalized=String(value??"").normalize("NFD
 function entityEquivalent(key,actual,expected){if(key==="folder")return canonicalAlias(actual)===canonicalAlias(expected);if(Array.isArray(actual)||Array.isArray(expected))return JSON.stringify(actual)===JSON.stringify(expected);return String(actual??"").normalize("NFKC").trim()===String(expected??"").normalize("NFKC").trim();}
 function entitiesMatch(result,expected){if(result.status==="unknown")return Object.keys(expected).length===0;return Object.entries(expected).every(([key,value])=>entityEquivalent(key,result.intent.entities?.[key]?.value,value));}
 function hasUnsafeInventedPath(intent,input){const normalized=input.replace(/\//g,"\\").replace(/[\\]+/g,"\\").toLowerCase();for(const key of["path","source","destination"]){const value=intent.entities?.[key]?.value;if(typeof value!=="string")continue;if(!/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(value))continue;const candidate=value.replace(/\//g,"\\").replace(/[\\]+/g,"\\").toLowerCase();if(!normalized.includes(candidate))return true;}return false;}
-function summarize(result){if(result.status==="unknown")return{status:result.status,reason:result.reason};return{status:result.status,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),confidence:result.confidence.overall};}
+function summarize(result){if(result.status==="unknown")return{status:result.status,reason:result.reason,...(result.intent?{domain:result.intent.domain,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),confidence:result.confidence?.overall}: {})};return{status:result.status,domain:result.intent.domain,operation:result.intent.operation,entities:Object.fromEntries(Object.entries(result.intent.entities).map(([key,item])=>[key,item.value])),confidence:result.confidence.overall};}
 function summarizeMapped(mapped){if(!mapped)return undefined;return mapped.type==="tool"?{type:mapped.type,tool:mapped.tool,deferredAction:mapped.deferredAction?.kind}:mapped.type==="clarification"?{type:mapped.type,question:mapped.question}:{type:mapped.type,reason:mapped.reason};}
