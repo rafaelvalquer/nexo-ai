@@ -1,4 +1,6 @@
 export * from "./types.js";
+export * from "./parser-result.js";
+export * from "./operation-requirements.js";
 export * from "./schema.js";
 export * from "./input-normalizer.js";
 export * from "./llm-intent-parser.js";

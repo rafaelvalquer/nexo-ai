@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
-import { buildAdjacencyMap, generateNeuralEdges } from "./neuralConnections";
-import { createSeededRandom, generateAmbientParticles, generateNeuralNodes, NEURAL_SEED } from "./neuralGeometry";
+import { buildAdjacencyMap } from "./neuralConnections";
+import { generateBrainTopology } from "./brainTopology";
+import { createSeededRandom, generateAmbientParticles, NEURAL_SEED } from "./neuralGeometry";
 import { createIdleLife } from "./neuralIdleLife";
 import { decayInteraction } from "./neuralInteraction";
 import { exponentialApproach, getAutonomousDrift, getAutonomousRotation, hexColor } from "./neuralPhysics";
 import { getTargetFrameInterval, lowerNeuralQuality, neuralQualityProfiles } from "./neuralPerformance";
 import { neuralStates } from "./neuralStates";
 import { ambientFragmentShader, ambientVertexShader, edgeFragmentShader, edgeVertexShader, nodeFragmentShader, nodeVertexShader, pulseFragmentShader, pulseVertexShader } from "./neuralShaders";
-import type { NeuralEdge, NeuralSceneProps, SynapticPulse } from "./types";
+import type { NeuralEdge, NeuralNode, NeuralSceneProps, SynapticPulse } from "./types";
 
 type ProgramInfo = {
   program: WebGLProgram;
@@ -119,7 +120,7 @@ function setColor(gl: WebGLRenderingContext, program: ProgramInfo, name: string,
   if (location) gl.uniform3fv(location,value);
 }
 
-function flattenNodes(nodes: ReturnType<typeof generateNeuralNodes>) {
+function flattenNodes(nodes: NeuralNode[]) {
   const positions=new Float32Array(nodes.length*3),phases=new Float32Array(nodes.length),weights=new Float32Array(nodes.length),regions=new Float32Array(nodes.length);
   nodes.forEach((node,index)=>{
     positions.set(node.position,index*3);
@@ -130,7 +131,7 @@ function flattenNodes(nodes: ReturnType<typeof generateNeuralNodes>) {
   return {positions,phases,weights,regions};
 }
 
-function flattenEdges(nodes: ReturnType<typeof generateNeuralNodes>, edges: NeuralEdge[]) {
+function flattenEdges(nodes: NeuralNode[], edges: NeuralEdge[]) {
   const count=edges.length*2,positions=new Float32Array(count*3),phases=new Float32Array(count),weights=new Float32Array(count),regions=new Float32Array(count);
   edges.forEach((edge,index)=>{
     const a=nodes[edge.source],b=nodes[edge.target],offset=index*6,vertex=index*2;
@@ -159,11 +160,11 @@ function nodeRadius(position: [number,number,number]) {
   return Math.hypot(position[0],position[1],position[2]);
 }
 
-export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQualityChange}: NeuralSceneProps) {
+export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQualityChange,onReady}: NeuralSceneProps) {
   const canvasRef=useRef<HTMLCanvasElement>(null);
-  const propsRef=useRef({state,paused,onUnavailable,onQualityChange});
+  const propsRef=useRef({state,paused,onUnavailable,onQualityChange,onReady});
   const redrawRef=useRef<(()=>void)|undefined>(undefined);
-  propsRef.current={state,paused,onUnavailable,onQualityChange};
+  propsRef.current={state,paused,onUnavailable,onQualityChange,onReady};
 
   useEffect(()=>{
     const canvas=canvasRef.current;
@@ -189,6 +190,7 @@ export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQu
     let lastFrame=0;
     let lastDraw=0;
     let failed=false;
+    let readyReported=false;
     let documentVisible=!document.hidden;
 
     let currentPrimary=[.46,.36,1];
@@ -210,8 +212,9 @@ export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQu
     const idleRandom=createSeededRandom("NEXO_NEURAL_IDLE_LIFE_V1");
     const idleLife=createIdleLife(idleRandom);
     const profile=neuralQualityProfiles[quality];
-    const nodes=generateNeuralNodes(profile.nodeCount);
-    const edges=generateNeuralEdges(nodes,profile.maxConnections);
+    const topology=generateBrainTopology(profile);
+    const nodes=topology.nodes;
+    const edges=topology.edges;
     const adjacency=buildAdjacencyMap(edges,nodes.length);
     const ambient=generateAmbientParticles(profile.particleCount);
 
@@ -483,13 +486,13 @@ export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQu
             rotateY(
               autoRotation.y*autonomousStrength+
               (isIdle?life.rotationBiasY:0)+
-              pointerX*.13
+              pointerX*.035
             )
           ),
           rotateX(
             autoRotation.x*autonomousStrength+
             (isIdle?life.rotationBiasX:0)-
-            pointerY*.10
+            pointerY*.025
           )
         );
 
@@ -578,6 +581,7 @@ export function NeuralScene({state,interaction,paused,quality,onUnavailable,onQu
         }
 
         gl.depthMask(true);
+        if(!readyReported){readyReported=true;propsRef.current.onReady?.();}
 
         if(!props.paused&&getTargetFrameInterval(props.state,interaction.current.hovering,true)<=17){
           if(!performanceStart)performanceStart=now;

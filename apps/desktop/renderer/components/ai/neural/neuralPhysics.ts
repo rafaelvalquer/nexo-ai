@@ -2,21 +2,21 @@ export const exponentialApproach = (current: number, target: number, delta: numb
   current + (target - current) * (1 - Math.exp(-delta * speed));
 
 export const neuralBreath = (time: number) =>
-  Math.sin(time * 0.62) * 0.020 + Math.sin(time * 0.21) * 0.008;
+  Math.sin(time * 0.62) * 0.016 + Math.sin(time * 0.21) * 0.006;
 
 export function getAutonomousRotation(time: number) {
   return {
-    x: Math.sin(time * 0.073 + 1.7) * 0.065 + Math.sin(time * 0.021) * 0.025,
-    y: Math.sin(time * 0.11) * 0.11 + Math.sin(time * 0.037) * 0.045,
-    z: Math.sin(time * 0.047 + 0.8) * 0.025
+    x: Math.sin(time*.073+1.7)*.008+Math.sin(time*.021)*.003,
+    y: Math.sin(time*.11)*.035+Math.sin(time*.037)*.014,
+    z: Math.sin(time*.047+.8)*.005
   };
 }
 
 export function getAutonomousDrift(time: number) {
   return {
-    x: Math.sin(time * 0.19) * 0.012,
-    y: Math.sin(time * 0.13 + 1.4) * 0.010,
-    z: Math.sin(time * 0.09 + 2.1) * 0.018
+    x: Math.sin(time * 0.19) * 0.010,
+    y: Math.sin(time * 0.13 + 1.4) * 0.008,
+    z: Math.sin(time * 0.09 + 2.1) * 0.004
   };
 }
 

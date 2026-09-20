@@ -3,6 +3,7 @@ import { ArrowUpRight, FileText, MessageSquare, Orbit, Pause, Play, Plus, Settin
 import { useAppStore } from "../../stores/app";
 import { useVisualStore } from "../../stores/visual";
 import { NeuralFallback } from "./neural/NeuralFallback";
+import { NeuralStaticFrame } from "./neural/NeuralStaticFrame";
 import { createNeuralInteraction, leavePointer, updatePointer } from "./neural/neuralInteraction";
 import { initialNeuralQuality, shouldRenderNeuralScene } from "./neural/neuralPerformance";
 import { neuralColors, neuralStates } from "./neural/neuralStates";
@@ -26,7 +27,7 @@ export function NexoCore({variant="standard",interactive=true,showControls=true}
   const {state,label}=useVisualStore();
   const navigate=useAppStore(store=>store.setPage);
   const [webgl,setWebgl]=useState<"checking"|"ready"|"unavailable">("checking");
-  const [reduced,setReduced]=useState(false),[paused,setPaused]=useState(false),[expanded,setExpanded]=useState(false),[visible,setVisible]=useState(false);
+  const [reduced,setReduced]=useState(false),[paused,setPaused]=useState(false),[expanded,setExpanded]=useState(false),[visible,setVisible]=useState(false),[sceneReady,setSceneReady]=useState(false);
   const [quality,setQuality]=useState<NeuralQuality>(()=>initialNeuralQuality(typeof window==="undefined"?1000:window.innerWidth,typeof navigator==="undefined"?8:navigator.hardwareConcurrency||8));
   const host=useRef<HTMLDivElement>(null);
   const interaction=useRef(createNeuralInteraction());
@@ -47,10 +48,13 @@ export function NexoCore({variant="standard",interactive=true,showControls=true}
     return()=>{media.removeEventListener("change",updateMotion);observer?.disconnect();};
   },[]);
 
+  useEffect(()=>{if(webgl!=="ready"||reduced)setSceneReady(false);},[webgl,reduced]);
+
   const stopped=paused||reduced||!visible;
   const renderScene=shouldRenderNeuralScene(webgl==="ready",reduced,visible);
   const colors=neuralColors[state],config=neuralStates[state];
   const fallback=<NeuralFallback animated={!stopped}/>;
+  const staticFrame=<NeuralStaticFrame/>;
   const style={
     "--neural-primary":colors.core,
     "--neural-secondary":colors.ring,
@@ -65,7 +69,24 @@ export function NexoCore({variant="standard",interactive=true,showControls=true}
   const activateRegion=(region:number)=>{interaction.current.activeRegion=region;interaction.current.wave=Math.max(interaction.current.wave,.35);};
   const clearRegion=()=>{interaction.current.activeRegion=-1;};
 
-  return <div ref={host} className={`nexoNeuralCore nexoNucleus nexoCore--${variant} ${expanded?"expanded":""} ${stopped?"still":""}`} style={style} data-state={state} data-webgl={webgl}>
+  const visual=reduced||webgl==="checking"||!visible
+    ?staticFrame
+    :webgl==="unavailable"
+      ?fallback
+      :renderScene
+        ?<div className={`neuralCoreVisualStack ${sceneReady?"isSceneReady":""}`}>
+          <div className="neuralCoreStaticLayer">{staticFrame}</div>
+          <div className="neuralCoreSceneLayer">
+            <SceneBoundary fallback={fallback}>
+              <Suspense fallback={null}>
+                <NeuralScene state={state} interaction={interaction} paused={stopped} quality={quality} onQualityChange={setQuality} onUnavailable={()=>setWebgl("unavailable")} onReady={()=>setSceneReady(true)}/>
+              </Suspense>
+            </SceneBoundary>
+          </div>
+        </div>
+        :staticFrame;
+
+  return <div ref={host} className={`nexoNeuralCore nexoNucleus nexoCore--${variant} ${expanded?"expanded":""} ${stopped?"still":""}`} style={style} data-state={state} data-webgl={webgl} data-visual="brain-network" data-topology-version="brain-v1">
     <div className="neuralCoreCoordinates nucleusCoordinates" aria-hidden="true"><span>NEXO / CORE</span><span>LOCAL INTELLIGENCE</span></div>
     <div className="neuralCoreHalo neuralCoreHaloA" aria-hidden="true"/><div className="neuralCoreHalo neuralCoreHaloB" aria-hidden="true"/>
     <div className="neuralCoreFrame" aria-hidden="true"><i/><i/><i/><i/></div>
@@ -77,7 +98,7 @@ export function NexoCore({variant="standard",interactive=true,showControls=true}
       onPointerDown={()=>{interaction.current.pressed=true;interaction.current.wave=1;}}
       onPointerUp={()=>{interaction.current.pressed=false;}}
       onKeyDown={event=>{if(event.key==="Escape")setExpanded(false);}}>
-      {renderScene?<SceneBoundary fallback={fallback}><Suspense fallback={fallback}><NeuralScene state={state} interaction={interaction} paused={stopped} quality={quality} onQualityChange={setQuality} onUnavailable={()=>setWebgl("unavailable")}/></Suspense></SceneBoundary>:fallback}
+      {visual}
     </button>
     {expanded&&<nav className="neuralCoreSatellites nucleusSatellites" aria-label="Atalhos do núcleo">
       <button className="satelliteAssistant" onPointerEnter={()=>activateRegion(satelliteRegions.assistant)} onPointerLeave={clearRegion} onFocus={()=>activateRegion(satelliteRegions.assistant)} onBlur={clearRegion} onClick={()=>navigate("Assistente")}><MessageSquare size={14}/>Conversar<ArrowUpRight size={12}/></button>

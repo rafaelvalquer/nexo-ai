@@ -1,20 +1,6 @@
 import path from "node:path";
+import {deriveMissingFields,sanitizeDeclaredMissing} from "./operation-requirements.js";
 import type { CanonicalIntent, IntentAmbiguity } from "./types.js";
-
-const REQUIREMENTS:Record<string,{required:string[];optional?:string[]}>={
-  create_folder:{required:["name","folder"]},
-  create_text_file:{required:["name","folder"],optional:["content"]},
-  write_text_file:{required:["file","content"],optional:["folder","path"]},
-  find_file:{required:["name"],optional:["folder"]},
-  list_files:{required:["folder"]},
-  search_files:{required:["query"],optional:["folder"]},
-  read_file:{required:["path"]},
-  copy_file:{required:["source","destination"]},
-  move_file:{required:["source","destination"]},
-  rename_file:{required:["path","newName"]},
-  trash_file:{required:["path"]},
-  file_info:{required:["path"]}
-};
 
 export type SemanticValidationResult={
   valid:boolean;
@@ -30,10 +16,18 @@ export function validateIntentSemantics(intent:CanonicalIntent,userText:string):
   if(isInformational(text))return invalid(intent,"INFORMATIONAL_REQUEST","O pedido é informacional e não autoriza execução.");
   if(isNegatedMutation(text))return invalid(intent,"NEGATED_ACTION","O pedido contém uma negação explícita e não autoriza alteração.");
 
-  const requirements=REQUIREMENTS[intent.operation];
-  if(!requirements)return invalid(intent,"INVALID_INTENT_OPERATION","Não há requisitos semânticos registrados para a operação.");
-  const missing=[...new Set([...intent.missing,...requirements.required.filter(key=>!hasEntity(intent,key))])];
+  const derivedMissing=deriveMissingFields(intent.operation,intent.entities);
+  if(!derivedMissing.length&&!isKnownOperation(intent.operation))return invalid(intent,"INVALID_INTENT_OPERATION","Não há requisitos semânticos registrados para a operação.");
+  const missing=[...new Set([...sanitizeDeclaredMissing(intent.operation,intent.missing),...derivedMissing])];
   const ambiguities=[...intent.ambiguities];
+
+  for(const key of ["folder","path","source","destination"]){
+    const entity=intent.entities[key];
+    if(entity?.source==="inferred"&&!missing.includes(key)){
+      missing.push(key);
+      ambiguities.push({code:"untrusted_inferred_location",field:key,message:"O local não foi informado literalmente nem derivado de contexto validado.",critical:true});
+    }
+  }
 
   if(intent.operation==="create_folder"||intent.operation==="create_text_file"){
     const name=entityString(intent,"name");
@@ -54,20 +48,19 @@ export function validateIntentSemantics(intent:CanonicalIntent,userText:string):
     if(!containsLiteralPath(text,value))ambiguities.push({code:"invented_physical_path",field:key,message:"O caminho físico não aparece literalmente no pedido do usuário.",critical:true});
   }
 
-  const next={...intent,missing,ambiguities};
-  if(missing.length){
-    return{valid:false,intent:next,missing,ambiguities,reason:"MISSING_REQUIRED_ENTITY",question:missingQuestion(intent.operation,missing[0])};
+  const next={...intent,missing:[...new Set(missing)],ambiguities};
+  if(next.missing.length){
+    return{valid:false,intent:next,missing:next.missing,ambiguities,reason:"MISSING_REQUIRED_ENTITY",question:missingQuestion(intent.operation,next.missing[0])};
   }
   const critical=ambiguities.find(item=>item.critical!==false);
   if(critical){
-    return{valid:false,intent:next,missing,ambiguities,reason:critical.code,question:ambiguityQuestion(critical,next)};
+    return{valid:false,intent:next,missing:next.missing,ambiguities,reason:critical.code,question:ambiguityQuestion(critical,next)};
   }
-  return{valid:true,intent:next,missing,ambiguities};
+  return{valid:true,intent:next,missing:next.missing,ambiguities};
 }
 
-function hasEntity(intent:CanonicalIntent,key:string){
-  const value=intent.entities[key]?.value;
-  return typeof value==="string"?Boolean(value.trim()):Array.isArray(value)?value.length>0:value!==undefined;
+function isKnownOperation(operation:string){
+  return ["create_folder","create_text_file","write_text_file","find_file","list_files","search_files","read_file","copy_file","move_file","rename_file","trash_file","file_info"].includes(operation);
 }
 function entityString(intent:CanonicalIntent,key:string){
   const value=intent.entities[key]?.value;
@@ -92,9 +85,6 @@ function isNegatedMutation(text:string){
 }
 function isResourceTypeAmbiguous(text:string){
   const mutation=/\b(?:crie|criar|cria|gere|gerar|faça|fazer|monte|montar)\b/i.test(text);
-  // A type word inside the destination ("na pasta downloads") does not tell us
-  // whether the resource being created is a file or directory. The type must
-  // qualify the object immediately after the creation verb.
   const explicitObjectType=/\b(?:crie|criar|cria|gere|gerar|faça|fazer|monte|montar)\s+(?:(?:um|uma|o|a)\s+)?(?:pastinha|pasta|diret[oó]rio|arquivo|documento)\b/i.test(text);
   const extension=/\.[a-z0-9]{1,12}\b/i.test(text);
   return mutation&&!explicitObjectType&&!extension;

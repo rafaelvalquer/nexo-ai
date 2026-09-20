@@ -1,0 +1,38 @@
+name: Intent Model Benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Comma-separated Ollama models"
+        required: false
+        default: "qwen3:0.6b,qwen3:1.7b,qwen3:4b"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+    env:
+      NEXO_MODEL_EVAL_URL: http://127.0.0.1:11434
+      NEXO_INTENT_MODELS: ${{ inputs.models }}
+      NEXO_INTENT_TIMEOUT_MS: "10000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Benchmark intent models on identical 130-case dataset
+        run: pnpm eval:intents:models
+      - name: Upload model comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: intent-model-benchmark
+          path: artifacts/intent-models
+          if-no-files-found: error

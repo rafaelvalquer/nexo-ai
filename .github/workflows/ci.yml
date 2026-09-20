@@ -44,7 +44,7 @@ jobs:
       - name: Agent model-backed smoke
         run: pnpm eval:agent:model
 
-  hybrid-intent-model:
+  hybrid-intent-quality:
     needs: core
     runs-on: ubuntu-latest
     services:
@@ -55,8 +55,10 @@ jobs:
     env:
       NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_MODEL_EVAL_URL || 'http://127.0.0.1:11434' }}
       NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
-      NEXO_INTENT_MODEL: ${{ vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
-      NEXO_INTENT_P95_MAX_MS: "1500"
+      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
+      NEXO_INTENT_GATE_MODE: quality
+      NEXO_INTENT_TIMEOUT_MS: "10000"
+      NEXO_INTENT_HOSTED_P95_MAX_MS: "5000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,10 +70,12 @@ jobs:
       - name: Pull local evaluation model
         if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
         shell: bash
+        env:
+          NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_MODEL || vars.NEXO_MODEL_EVAL_MODEL || 'qwen3:0.6b' }}
         run: bash scripts/ci/pull-ollama-model.sh
-      - name: Hybrid intent model gate
+      - name: Hybrid intent quality gate
         run: pnpm eval:intents:hybrid
-      - name: Hybrid intent model summary
+      - name: Hybrid intent quality summary
         if: always()
         shell: bash
         run: |
@@ -80,7 +84,7 @@ jobs:
             exit 0
           fi
           {
-            echo "## Hybrid Intent Model Gate"
+            echo "## Hybrid Intent Quality Gate"
             echo
             echo "| Metric | Value |"
             echo "| --- | ---: |"
@@ -90,21 +94,53 @@ jobs:
             echo "| Entity accuracy | $(jq -r '((.entityAccuracy // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
             echo "| Wrong tool rate | $(jq -r '((.wrongToolRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
             echo "| Schema invalid rate | $(jq -r '((.schemaInvalidRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
-            echo "| Ambiguity/negative safety | $(jq -r '((.ambiguitySafety // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Semantic invalid rate | $(jq -r '((.semanticInvalidRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Timeout rate | $(jq -r '((.timeoutRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Model/transport errors | $(jq -r '((.modelErrorRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Invalid JSON | $(jq -r '((.invalidJsonRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Structured output errors | $(jq -r '((.structuredOutputErrorRate // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
+            echo "| Safety | $(jq -r '((.ambiguitySafety // 0) * 100 | tostring) + "%"' artifacts/hybrid-intent-eval.json) |"
             echo "| Unsafe invented paths | $(jq -r '.unsafeInventedPaths // 0' artifacts/hybrid-intent-eval.json) |"
-            echo "| P50 | $(jq -r '.p50Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
-            echo "| P90 | $(jq -r '.p90Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
-            echo "| P95 | $(jq -r '.p95Ms // 0' artifacts/hybrid-intent-eval.json) ms |"
-            echo "| Max | $(jq -r '.maxMs // 0' artifacts/hybrid-intent-eval.json) ms |"
-            echo "| Failures | $(jq -r '(.failures // []) | length' artifacts/hybrid-intent-eval.json) |"
+            echo "| Cold start | $(jq -r '.coldStartMs // 0' artifacts/hybrid-intent-eval.json) ms |"
+            echo "| Warm P95 | $(jq -r '.warmP95 // 0' artifacts/hybrid-intent-eval.json) ms |"
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload Hybrid Intent evaluation
+      - name: Upload Hybrid Intent quality report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hybrid-intent-eval
+          name: hybrid-intent-quality
           path: artifacts/hybrid-intent-eval.json
           if-no-files-found: warn
+
+  hybrid-intent-performance:
+    needs: core
+    if: ${{ vars.NEXO_INTENT_PERF_URL != '' }}
+    runs-on: ubuntu-latest
+    env:
+      NEXO_MODEL_EVAL_URL: ${{ vars.NEXO_INTENT_PERF_URL }}
+      NEXO_MODEL_EVAL_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:0.6b' }}
+      NEXO_INTENT_MODEL: ${{ vars.NEXO_INTENT_PERF_MODEL || vars.NEXO_INTENT_MODEL || 'qwen3:0.6b' }}
+      NEXO_INTENT_GATE_MODE: performance
+      NEXO_INTENT_TIMEOUT_MS: "10000"
+      NEXO_INTENT_P95_MAX_MS: "1500"
+      NEXO_INTENT_REPORT_PATH: artifacts/hybrid-intent-performance.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22.20.0 }
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Production representative P95 gate
+        run: pnpm eval:intents:hybrid
+      - name: Upload representative performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-intent-performance
+          path: artifacts/hybrid-intent-performance.json
+          if-no-files-found: error
 
   desktop-e2e:
     needs: core
@@ -121,7 +157,8 @@ jobs:
       - run: pnpm test:e2e
 
   package:
-    needs: [core, agent-model-smoke, hybrid-intent-model, desktop-e2e]
+    needs: [core, desktop-e2e, agent-model-smoke, hybrid-intent-quality, hybrid-intent-performance]
+    if: ${{ always() && needs.core.result == 'success' && needs.desktop-e2e.result == 'success' && needs.agent-model-smoke.result == 'success' && needs.hybrid-intent-quality.result == 'success' && needs.hybrid-intent-performance.result == 'success' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
