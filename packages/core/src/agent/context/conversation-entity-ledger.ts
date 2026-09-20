@@ -12,7 +12,7 @@ export class ConversationEntityLedger{
     const observed=[] as ConversationEntity[];
     for(const item of discovered){
       const existing=current.find(candidate=>candidate.kind===item.kind&&candidate.id===item.id);
-      const normalized={...(existing??{}),...item,ordinal:1,observedAtTurn:turn||existing?.observedAtTurn??0,lastUsedAtTurn:turn||existing?.lastUsedAtTurn??0};
+      const normalized={...(existing??{}),...item,ordinal:1,observedAtTurn:turn||(existing?.observedAtTurn??0),lastUsedAtTurn:turn||(existing?.lastUsedAtTurn??0)};
       if(!observed.some(candidate=>candidate.kind===normalized.kind&&candidate.id===normalized.id))observed.push(normalized);
     }
     const remaining=current.filter(candidate=>!observed.some(item=>item.kind===candidate.kind&&item.id===candidate.id));
