@@ -23,6 +23,9 @@ import {GoalSatisfactionEvaluator,type GoalSatisfaction} from "../agent/decision
 import {DecisionRefiner} from "../agent/decision/decision-refiner.js";
 import {ContextResolver} from "../agent/context/context-resolver.js";
 import {ContextSnapshotBuilder} from "../agent/context/context-snapshot-builder.js";
+import type {ContextSnapshot} from "../agent/context/context-snapshot.js";
+import type {ConversationEntity} from "../agent/resolution/entity-reference-resolver.js";
+import type {RetrievedIntentExample} from "../agent/intent-memory/retriever.js";
 import {targetedClarification} from "../agent/clarification/targeted-clarification.js";
 import {DomainEvidenceBuilder,type DomainEvidenceSnapshot} from "../intent/domain/domain-evidence-builder.js";
 import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.js";
@@ -82,6 +85,9 @@ export type AccuracyCommandOptions={
   contextEnabled:()=>boolean;
   goalEnabled:()=>boolean;
   failurePenaltyFor?:(text:string,candidate:DecisionCandidate)=>number;
+  memoryCandidatesFor?:(text:string,expectedDomain?:string)=>Promise<{candidates:DecisionCandidate[];examples:RetrievedIntentExample[]}>;
+  entityLedgerFor?:(conversationId:string,turn:number)=>ConversationEntity[];
+  pendingClarificationFor?:(conversationId:string)=>ContextSnapshot["pendingClarification"]|undefined;
   metrics?:LocalMetricsService;
 };
 
@@ -103,15 +109,24 @@ export class CommandService {
   constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions,private readonly accuracy?:AccuracyCommandOptions) {}
 
   /** Canonical async routing entry point. Candidate generators never execute directly. */
-  async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal,requestContext:{conversationId?:string}={}):Promise<CommandRoute>{
+  async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal,requestContext:{conversationId?:string;recentMessages?:ContextSnapshot["recentMessages"]}={}):Promise<CommandRoute>{
     const started=Date.now(),requestId=randomUUID(),normalized=normalizeIntentInput(text),domainEvidence=this.domainEvidenceBuilder.build(normalized);
     const diagnostics:HybridIntentDiagnosticsV2={requestId,originalInput:text,normalizedInput:normalized.routingText,hybrid:{invoked:false},webIntent:{invoked:false},latency:{totalMs:0}};
     const trace=this.accuracy?.enabled()?createDecisionTrace({requestId,conversationId:requestContext.conversationId,normalizedInput:normalized.routingText}):undefined;
     const turn=this.nextConversationTurn(requestContext.conversationId);
-    let expectedDomain=expectedDomainFromEvidence(domainEvidence);
+    const expectedDomain=expectedDomainFromEvidence(domainEvidence);
+    const memoryBundle=await this.accuracy?.memoryCandidatesFor?.(text,expectedDomain).catch(()=>undefined);
+    const memoryCandidates=memoryBundle?.candidates??[];
+    if(trace)trace.intentCandidates.push(...memoryCandidates);
     let contextEvidence:ReturnType<ContextResolver["resolve"]>|undefined;
 
-    const saveTrace=()=>{if(!trace)return;this.lastTrace=structuredClone(trace);this.accuracy?.traceStore?.save(trace);};
+    const saveTrace=()=>{
+      if(!trace)return;
+      const snapshot=structuredClone(trace);
+      this.lastTrace=snapshot;
+      const store=this.accuracy?.traceStore;
+      if(store)queueMicrotask(()=>{try{store.save(snapshot);}catch{}});
+    };
     const finish=(route:CommandRoute,source:string)=>{
       diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:undefined};diagnostics.latency.totalMs=Date.now()-started;this.lastDiagnostics=diagnostics;
       if(trace){trace.finalTool=route.type==="tool"?route.tool:undefined;if(route.type==="chat"&&route.response&&!trace.outcome)trace.outcome={status:"needs_clarification"};saveTrace();}
@@ -125,7 +140,10 @@ export class CommandService {
     if(trace)for(const item of domainEvidence.items)trace.domainCandidates.push({source:"exact",domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence});
     if(this.refinementFlags.contextSnapshotV2Enabled&&this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
       const previousResultTurnAge=this.previousResultTurnAge(requestContext.conversationId,previous,turn);
-      const snapshot=this.contextSnapshotBuilder.build({conversationId:requestContext.conversationId??"current",turn,state:previous,previousResultTurnAge});
+      const conversationId=requestContext.conversationId??"current";
+      const ledger=requestContext.conversationId?this.accuracy.entityLedgerFor?.(requestContext.conversationId,turn):undefined;
+      const pending=requestContext.conversationId?this.accuracy.pendingClarificationFor?.(requestContext.conversationId):undefined;
+      const snapshot=this.contextSnapshotBuilder.build({conversationId,turn,state:previous,previousResultTurnAge,ledger,memoryCandidates:memoryBundle?.examples,recentMessages:requestContext.recentMessages,pendingClarification:pending});
       contextEvidence=this.accuracy.contextResolver.resolve(text,snapshot);if(trace)trace.contextUsed.push(...contextEvidence.evidence);
     }
 
@@ -200,7 +218,7 @@ export class CommandService {
       const goals=new Map<string,GoalSatisfaction>();
       for(const entry of entries){const goal=this.accuracy?.goalEvaluator.evaluate(text,entry.candidate)??{status:"unknown",score:.7} as GoalSatisfaction;goals.set(decisionKey(entry.candidate),goal);}
       const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
-      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
+      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates:memoryCandidates,domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
       if(this.refinementFlags.candidateArbiterShadowMode){this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});const first=entries[0];if(first)return finish(first.route,first.source);}
       if(decision.clarificationNeeded){
