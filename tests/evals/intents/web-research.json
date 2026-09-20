@@ -1,0 +1,222 @@
+[
+  {
+    "input": "acesse o InfoMoney",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "abra o InfoMoney para eu ver",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "entre no Google",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "abra https://github.com",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "acesse g1.com.br",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "abra o TechCrunch",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "acesse o site da Microsoft",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "abra o GitHub",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "entre no UOL",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "abra o site cnn.com",
+    "expectedOperation": "navigate"
+  },
+  {
+    "input": "acesse o InfoMoney e traga as principais notícias",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "quais são as principais notícias do InfoMoney?",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "veja no InfoMoney o que saiu sobre Petrobras",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "pesquise no G1 notícias sobre inflação",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "acesse o TechCrunch e resuma as notícias sobre IA",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "pesquise na internet notícias sobre Petrobras",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "pesquisar as principais noticias no infomoney",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "consulte o InfoMoney e veja as manchetes",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "traga notícias do G1",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "me diga as novidades no TechCrunch",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "acesse o GitHub e veja os últimos releases",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "entre no InfoMoney e resuma os destaques",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "vá ao InfoMoney e me diga as principais notícias",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "acesse o G1 para descobrir as notícias de hoje",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "veja no UOL as principais manchetes",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "procure no InfoMoney notícias sobre Selic",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "busque no TechCrunch notícias sobre OpenAI",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "consulte no G1 notícias sobre economia",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "mostre as notícias no InfoMoney",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "informe as principais notícias do UOL",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "acesse a CNN e traga notícias sobre Brasil",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "pesquise no GitHub os últimos releases do React",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "veja no site Microsoft as novidades do Windows",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "consulte o React e explique useEffect",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "traga do InfoMoney notícias sobre bolsa",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "pesquise notícias recentes no G1",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "quais manchetes estão no UOL",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "descubra no TechCrunch o que saiu sobre IA",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "acesse o InfoMoney e veja o que saiu sobre dólar",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "entre no G1 e me diga as manchetes",
+    "expectedOperation": "research"
+  },
+  {
+    "input": "entre no InfoMoney e clique em Mercados",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "abra o site e faça login",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "acesse o site e baixe o relatório",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "entre no LinkedIn usando minha conta",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "abra o GitHub e clique em Releases",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "acesse o site e preencha o formulário",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "entre no portal e digite meu e-mail",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "abra o site e selecione Mercados",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "acesse o site e envie o formulário",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "entre no InfoMoney e baixe o PDF",
+    "expectedOperation": "interact"
+  },
+  {
+    "input": "resuma https://example.com/noticia",
+    "expectedOperation": "fetch"
+  },
+  {
+    "input": "leia https://react.dev/reference/react/useEffect",
+    "expectedOperation": "fetch"
+  },
+  {
+    "input": "explique https://example.com/artigo",
+    "expectedOperation": "fetch"
+  },
+  {
+    "input": "analise https://example.com/report",
+    "expectedOperation": "fetch"
+  },
+  {
+    "input": "extraia o conteúdo de https://example.com/page",
+    "expectedOperation": "fetch"
+  }
+]
