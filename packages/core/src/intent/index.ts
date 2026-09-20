@@ -12,3 +12,6 @@ export * from "./intent-tool-mapper.js";
 export * from "./deterministic-intent-adapter.js";
 export * from "./intent-result.js";
 export * from "./web/index.js";
+
+export * from "./domain/index.js";
+export * from "./entities/index.js";

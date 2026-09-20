@@ -15,6 +15,15 @@ import type { ActionContextFile } from "../agent/context/conversation-action-con
 import { PreRoutingSafetyGuard } from "./pre-routing-safety-guard.js";
 import { RouteConflictGuard } from "./route-conflict-guard.js";
 import { WebGoalConflictGuard, WebIntentMapper, WebIntentResolver, mayBeWebRequest } from "../intent/web/index.js";
+import {DomainResolver} from "../intent/domain/resolver.js";
+import {candidateFromCommandRoute,createDecisionTrace} from "../agent/decision/decision-trace.js";
+import type {DecisionCandidateSource,DecisionTrace} from "../agent/decision/types.js";
+import {DecisionTraceStore} from "../agent/decision/decision-trace-store.js";
+import {GoalSatisfactionEvaluator,type GoalSatisfaction} from "../agent/decision/goal-satisfaction.js";
+import {DecisionRefiner} from "../agent/decision/decision-refiner.js";
+import {ContextResolver} from "../agent/context/context-resolver.js";
+import {contextSnapshotFromActionState} from "../agent/context/context-snapshot.js";
+import {targetedClarification} from "../agent/clarification/targeted-clarification.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
@@ -57,6 +66,19 @@ export type WebCommandOptions={
   researchEnabled:()=>boolean;
   metrics?:LocalMetricsService;
 };
+export type AccuracyCommandOptions={
+  domainResolver:DomainResolver;
+  traceStore?:DecisionTraceStore;
+  goalEvaluator:GoalSatisfactionEvaluator;
+  refiner:DecisionRefiner;
+  contextResolver:ContextResolver;
+  enabled:()=>boolean;
+  refinerEnabled:()=>boolean;
+  shadowMode:()=>boolean;
+  contextEnabled:()=>boolean;
+  goalEnabled:()=>boolean;
+  metrics?:LocalMetricsService;
+};
 
 export class CommandService {
   private readonly fastRouter = new DeterministicRouter();
@@ -65,23 +87,76 @@ export class CommandService {
   private readonly conflictGuard = new RouteConflictGuard();
   private readonly webGoalGuard = new WebGoalConflictGuard();
   private lastDiagnostics?:HybridIntentDiagnosticsV2;
+  private lastTrace?:DecisionTrace;
 
-  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions) {}
+  constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions,private readonly accuracy?:AccuracyCommandOptions) {}
 
   /** Canonical async routing entry point for AgentEngine in Routing V2. */
-  async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
-    if(this.hybrid?.routingV2Enabled?.()===false){
-      const legacy=this.route(text,previous);
-      return legacy.type==="unknown"?this.routeHybrid(text,previous,signal):legacy;
-    }
-
+  async resolve(text:string,previous?:ConversationActionContextState,signal?:AbortSignal,requestContext:{conversationId?:string}={}):Promise<CommandRoute>{
     const started=Date.now(),requestId=randomUUID(),normalized=normalizeIntentInput(text);
     const diagnostics:HybridIntentDiagnosticsV2={requestId,originalInput:text,normalizedInput:normalized.routingText,hybrid:{invoked:false},webIntent:{invoked:false},latency:{totalMs:0}};
+    const trace=this.accuracy?.enabled()?createDecisionTrace({requestId,conversationId:requestContext.conversationId,normalizedInput:normalized.routingText}):undefined;
+    const rejectedRoutes=new Set<string>();
+    let expectedDomain:string|undefined;
+    const useAccuracy=Boolean(this.accuracy?.enabled());
+
+    const saveTrace=()=>{
+      if(!trace)return;
+      this.lastTrace=structuredClone(trace);
+      this.accuracy?.traceStore?.save(trace);
+    };
     const finish=(route:CommandRoute,source:string)=>{
       diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:undefined};
       diagnostics.latency.totalMs=Date.now()-started;
       this.lastDiagnostics=diagnostics;
+      if(trace){
+        trace.finalTool=route.type==="tool"?route.tool:undefined;
+        if(route.type==="chat"&&route.response&&!trace.outcome)trace.outcome={status:"needs_clarification"};
+        saveTrace();
+      }
       return route;
+    };
+    const reject=(route:CommandRoute,source:DecisionCandidateSource,reason:string)=>{
+      const candidate=candidateFromCommandRoute(route,source);
+      if(candidate){trace?.intentCandidates.push(candidate);trace?.rejected.push({candidate,reason});}
+      rejectedRoutes.add(routeLabel(route));
+      this.accuracy?.metrics?.record("intent.decision.disagreement",1,{candidate:routeLabel(route),reason});
+      return candidate;
+    };
+    let contextEvidence:ReturnType<ContextResolver["resolve"]>|undefined;
+    const evaluate=(route:CommandRoute,source:DecisionCandidateSource):{accepted:boolean;route:CommandRoute}=>{
+      if(route.type!=="tool")return{accepted:true,route};
+      const candidate=candidateFromCommandRoute(route,source);
+      if(!candidate)return{accepted:true,route};
+      trace?.intentCandidates.push(candidate);
+      if(expectedDomain&&!compatibleDomain(expectedDomain,candidate.domain)){
+        const reason=`DOMAIN_MISMATCH:${expectedDomain}:${candidate.domain}`;
+        if(this.accuracy?.shadowMode()){this.accuracy.metrics?.record("intent.decision.disagreement",1,{candidate:route.tool,reason});}
+        else{trace?.rejected.push({candidate,reason});rejectedRoutes.add(routeLabel(route));return{accepted:false,route};}
+      }
+      let goal:GoalSatisfaction|undefined;
+      if(this.accuracy&&(this.accuracy.goalEnabled()||this.accuracy.shadowMode())){
+        goal=this.accuracy.goalEvaluator.evaluate(text,candidate);
+        if(goal.status==="unsatisfied"){
+          this.accuracy.metrics?.record("intent.goal.not_satisfied",1,{tool:route.tool,reason:goal.reason??"unknown"});
+          if(!this.accuracy.shadowMode()&&this.accuracy.goalEnabled()){trace?.rejected.push({candidate,reason:goal.reason??"GOAL_NOT_SATISFIED"});rejectedRoutes.add(routeLabel(route));return{accepted:false,route};}
+        }else if(goal.status==="partial")this.accuracy.metrics?.record("intent.goal.partial",1,{tool:route.tool});
+      }
+      if(this.accuracy?.refinerEnabled()){
+        const goals=new Map<string,GoalSatisfaction>();if(goal)goals.set(`${candidate.source}:${candidate.proposedTool??candidate.operation}`,goal);
+        const refined=this.accuracy.refiner.refine({current:candidate,context:contextEvidence?.evidence,goalByKey:goals});
+        candidate.confidence=refined.confidence||candidate.confidence;
+        if(refined.clarificationNeeded){
+          const reason=refined.clarificationReason??"REFINEMENT_REQUIRES_CLARIFICATION";
+          if(this.accuracy.shadowMode())this.accuracy.metrics?.record("intent.decision.disagreement",1,{candidate:route.tool,reason});
+          else{
+            trace?.rejected.push({candidate,reason});rejectedRoutes.add(routeLabel(route));
+            return{accepted:false,route:{type:"chat",response:targetedClarification(candidate,reason)}};
+          }
+        }
+      }
+      trace&&(trace.selected=candidate,trace.confidence=candidate.confidence);
+      return{accepted:true,route};
     };
 
     const safety=this.safetyGuard.evaluate(normalized);
@@ -91,6 +166,24 @@ export class CommandService {
       return finish(safety.status==="informational"?{type:"chat",stream:true}:{type:"chat",response:safety.response},"safety");
     }
 
+    if(useAccuracy){
+      const domain=await this.accuracy!.domainResolver.resolve(text,signal);
+      if(domain.status==="resolved"){
+        expectedDomain=domain.candidate.domain;
+        trace?.domainCandidates.push({source:domain.candidate.source==="deterministic"?"exact":"planner",domain:domain.candidate.domain,operation:"domain_resolution",entities:{},missing:[],ambiguities:[],confidence:domain.candidate.confidence,mutatesState:false,evidence:domain.candidate.evidence});
+      }else for(const item of domain.candidates)trace?.domainCandidates.push({source:item.source==="deterministic"?"exact":"planner",domain:item.domain,operation:"domain_resolution",entities:{},missing:[],ambiguities:[],confidence:item.confidence,mutatesState:false,evidence:item.evidence});
+      if(this.accuracy!.contextEnabled()||this.accuracy!.shadowMode()){
+        const snapshot=contextSnapshotFromActionState({conversationId:requestContext.conversationId??"current",turn:0,state:previous});
+        contextEvidence=this.accuracy!.contextResolver.resolve(text,snapshot);
+        if(trace)trace.contextUsed.push(...contextEvidence.evidence);
+      }
+    }
+
+    if(this.hybrid?.routingV2Enabled?.()===false){
+      const legacy=this.route(text,previous),final=legacy.type==="unknown"?await this.routeHybrid(text,previous,signal):legacy;
+      const assessed=evaluate(final,"legacy");return finish(assessed.accepted?assessed.route:{type:"unknown"},"legacy-compat");
+    }
+
     const exact=this.routeExact(text,previous);
     let webOverrideReason:string|undefined;
     if(exact.type!=="unknown"){
@@ -98,25 +191,22 @@ export class CommandService {
       if(!webConflict.accepted){
         webOverrideReason=webConflict.reason;
         diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:false,rejectedReason:webConflict.reason};
+        reject(exact,"exact",webConflict.reason??"WEB_GOAL_CONFLICT");
         this.web?.metrics?.record("web.intent.route_override",1,{candidate:routeLabel(exact),reason:webConflict.reason??"web_goal"});
       }else{
         const conflict=this.conflictGuard.evaluate(text,exact);
         diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
         if(conflict.accepted){
-          this.hybrid?.metrics?.record("intent.route.exact.accepted",1,{route:routeLabel(exact)});
-          void this.evaluateShadow(text,exact,previous,signal).catch(()=>undefined);
-          return finish(exact,"exact");
-        }
-        this.hybrid?.metrics?.record("intent.route.exact.rejected",1,{reason:conflict.reason});
-        this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(exact)});
+          const assessed=evaluate(exact,"exact");
+          if(assessed.accepted){this.hybrid?.metrics?.record("intent.route.exact.accepted",1,{route:routeLabel(exact)});void this.evaluateShadow(text,exact,previous,signal).catch(()=>undefined);return finish(assessed.route,"exact");}
+          if(assessed.route.type==="chat")return finish(assessed.route,"accuracy-clarification");
+        }else{reject(exact,"exact",conflict.reason);this.hybrid?.metrics?.record("intent.route.exact.rejected",1,{reason:conflict.reason});this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(exact)});}
       }
     }
 
     if(this.shouldInvokeWeb(text)){
       diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),overrideReason:webOverrideReason};
-      const webStarted=Date.now();
-      const resolution=await this.web!.resolver.resolve(text,signal);
-      diagnostics.latency.webMs=Date.now()-webStarted;
+      const webStarted=Date.now(),resolution=await this.web!.resolver.resolve(text,signal);diagnostics.latency.webMs=Date.now()-webStarted;
       if(resolution.status==="resolved"){
         const intent=resolution.intent;
         diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),overrideReason:webOverrideReason,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query};
@@ -124,52 +214,40 @@ export class CommandService {
         if(mapped.type==="tool"){
           diagnostics.webIntent.finalRoute=mapped.tool;
           if(intent.operation==="research"&&mapped.tool==="browser_open")this.web?.metrics?.record("web.intent.browser_open_false_positive",1);
-          if(this.web!.shadowMode()){
-            this.web?.metrics?.record("web.intent.route_disagreement",1,{old:exact.type==="unknown"?"unknown":routeLabel(exact),next:mapped.tool});
-            if(exact.type!=="unknown")return finish(exact,"exact-web-shadow");
-          }else{
+          if(this.web!.shadowMode()){this.web?.metrics?.record("web.intent.route_disagreement",1,{old:exact.type==="unknown"?"unknown":routeLabel(exact),next:mapped.tool});if(exact.type!=="unknown"&&!rejectedRoutes.has(routeLabel(exact)))return finish(exact,"exact-web-shadow");}
+          else{
             if(intent.operation==="research"&&!this.web!.researchEnabled())return finish({type:"unknown"},"web-research-disabled");
-            return finish(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web-intent");
+            const route=this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation});
+            const assessed=evaluate(route,"web");if(assessed.accepted)return finish(assessed.route,"web-intent");if(assessed.route.type==="chat")return finish(assessed.route,"accuracy-clarification");
           }
         }
       }
     }
 
     if(this.shouldInvokeHybrid(text)){
-      diagnostics.hybrid!.invoked=true;
-      this.hybrid?.metrics?.record("intent.route.hybrid.invoked",1);
-      const hybridStarted=Date.now();
-      const hybrid=await this.routeHybridInternal(text,previous,signal);
-      diagnostics.latency.hybridMs=Date.now()-hybridStarted;
+      diagnostics.hybrid!.invoked=true;this.hybrid?.metrics?.record("intent.route.hybrid.invoked",1);
+      const hybridStarted=Date.now(),hybrid=await this.routeHybridInternal(text,previous,signal);diagnostics.latency.hybridMs=Date.now()-hybridStarted;
       const resolverDiag=this.hybrid?.resolver.diagnostics();
       diagnostics.hybrid={invoked:true,model:resolverDiag?.model,status:resolverDiag?.status,operation:resolverDiag?.operation,entities:resolverDiag?.entities,missing:resolverDiag?.missing,ambiguities:resolverDiag?.ambiguities,confidence:resolverDiag?.confidence};
-      diagnostics.latency.parserMs=resolverDiag?.parserMs;
-      diagnostics.latency.validationMs=resolverDiag?.validationMs;
-      diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
+      diagnostics.latency.parserMs=resolverDiag?.parserMs;diagnostics.latency.validationMs=resolverDiag?.validationMs;diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
       if(hybrid.type!=="unknown"){
         const conflict=this.conflictGuard.evaluate(text,hybrid);
         if(conflict.accepted){
-          this.hybrid?.metrics?.record(hybrid.type==="chat"?"intent.route.hybrid.clarification":"intent.route.hybrid.resolved",1,{route:routeLabel(hybrid)});
-          if(hybrid.type==="tool")diagnostics.mapping={tool:hybrid.tool,deferredAction:hybrid.deferredAction?.kind,resolvedScope:resolvedScopeFromRoute(hybrid)};
-          return finish(hybrid,"hybrid");
-        }
-        this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(hybrid)});
+          const assessed=evaluate(hybrid,"hybrid");
+          if(assessed.accepted){this.hybrid?.metrics?.record(hybrid.type==="chat"?"intent.route.hybrid.clarification":"intent.route.hybrid.resolved",1,{route:routeLabel(hybrid)});if(hybrid.type==="tool")diagnostics.mapping={tool:hybrid.tool,deferredAction:hybrid.deferredAction?.kind,resolvedScope:resolvedScopeFromRoute(hybrid)};return finish(assessed.route,"hybrid");}
+          if(assessed.route.type==="chat")return finish(assessed.route,"accuracy-clarification");
+        }else{reject(hybrid,"hybrid",conflict.reason);this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(hybrid)});}
       }else this.hybrid?.metrics?.record("intent.route.hybrid.unknown",1);
     }
 
     const legacy=this.routeLegacyFallback(text,previous);
-    if(legacy.type!=="unknown"){
+    if(legacy.type!=="unknown"&&!rejectedRoutes.has(routeLabel(legacy))){
       const conflict=this.conflictGuard.evaluate(text,legacy);
-      if(conflict.accepted){
-        this.hybrid?.metrics?.record("intent.route.legacy_fallback",1,{route:routeLabel(legacy)});
-        return finish(legacy,"legacy");
-      }
-      this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(legacy)});
-    }
+      if(conflict.accepted){const assessed=evaluate(legacy,"legacy");if(assessed.accepted){this.hybrid?.metrics?.record("intent.route.legacy_fallback",1,{route:routeLabel(legacy)});return finish(assessed.route,"legacy");}if(assessed.route.type==="chat")return finish(assessed.route,"accuracy-clarification");}
+      else{reject(legacy,"legacy",conflict.reason);this.hybrid?.metrics?.record("intent.route.conflict.read_vs_mutation",1,{route:routeLabel(legacy)});}
+    }else if(legacy.type!=="unknown")this.accuracy?.metrics?.record("intent.route.rejected_fallback_blocked",1,{route:routeLabel(legacy)});
 
-    const chat=this.conversationFallback(text);
-    this.hybrid?.metrics?.record("intent.route.chat_fallback",1);
-    return finish(chat,"chat");
+    const chat=this.conversationFallback(text);this.hybrid?.metrics?.record("intent.route.chat_fallback",1);return finish(chat,"chat");
   }
 
   /** Compatibility route retained for rollback/tests during the RC. */
@@ -235,6 +313,13 @@ export class CommandService {
       if(left!==right)this.hybrid.metrics?.record("intent.shadow.different_entities",1,{operation:baseline.operation});
     }
   }
+
+  recordOutcome(status:"success"|"partial"|"failed"|"needs_clarification"){
+    if(!this.lastTrace)return;
+    this.lastTrace.outcome={status};
+    this.accuracy?.traceStore?.save(this.lastTrace);
+  }
+  decisionTrace(){return this.lastTrace?structuredClone(this.lastTrace):undefined;}
 
   hybridDiagnostics(){
     if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
@@ -404,4 +489,12 @@ function foldScope(value:string){return value.normalize("NFD").replace(/[\u0300-
 function resolvedScopeFromRoute(route:Extract<CommandRoute,{type:"tool"}>){
   const candidate=route.input.root??route.input.path;
   return typeof candidate==="string"?candidate:undefined;
+}
+
+function compatibleDomain(expected:string,actual:string){
+  const normalize=(value:string)=>value==="document"?"documents":value;
+  const left=normalize(expected),right=normalize(actual);
+  if(left===right)return true;
+  if((left==="web"&&right==="browser")||(left==="browser"&&right==="web"))return true;
+  return false;
 }
