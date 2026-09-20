@@ -21,7 +21,8 @@ export class GlobalDecisionArbiter{
    if(weak&&candidate.mutatesState){rejected.push({candidate,reason:"WEAK_CONTEXT_FOR_MUTATION"});continue;}
    const domainConsistency=input.expectedDomain?(compatibleDomainEvidence(input.expectedDomain,candidate.domain)?1:0):domainEvidenceConfidence(input.domainEvidence,candidate.domain);
    if(input.expectedDomain&&domainConsistency===0&&domainEvidenceConfidence(input.domainEvidence,input.expectedDomain)>=.75){rejected.push({candidate,reason:`DOMAIN_MISMATCH:${input.expectedDomain}:${candidate.domain}`});continue;}
-   const operationScore=Math.max(candidate.confidence,plannerSupportScore(candidate,input.supportingCandidates));\n   const score=evaluateDecisionConfidence({domainConsistency,operationScore,entityCompleteness:1,goalScore:goal.score,contextConfidence:contextConfidence(input.context),deterministicEvidence:deterministicScore(candidate),verifiedMemory:verifiedMemoryScore(candidate,input.supportingCandidates),ambiguityCount:candidate.ambiguities.length,conflictCount:0,failurePenalty:input.failurePenaltyByKey?.get(key(candidate))??0,mutatesState:candidate.mutatesState}).overall;
+   const operationScore=Math.max(candidate.confidence,plannerSupportScore(candidate,input.supportingCandidates));
+   const score=evaluateDecisionConfidence({domainConsistency,operationScore,entityCompleteness:1,goalScore:goal.score,contextConfidence:contextConfidence(input.context),deterministicEvidence:deterministicScore(candidate),verifiedMemory:verifiedMemoryScore(candidate,input.supportingCandidates),ambiguityCount:candidate.ambiguities.length,conflictCount:0,failurePenalty:input.failurePenaltyByKey?.get(key(candidate))??0,mutatesState:candidate.mutatesState}).overall;
    scored.push({candidate:{...candidate,confidence:score},score});
   }
   scored.sort((a,b)=>b.score-a.score);const top=scored[0],second=scored[1];
