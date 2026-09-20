@@ -8,6 +8,7 @@ import type { IntentParserFailureKind, IntentParserResult } from "./parser-resul
 import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
 import { filesystemIntentPrompt } from "./prompts/filesystem.js";
+import {parseOperationEntities} from "./entities/operation-parser.js";
 import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, NormalizedIntentInput } from "./types.js";
 
 export interface IntentParser {
@@ -45,7 +46,7 @@ export class LLMIntentParser implements IntentParser{
         catch(error){return failure("INVALID_JSON",started,model,error);}
         intent=toCanonicalIntent(parseModelIntent(value));
       }
-      const normalizedIntent=applyLiteralEntities(applyEntityProvenance(intent,normalized.routingText),normalized);
+      const normalizedIntent=applyOperationEntities(applyLiteralEntities(applyEntityProvenance(intent,normalized.routingText),normalized),normalized.original);
       return{status:"success",intent:normalizedIntent,latencyMs:Date.now()-started,model};
     }catch(error){
       return failure(classifyFailure(error,input.signal),started,model,error);
@@ -138,4 +139,12 @@ function applyLiteralEntities(intent:CanonicalIntent,input:NormalizedIntentInput
   const literal=input.literalSegments.find(segment=>segment.type==="content");
   if(!literal)return intent;
   return{...intent,entities:{...intent.entities,content:{value:literal.value,source:"user",confidence:1}}};
+}
+
+function applyOperationEntities(intent:CanonicalIntent,text:string):CanonicalIntent{
+  const parsed=parseOperationEntities(intent.operation,text).entities;
+  if(!Object.keys(parsed).length)return intent;
+  const entities={...intent.entities};
+  for(const [key,value] of Object.entries(parsed))entities[key]={value:value as any,source:"user",confidence:1};
+  return{...intent,entities};
 }
