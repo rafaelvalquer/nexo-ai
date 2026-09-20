@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { responsePolicy } from "../chat/presentation/response-policy.js";
 import { ToolRegistry } from "../tools/registry.js";
 import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "../agent/orchestrator/intent-schema.js";
-import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper, normalizeIntentInput } from "../intent/index.js";
+import { adaptDeterministicTool, filesystemOperations, HybridIntentResolver, IntentToolMapper, normalizeIntentInput, operationsForDomains } from "../intent/index.js";
 import type { CanonicalIntent } from "../intent/types.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 import type { ConversationActionContextState } from "../agent/context/conversation-action-context.js";
@@ -14,7 +14,7 @@ import { FilesystemCommandResolver, filesystemCommandTool } from "../filesystem/
 import type { ActionContextFile } from "../agent/context/conversation-action-context.js";
 import { PreRoutingSafetyGuard } from "./pre-routing-safety-guard.js";
 import { RouteConflictGuard } from "./route-conflict-guard.js";
-import { WebGoalConflictGuard, WebIntentMapper, WebIntentResolver, mayBeWebRequest } from "../intent/web/index.js";
+import { WebGoalConflictGuard, WebIntentMapper, WebIntentResolver, mayBeWebRequest, deterministicWebIntent } from "../intent/web/index.js";
 import {DomainResolver} from "../intent/domain/resolver.js";
 import {candidateFromCommandRoute,createDecisionTrace,sanitizeDecisionTrace} from "../agent/decision/decision-trace.js";
 import type {DecisionCandidateSource,DecisionTrace} from "../agent/decision/types.js";
@@ -155,31 +155,44 @@ export class CommandService {
       else if(exact.type==="tool"){const candidate=candidateFromCommandRoute(exact,"exact");if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
     }
 
-    const exactStrong=entries.some(entry=>entry.candidate.confidence>=.98&&domainEvidenceConfidenceForCandidate(domainEvidence,entry.candidate)>=.75);
-    const hasRoutingCorrections="routingCorrections" in normalized&&Array.isArray((normalized as {routingCorrections?:unknown[]}).routingCorrections)&&(normalized as {routingCorrections:unknown[]}).routingCorrections.length>0;\n    const needsSemantic=!exactStrong||hasRoutingCorrections;
-    const webEligible=needsSemantic&&this.shouldInvokeWeb(text,domainEvidence,expectedDomain);
-    const hybridEligible=needsSemantic&&!webEligible&&this.shouldInvokeHybrid(text,domainEvidence,expectedDomain);
-
-    if(webEligible){
-      diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact)};
-      const webStarted=Date.now(),resolution=await this.web!.resolver.resolve(text,signal);diagnostics.latency.webMs=Date.now()-webStarted;
-      if(resolution.status==="resolved"){
-        const intent=resolution.intent;diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query};
-        const mapped=this.web!.mapper.map(intent,text);
-        if(mapped.type==="tool"&&!(intent.operation==="research"&&!this.web!.researchEnabled())){
-          diagnostics.webIntent.finalRoute=mapped.tool;add(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web",intent.confidence);
-        }
+    const deterministicWeb=this.web?.enabled()?deterministicWebIntent(text):undefined;
+    if(deterministicWeb){
+      const mapped=this.web!.mapper.map(deterministicWeb,text);
+      diagnostics.webIntent={invoked:false,operation:deterministicWeb.operation,confidence:deterministicWeb.confidence,sourceName:deterministicWeb.entities.sourceName,domain:deterministicWeb.entities.domain,query:deterministicWeb.entities.query,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),finalRoute:mapped.type==="tool"?mapped.tool:undefined};
+      if(mapped.type==="tool"&&!(deterministicWeb.operation==="research"&&!this.web!.researchEnabled())){
+        add(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web",deterministicWeb.confidence);
       }
-    }else if(hybridEligible){
-      diagnostics.hybrid!.invoked=true;this.hybrid?.metrics?.record("intent.route.hybrid.invoked",1);
-      const hybridStarted=Date.now(),hybrid=await this.routeHybridInternal(text,previous,signal);diagnostics.latency.hybridMs=Date.now()-hybridStarted;
+    }
+
+    const exactStrong=entries.some(entry=>entry.candidate.confidence>=.98&&domainEvidenceConfidenceForCandidate(domainEvidence,entry.candidate)>=.75);
+    const hasRoutingCorrections="routingCorrections" in normalized&&Array.isArray((normalized as {routingCorrections?:unknown[]}).routingCorrections)&&(normalized as {routingCorrections:unknown[]}).routingCorrections.length>0;
+    const needsStructured=!exactStrong||hasRoutingCorrections||entries.length===0;
+
+    if(needsStructured&&this.shouldInvokeHybrid(text,domainEvidence,expectedDomain)){
+      diagnostics.hybrid!.invoked=true;
+      this.hybrid?.metrics?.record("intent.route.structured.invoked",1);
+      const hybridStarted=Date.now();
+      const structured=await this.routeStructuredInternal(text,previous,signal,structuredDomains(domainEvidence,expectedDomain));
+      diagnostics.latency.hybridMs=Date.now()-hybridStarted;
       const resolverDiag=this.hybrid?.resolver.diagnostics();
       diagnostics.hybrid={invoked:true,model:resolverDiag?.model,status:resolverDiag?.status,operation:resolverDiag?.operation,entities:resolverDiag?.entities,missing:resolverDiag?.missing,ambiguities:resolverDiag?.ambiguities,confidence:resolverDiag?.confidence};
-      diagnostics.latency.parserMs=resolverDiag?.parserMs;diagnostics.latency.validationMs=resolverDiag?.validationMs;diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
-      if(hybrid.type!=="unknown"){
-        const conflict=this.conflictGuard.evaluate(text,hybrid);
-        if(conflict.accepted)add(hybrid,"hybrid",resolverDiag?.confidence??.9);
-        else if(hybrid.type==="tool"){const candidate=candidateFromCommandRoute(hybrid,"hybrid",resolverDiag?.confidence??.9);if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
+      diagnostics.latency.parserMs=resolverDiag?.parserMs;
+      diagnostics.latency.validationMs=resolverDiag?.validationMs;
+      diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
+      if(structured.type!=="unknown"){
+        const conflict=this.conflictGuard.evaluate(text,structured);
+        if(conflict.accepted)add(structured,"hybrid",resolverDiag?.confidence??.9);
+        else if(structured.type==="tool"){const candidate=candidateFromCommandRoute(structured,"hybrid",resolverDiag?.confidence??.9);if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
+      }
+    }else if(needsStructured&&!this.hybrid&&this.shouldInvokeWeb(text,domainEvidence,expectedDomain)){
+      diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact)};
+      const webStarted=Date.now();
+      const resolution=await this.web!.resolver.resolve(text,signal);
+      diagnostics.latency.webMs=Date.now()-webStarted;
+      if(resolution.status==="resolved"){
+        const intent=resolution.intent,mapped=this.web!.mapper.map(intent,text);
+        diagnostics.webIntent={invoked:true,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query,finalRoute:mapped.type==="tool"?mapped.tool:undefined};
+        if(mapped.type==="tool")add(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web",intent.confidence);
       }
     }
 
@@ -355,12 +368,17 @@ export class CommandService {
   }
 
   private async routeHybridInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
-    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode()||!this.hybrid.filesystemEnabled()||hasExplicitPhysicalPath(text))return{type:"unknown"};
-    const availableOperations=filesystemOperations.filter(operation=>Boolean(this.registry.get(operation)));
-    const resolution=await this.hybrid.resolver.resolve({text,allowedDomains:["filesystem"],availableOperations:[...availableOperations],context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
+    return this.routeStructuredInternal(text,previous,signal,["filesystem"]);
+  }
+
+  private async routeStructuredInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal,allowedDomains?:string[]):Promise<CommandRoute>{
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode())return{type:"unknown"};
+    const availableOperations=operationsForDomains(allowedDomains).filter(operation=>Boolean(this.registry.get(operation)));
+    if(!availableOperations.length)return{type:"unknown"};
+    const resolution=await this.hybrid.resolver.resolve({text,allowedDomains,availableOperations,context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
     if(resolution.status==="unknown")return{type:"unknown"};
     if(resolution.status==="clarification")return{type:"chat",response:resolution.question};
-    const intent=preserveExplicitScope(resolution.intent,text);
+    const intent=resolution.intent.domain==="filesystem"?preserveExplicitScope(resolution.intent,text):resolution.intent;
     const mapped=this.hybrid.mapper.map(intent);
     if(mapped.type==="unknown")return{type:"unknown"};
     if(mapped.type==="clarification")return{type:"chat",response:mapped.question};
@@ -399,10 +417,11 @@ export class CommandService {
   }
 
   private shouldInvokeHybrid(text:string,evidence?:DomainEvidenceSnapshot,expectedDomain?:string){
-    if(!this.hybrid?.enabled()||!this.hybrid.filesystemEnabled()||this.hybrid.shadowMode()||hasExplicitPhysicalPath(text))return false;
-    if(expectedDomain&&expectedDomain!=="filesystem")return false;
-    const fsScore=evidence?.items.find(item=>item.domain==="filesystem")?.score??0;
-    return Boolean(evidence?.strongFilesystem||fsScore>=.45||mayBeFilesystemRequest(text));
+    if(!this.hybrid?.enabled()||this.hybrid.shadowMode())return false;
+    if(expectedDomain==="filesystem"&&!this.hybrid.filesystemEnabled())return false;
+    if(expectedDomain)return operationsForDomains(structuredDomains(evidence,expectedDomain)).some(operation=>Boolean(this.registry.get(operation)));
+    if(evidence?.items.some(item=>item.score>=.45&&operationsForDomains([item.domain]).some(operation=>Boolean(this.registry.get(operation)))))return true;
+    return mayBeFilesystemRequest(text)||mayBeWebRequest(text);
   }
 
   private fromToolStep(step: { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string }, intent?: AgentIntent, deferredAction?:DeferredAction, responseModeOverride?:"synthesize"|"deterministic"|"presentation"): CommandRoute {
@@ -511,4 +530,11 @@ function candidateChoiceQuestion(first:DecisionCandidate,second:DecisionCandidat
 function humanOperation(operation:string){
   const names:Record<string,string>={write_text_file:"alterar o conteúdo do arquivo",create_text_file:"criar um arquivo",create_folder:"criar uma pasta",find_file:"procurar um arquivo",search_files:"pesquisar arquivos",web_research:"pesquisar informações na web",browser_open:"abrir uma página",email_send:"enviar um e-mail",calendar_create:"agendar um compromisso"};
   return names[operation]??operation.replace(/_/g," ");
+}
+
+function structuredDomains(evidence:DomainEvidenceSnapshot|undefined,expectedDomain?:string){
+  if(expectedDomain==="web"||expectedDomain==="browser")return["web","browser"];
+  if(expectedDomain)return[expectedDomain];
+  const domains=(evidence?.items??[]).filter(item=>item.score>=.35).map(item=>item.domain);
+  return domains.length?[...new Set(domains)]:undefined;
 }
