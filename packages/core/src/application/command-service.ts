@@ -16,7 +16,7 @@ import { PreRoutingSafetyGuard } from "./pre-routing-safety-guard.js";
 import { RouteConflictGuard } from "./route-conflict-guard.js";
 import { WebGoalConflictGuard, WebIntentMapper, WebIntentResolver, mayBeWebRequest } from "../intent/web/index.js";
 import {DomainResolver} from "../intent/domain/resolver.js";
-import {candidateFromCommandRoute,createDecisionTrace} from "../agent/decision/decision-trace.js";
+import {candidateFromCommandRoute,createDecisionTrace,sanitizeDecisionTrace} from "../agent/decision/decision-trace.js";
 import type {DecisionCandidateSource,DecisionTrace} from "../agent/decision/types.js";
 import {DecisionTraceStore} from "../agent/decision/decision-trace-store.js";
 import {GoalSatisfactionEvaluator,type GoalSatisfaction} from "../agent/decision/goal-satisfaction.js";
@@ -296,7 +296,7 @@ export class CommandService {
     this.lastTrace.outcome={status};
     this.accuracy?.traceStore?.save(this.lastTrace);
   }
-  decisionTrace(){return this.lastTrace?structuredClone(this.lastTrace):undefined;}
+  decisionTrace(detailed=false){return this.lastTrace?sanitizeDecisionTrace(this.lastTrace,detailed):undefined;}
 
   hybridDiagnostics(){
     if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
