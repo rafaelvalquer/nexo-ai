@@ -12,8 +12,10 @@ import {HybridIntentResolver} from "../../../packages/core/src/intent/hybrid-int
 import {IntentToolMapper} from "../../../packages/core/src/intent/intent-tool-mapper.js";
 import {WebIntentMapper} from "../../../packages/core/src/intent/web/mapper.js";
 import type {CanonicalIntent} from "../../../packages/core/src/intent/types.js";
+import {parseOperationEntities} from "../../../packages/core/src/intent/entities/operation-parser.js";
+import {parseModelIntent,modelIntentJsonSchemaFor} from "../../../packages/core/src/intent/schema.js";
 
-const dataset=JSON.parse(fs.readFileSync(path.resolve("tests/evals/intents/refinement-v2-1000.json"),"utf8")) as Array<{prompt:string;expectedDomain:string;mustNotDomain?:string}>;
+const dataset=JSON.parse(fs.readFileSync(path.resolve("tests/evals/intents/refinement-v2-1000.json"),"utf8")) as Array<{prompt:string;expectedDomain:string;expectedOperation?:string;category:string;mustNotDomain?:string}>;
 const builder=new DomainEvidenceBuilder();
 
 function fsIntent():CanonicalIntent{
@@ -22,6 +24,31 @@ function fsIntent():CanonicalIntent{
 
 describe("Nexo Refinamento Definitivo V2",()=>{
  it("mantém dataset permanente com mais de 1000 regressões",()=>expect(dataset.length).toBeGreaterThanOrEqual(1000));
+
+ it("cobre os grupos obrigatórios do dataset definitivo",()=>{
+  const categories=new Set(dataset.map(row=>row.category));
+  for(const category of["filesystem","web","email","calendar","documents","browser","system","typo","cross-domain","multi-turn","multi-step","correction","ambiguity"])expect(categories.has(category)).toBe(true);
+ });
+
+ it("parser por operação separa arquivo pasta e conteúdo sem reescrever literal",()=>{
+  expect(parseOperationEntities("write_text_file","altere o arqquivo teste123.txt na pasta download para rafael alterei")).toMatchObject({entities:{file:"teste123.txt",folder:"downloads",content:"rafael alterei"}});
+ });
+
+ it("schema estruturado é gerado pelos contratos e permanece fechado",()=>{
+  const schema=JSON.stringify(modelIntentJsonSchemaFor(["email_send"],["email"]));
+  expect(schema).toContain('"operation":{"const":"email_send"}');
+  expect(()=>parseModelIntent({schemaVersion:1,domain:"email",intent:"update",operation:"email_send",entities:{to:"a@b.com",body:"ok",path:"C:\\x"},referencesPreviousResult:false,ambiguities:[],missing:[],modelConfidence:.9})).toThrow();
+ });
+
+ it("fontes equivalentes são consolidadas antes do cálculo de margem",()=>{
+  const evidence=builder.build("procure teste.txt nos downloads");
+  const result=new GlobalDecisionArbiter().decide({userText:"procure teste.txt nos downloads",domainEvidence:evidence,expectedDomain:"filesystem",candidates:[
+    {source:"filesystem",domain:"filesystem",operation:"find_file",entities:{name:"teste.txt",folder:"downloads"},missing:[],ambiguities:[],confidence:.99,proposedTool:"find_file",mutatesState:false,evidence:["exact"]},
+    {source:"hybrid",domain:"filesystem",operation:"find_file",entities:{folder:"downloads",name:"teste.txt"},missing:[],ambiguities:[],confidence:.96,proposedTool:"find_file",mutatesState:false,evidence:["structured"]}
+  ]});
+  expect(result.clarificationNeeded).toBe(false);
+  expect(result.selectedCandidate?.operation).toBe("find_file");
+ });
 
  it("preserva literais e corrige somente tokens estruturais",()=>{
   const input=normalizeIntentInputV3("altere o arqquivo teste123.txt na pasta dowload para rafael alterei");
