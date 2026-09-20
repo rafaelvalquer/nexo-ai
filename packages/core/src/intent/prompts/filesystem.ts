@@ -1,10 +1,25 @@
+import { intentOperationContracts } from "../operation-contracts.js";
 import type { NormalizedIntentInput } from "../types.js";
 
-export function filesystemIntentPrompt(input:NormalizedIntentInput,operations:string[]){
-  const literalContent=input.literalSegments.find(segment=>segment.type==="content")?.value;
+function operationRulesForPrompt(operations: string[]) {
+  return operations
+    .map(op => {
+      const contract = intentOperationContracts[op];
+      if (!contract || op === "unknown") return undefined;
+      return `- ${op}: permitidas: ${contract.allowedEntities.join(", ")}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function filesystemIntentPrompt(input: NormalizedIntentInput, operations: string[]) {
+  const literalContent = input.literalSegments.find(segment => segment.type === "content")?.value;
   return [
     "Classifique o pedido em UMA intenção de filesystem usando somente o schema fornecido.",
     `Operações permitidas: ${operations.join(", ")}.`,
+    "Use somente as entidades permitidas para a operação selecionada. Não preencha entidades não relacionadas à operação.",
+    "Regras de entidades por operação:",
+    operationRulesForPrompt(operations),
     "Não invente entidades obrigatórias ausentes. Se faltar name, folder, file, content, path, source ou destination: omita a entidade e liste o campo em missing.",
     "O Core calcula missing novamente; sua função é preservar somente o que está no pedido.",
     "Mapa:",
@@ -19,7 +34,7 @@ export function filesystemIntentPrompt(input:NormalizedIntentInput,operations:st
     "NUNCA invente path/source/destination. Caminho físico só pode aparecer se estiver literalmente no pedido.",
     "Pergunta informacional ou ação negada => unknown.",
     "Se o tipo do recurso não estiver claro entre arquivo e pasta, registre ambiguity e não adivinhe.",
-    literalContent!==undefined?`Conteúdo literal extraído pelo Core; copie exatamente para entities.content: ${JSON.stringify(literalContent)}`:"Nenhum conteúdo literal pré-extraído.",
+    literalContent !== undefined ? `Conteúdo literal extraído pelo Core; copie exatamente para entities.content: ${JSON.stringify(literalContent)}` : "Nenhum conteúdo literal pré-extraído.",
     "Preserve nomes, extensões, números, pontuação, moeda, acentos e conteúdo sem traduzir ou reescrever.",
     `Pedido normalizado: ${input.routingText}`,
     `Pedido original: ${input.original}`

@@ -13,6 +13,8 @@ export type HybridResolverDiagnostics={
   operation?:string;
   entities?:Record<string,unknown>;
   missing?:string[];
+  modelDeclaredMissing?:string[];
+  coreDerivedMissing?:string[];
   ambiguities?:Array<{code:string;field?:string;message:string;critical?:boolean}>;
   confidence?:number;
   reason?:string;
@@ -89,6 +91,13 @@ export class HybridIntentResolver{
     if(semantic.missing.length)this.metrics?.record("intent.entity.missing",semantic.missing.length,{operation:intent.operation});
     if(semantic.ambiguities.length)this.metrics?.record("intent.entity.ambiguous",semantic.ambiguities.length,{operation:intent.operation});
     if(!semantic.valid)this.metrics?.record("intent.validation.semantic_invalid",1,{reason:semantic.reason??"unknown"});
+    if(intent.diagnostics?.modelDeclaredMissing){
+      for(const field of intent.diagnostics.modelDeclaredMissing){
+        if(!semantic.missing.includes(field)){
+          this.metrics?.record("intent.model_missing.disagreement",1,{operation:intent.operation,field});
+        }
+      }
+    }
     const timing=()=>({
       parserMs,
       validationMs:Date.now()-validationStarted,
@@ -148,6 +157,8 @@ export class HybridIntentResolver{
       operation:intent?.operation,
       entities:intent?Object.fromEntries(Object.entries(intent.entities).map(([key,value])=>[key,value.value])):undefined,
       missing:intent?.missing,
+      modelDeclaredMissing:intent?.diagnostics?.modelDeclaredMissing,
+      coreDerivedMissing:intent?.diagnostics?.coreDerivedMissing??intent?.missing,
       ambiguities:intent?.ambiguities,
       confidence:"confidence" in result?result.confidence?.overall:undefined,
       latencyMs,

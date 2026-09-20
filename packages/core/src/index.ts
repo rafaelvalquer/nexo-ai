@@ -43,6 +43,7 @@ import { DocumentAssistantService } from "./documents/assistant.js";
 import { DocumentConversationContext } from "./documents/conversation-context.js";
 import { MemorySecretStore,type OAuthHost,type SecretStore } from "./connections/types.js";
 import { EmailService } from "./email/service.js";
+import { defaultMailboxCategories, getMailboxOptions, normalizeMailboxCategories } from "./email/preferences/category-resolver.js";
 import { CalendarService } from "./calendar/service.js";
 import { environment } from "./config/environment.js";
 import { ConversationContextBuilder } from "./agent/context/conversation-context.js";
@@ -125,6 +126,24 @@ export class NexoCore{
   async dashboardGadgetData(gadgetId:DashboardGadgetId,configuration:Record<string,unknown>={}){await this.ready();return this.dashboard.data(gadgetId,configuration);}
   async dashboardEmailMessage(connectionId:string,messageId:string){await this.ensureConnections();return this.email.getMessage(connectionId,messageId);}
   async dashboardEmailReply(input:import("./email/types.js").EmailReplyInput){await this.ensureConnections();if(!input||typeof input.connectionId!=="string"||typeof input.messageId!=="string"||typeof input.bodyText!=="string")throw new Error("Dados da resposta inválidos.");return this.agent.runPlan("Responder e-mail pelo Dashboard",[{tool:"email_reply",input}]);}
+  async getEmailSearchPreferences(connectionId:string){
+    await this.ensureConnections();
+    const account=this.connections.get(connectionId);
+    if(!account)throw new Error("Conexão não encontrada.");
+    const saved=this.agentRuntime.emailPreferences.get(connectionId);
+    const options=getMailboxOptions(account.provider);
+    const categories=saved?.categories??defaultMailboxCategories(account.provider);
+    return{connectionId,provider:account.provider,categories,options};
+  }
+  async saveEmailSearchPreferences(connectionId:string,categories:string[]){
+    await this.ensureConnections();
+    const account=this.connections.get(connectionId);
+    if(!account)throw new Error("Conexão não encontrada.");
+    const normalized=normalizeMailboxCategories(account.provider,categories);
+    const result=this.agentRuntime.emailPreferences.save(connectionId,normalized);
+    await this.dashboardRefresh("email");
+    return result;
+  }
   async dashboardRefresh(gadgetId:DashboardGadgetId,configuration:Record<string,unknown>={}){await this.ready();const row=this.db.get<{cache_key:string}>("SELECT cache_key FROM dashboard_cache WHERE provider=?",[gadgetId]);if(row)this.db.run("DELETE FROM dashboard_cache WHERE provider=? AND cache_key=?",[gadgetId,this.dashboardCacheKey(gadgetId,configuration)]);return this.dashboard.data(gadgetId,configuration);}
   private dashboardCacheKey(gadgetId:DashboardGadgetId,configuration:Record<string,unknown>){return gadgetId==="weather"?`${configuration.latitude},${configuration.longitude},${configuration.unit??"C"}`:gadgetId==="currency"?String(configuration.currencies??"USD,EUR,GBP,JPY"):gadgetId;}
   private async dashboardInternalData(id:DashboardGadgetId):Promise<unknown>{

@@ -14,6 +14,8 @@ export function useConnections(){
     async updateCapabilities(provider:ConnectionProvider,id:string,capabilities:ConnectionCapability[]){await run(provider,()=>window.nexo.setConnectionCapabilities(id,capabilities));await reload();setNotice("Permissões atualizadas e reconciliadas.");},
     async disconnect(provider:ConnectionProvider,id:string){await run(provider,()=>window.nexo.disconnect(id));await reload();setNotice(`${providerLabel(provider)} desconectado.`);},
     async diagnostics(id:string){return await run("settings",()=>window.nexo.connectionDiagnostics(id) as Promise<ConnectionDiagnosticSnapshot>);},
+    async getEmailPreferences(id:string){return await run("settings",()=>window.nexo.getEmailSearchPreferences(id));},
+    async saveEmailPreferences(id:string,categories:string[]){const result=await run("settings",()=>window.nexo.saveEmailSearchPreferences(id,categories));setNotice("Configuração de caixas de e-mail salva.");return result;},
     async saveOAuth(secret:string){const config=await run("settings",()=>window.nexo.saveConnectionConfiguration({...configuration,googleClientSecret:secret.trim()||undefined}));setConfiguration(config);setNotice("Configuração OAuth salva com segurança.");return config;},
     async removeGoogleSecret(){await run("secret",()=>window.nexo.deleteGoogleClientSecret());await reload();setNotice("Client Secret removido. As contas Google precisam ser reautorizadas.");}
   };
