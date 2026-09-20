@@ -19,7 +19,8 @@ export class GlobalDecisionArbiter{
    if(candidate.missing.length){rejected.push({candidate,reason:`MISSING:${candidate.missing.join(",")}`});continue;}
    const weak=(input.context??[]).some(item=>item.confidence<.7&&Object.values(candidate.entities).includes(item.value));
    if(weak&&candidate.mutatesState){rejected.push({candidate,reason:"WEAK_CONTEXT_FOR_MUTATION"});continue;}
-   const domainConsistency=input.expectedDomain?(compatibleDomainEvidence(input.expectedDomain,candidate.domain)?1:0):domainEvidenceConfidence(input.domainEvidence,candidate.domain);
+   const observedDomain=input.expectedDomain?(compatibleDomainEvidence(input.expectedDomain,candidate.domain)?1:0):domainEvidenceConfidence(input.domainEvidence,candidate.domain);
+   const domainConsistency=input.expectedDomain?observedDomain:Math.max(observedDomain,sourceDomainFloor(candidate));
    if(input.expectedDomain&&domainConsistency===0&&domainEvidenceConfidence(input.domainEvidence,input.expectedDomain)>=.75){rejected.push({candidate,reason:`DOMAIN_MISMATCH:${input.expectedDomain}:${candidate.domain}`});continue;}
    const operationScore=Math.max(candidate.confidence,plannerSupportScore(candidate,input.supportingCandidates));
    const score=evaluateDecisionConfidence({domainConsistency,operationScore,entityCompleteness:1,goalScore:goal.score,contextConfidence:contextConfidence(input.context),deterministicEvidence:deterministicScore(candidate),verifiedMemory:verifiedMemoryScore(candidate,input.supportingCandidates),ambiguityCount:candidate.ambiguities.length,conflictCount:0,failurePenalty:input.failurePenaltyByKey?.get(key(candidate))??0,mutatesState:candidate.mutatesState}).overall;
@@ -63,3 +64,5 @@ function verifiedMemoryScore(candidate:DecisionCandidate,supporting?:DecisionCan
 function plannerSupportScore(candidate:DecisionCandidate,supporting?:DecisionCandidate[]){
  let best=0;for(const item of supporting??[]){if(item.source!=="planner"||item.operation!==candidate.operation||!compatibleDomainEvidence(item.domain,candidate.domain))continue;best=Math.max(best,item.confidence);}return best;
 }
+
+function sourceDomainFloor(candidate:DecisionCandidate){return candidate.source==="exact"||candidate.source==="filesystem"?1:candidate.source==="hybrid"?.9:candidate.source==="web"?.9:candidate.source==="planner"?.65:0;}
