@@ -96,4 +96,16 @@ describe("semantic validator", () => {
     expect(result.reason).toBe("MISSING_REQUIRED_ENTITY");
     expect(result.question).toBe("Em qual pasta devo executar essa ação?");
   });
+  it("preserva modelDeclaredMissing original em revalidações", () => {
+    const initial = intent("create_folder", { name: "teste", folder: "downloads" }, ["folder"]);
+    const first = validateIntentSemantics(initial, "crie uma pasta teste em downloads");
+    const second = validateIntentSemantics(first.intent, "crie uma pasta teste em downloads");
+
+    expect(first.intent.diagnostics?.modelDeclaredMissing).toEqual(["folder"]);
+    expect(first.intent.diagnostics?.coreDerivedMissing).toEqual([]);
+    expect(second.intent.diagnostics?.modelDeclaredMissing).toEqual(["folder"]);
+    expect(second.intent.diagnostics?.coreDerivedMissing).toEqual([]);
+    expect(second.intent.missing).toEqual([]);
+  });
+
 });
