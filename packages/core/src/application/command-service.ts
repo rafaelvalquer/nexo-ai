@@ -373,8 +373,7 @@ export class CommandService {
       this.hybrid?.metrics?.record("intent.resolve.deterministic",1,{operation:step.tool});
       return this.fromToolStep(step);
     }
-    // Preserve already-stable exact routes outside filesystem. Broad
-    // filesystem heuristics remain in routeLegacyFallback after Hybrid.
+    // Preserve stable exact deterministic routes outside filesystem as candidates.
     const other=this.fastRouter.route(text,{allowedRoots:this.allowedRoots()});
     if(other.type==="macro")return other;
     if(other.type==="tool"){
@@ -403,21 +402,6 @@ export class CommandService {
     return this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation},mapped.intent,mapped.deferredAction,mapped.responseMode);
   }
 
-  private routeLegacyFallback(text:string,previous?:ConversationActionContextState):CommandRoute{
-    const filesystemIntent=deterministicFilesystemIntent(text);
-    if(filesystemIntent){
-      const intent=validateIntentRequirements(filesystemIntent);
-      const tools=this.registry.listForAgent().map(tool=>({...tool,domain:tool.domain??domainFromName(tool.name),operation:tool.operation??tool.name}));
-      const built=buildIntentPlan(intent,tools,previous);
-      if(built.steps?.length===1)return this.fromToolStep(built.steps[0],intent);
-      if(built.steps?.length)return{type:"unknown"};
-      if(built.direct&&!mutationIntents.has(intent.intent))return{type:"chat",response:built.direct};
-      if(built.directStream)return{type:"chat",stream:true};
-    }
-    const routed=this.fastRouter.route(text,{allowedRoots:this.allowedRoots()});
-    if(routed.type==="tool")return this.fromToolStep({tool:routed.tool,input:routed.input,explanation:routed.explanation});
-    return routed;
-  }
 
   private conversationFallback(text:string):CommandRoute{
     // Preserve the existing Agent V2/planner path for operational requests that
