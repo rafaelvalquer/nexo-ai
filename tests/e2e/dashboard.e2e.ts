@@ -246,8 +246,10 @@ test("email gadget moves a message to trash only after approval and refreshes th
     api.getGadgetData=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:1,messages:[message]},fetchedAt:new Date().toISOString(),stale:false});
     api.refreshGadget=async()=>({data:{available:true,connectionId:"mail-account",provider:"google",canModify:true,unreadCount:0,messages:[]},fetchedAt:new Date().toISOString(),stale:false});
     api.getEmailMessage=async()=>({...message,bodyText:"Conteúdo completo da mensagem."});
-    api.trashEmail=async(request:any)=>{(window as any).__trashEmailRequest=request;return{approvalId:"trash-approval-1"};};
-    (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__trashApprovalResolution={id,approved};return{ok:true};};
+    let trashAttempt=0;
+    api.trashEmail=async(request:any)=>{trashAttempt++;(window as any).__trashEmailRequest=request;return{approvalId:`trash-approval-${trashAttempt}`};};
+    (window as any).__trashApprovalResolutions=[];
+    (window as any).nexo.resolveApproval=async(id:string,approved:boolean)=>{(window as any).__trashApprovalResolutions.push({id,approved});return{ok:true};};
   });
 
   await page.locator(".sidebar").getByRole("button",{name:"Dashboard",exact:true}).click();
@@ -257,9 +259,20 @@ test("email gadget moves a message to trash only after approval and refreshes th
   await drawer.getByRole("button",{name:/Excluir/}).click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__trashEmailRequest)).toEqual({connectionId:"mail-account",messageId:"trash-mail-1"});
   await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
-  expect(await page.evaluate(()=>(window as any).__trashApprovalResolution)).toBeUndefined();
+  expect(await page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([]);
+
+  await drawer.getByRole("button",{name:"Cancelar",exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([{id:"trash-approval-1",approved:false}]);
+  await expect(drawer).toBeVisible();
+  await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(1);
+
+  await drawer.getByRole("button",{name:/Excluir/}).click();
+  await expect(drawer.getByText("Este e-mail será movido para a lixeira da sua conta.")).toBeVisible();
   await drawer.getByRole("button",{name:/Mover para a lixeira/}).click();
-  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolution)).toEqual({id:"trash-approval-1",approved:true});
+  await expect.poll(()=>page.evaluate(()=>(window as any).__trashApprovalResolutions)).toEqual([
+    {id:"trash-approval-1",approved:false},
+    {id:"trash-approval-2",approved:true}
+  ]);
   await expect(drawer).not.toBeVisible();
   await expect(page.locator(".emailGadgetRow").filter({hasText:"Mensagem para excluir"})).toHaveCount(0);
 });
