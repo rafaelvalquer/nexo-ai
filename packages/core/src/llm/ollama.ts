@@ -272,6 +272,7 @@ export class OllamaProvider implements LLMProvider {
           return await invoke(preferredModel, false);
         } catch (firstError: any) {
           if (firstError?.status === 404 && preferredModel !== this.model) return await invoke(this.model, false);
+          if ((request.maxAttempts ?? 2) <= 1) throw firstError;
           try {
             return await invoke(preferredModel, true);
           } catch (secondError: any) {
