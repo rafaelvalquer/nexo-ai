@@ -1,0 +1,2 @@
+import {contract} from "./types.js";
+export const calendarIntentContracts={calendar_list:contract("list",[],["start","end"]),calendar_search:contract("find",["query"],["start","end"]),calendar_create:contract("create",["title","start"],["end","attendees","location"]),calendar_update:contract("update",["eventId"],["title","start","end","attendees","location"]),calendar_delete:contract("delete",["eventId"]),calendar_rsvp:contract("update",["eventId","response"])} as const;
