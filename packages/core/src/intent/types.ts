@@ -14,7 +14,7 @@ export const filesystemOperations = [
 ] as const;
 
 export type FilesystemOperation = (typeof filesystemOperations)[number];
-export type IntentDomain = "filesystem"|"system"|"web"|"email"|"calendar"|"documents"|"macro"|"chat"|"unknown";
+export type IntentDomain = "filesystem"|"system"|"web"|"browser"|"email"|"calendar"|"documents"|"memory"|"macro"|"chat"|"conversation"|"unknown";
 export type IntentAction = "create"|"read"|"update"|"delete"|"find"|"list"|"open"|"execute"|"unknown";
 export type IntentEntityValue = string|number|boolean|string[];
 export type IntentEntitySource = "user"|"semantic_alias"|"previous_context"|"inferred";
@@ -75,7 +75,7 @@ export type IntentResolutionResult =
   | { status:"unknown"; reason:string; intent?:CanonicalIntent; confidence?:IntentConfidence };
 
 export interface NormalizedIntentLiteralSegment {
-  type: "quoted"|"content"|"path";
+  type: "quoted"|"content"|"path"|"filename"|"url"|"email";
   value: string;
   start: number;
   end: number;
