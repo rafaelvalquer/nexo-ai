@@ -55,14 +55,14 @@ function combinedScore(query: string, queryEmbedding: number[] | undefined, exam
   const lexical = lexicalSimilarity(query, example.normalizedUtterance);
   const semantic = queryEmbedding?.length && example.embedding?.length === queryEmbedding.length ? Math.max(0,cosine(queryEmbedding, example.embedding)) : lexical;
   const domainMatch=domain?Number(example.domain===domain):.5;
-  const sourceTrust=example.source==="user_correction"?1:example.source==="confirmed_execution"?.9:.7;
+  const sourceTrust=example.source==="user_correction"?1:example.source==="confirmed_execution"?0.9:0.7;
   const successEvidence=Math.min(1,example.successCount/3);
   const recency=recencyScore(example.lastVerifiedAt??example.createdAt);
   const failurePenalty=Math.min(.45,example.failureCount*.12);
   return Math.max(0,Math.min(1,semantic*.45+lexical*.20+domainMatch*.10+sourceTrust*.10+successEvidence*.10+recency*.05-failurePenalty));
 }
 
-function recencyScore(value:string){const time=Date.parse(value);if(!Number.isFinite(time))return .3;const days=Math.max(0,(Date.now()-time)/86_400_000);return days<=7?1:days<=30?.8:days<=90?.6:days<=180?.4:.2;}
+function recencyScore(value:string){const time=Date.parse(value);if(!Number.isFinite(time))return .3;const days=Math.max(0,(Date.now()-time)/86_400_000);return days<=7?1:days<=30?0.8:days<=90?0.6:days<=180?0.4:0.2;}
 function lexicalSimilarity(a: string, b: string) {
   if (a === b) return 1;
   const left = new Set(tokens(a)), right = new Set(tokens(b));
