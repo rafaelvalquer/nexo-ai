@@ -15,6 +15,7 @@ import type { PendingClarification } from "../clarification/types.js";
 import type { AgentRun, AgentRunStatus, PersistedAgentState } from "./state.js";
 import type { AgentLoopState } from "../loop/types.js";
 import { ConversationEntityLedger } from "../context/conversation-entity-ledger.js";
+import {intentFeatureFlags} from "../../intent/feature-flags.js";
 
 type RunRow={id:string;status:AgentRunStatus;state_json:string;final_response:string|null;created_at:string;updated_at:string;conversation_id?:string|null;task_id?:string|null;agent_id?:string|null};
 type ClarificationRow={id:string;conversation_id:string;domain:PendingClarification["domain"];intent:string;operation:string;original_request:string;partial_entities_json:string;questions_json:string;intent_json:string;values_json:string;status:PendingClarification["status"];created_at:string;resolved_at:string|null;expires_at:string|null};
@@ -61,7 +62,7 @@ export class AgentRuntime{
   clearIntentLearning(){this.intentMemory.clear();}
   intentLearningCount(){return this.intentMemory.count();}
   private intentLearningEnabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return true;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false;}catch{return true;}}
-  private intentLearningV2Enabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return false;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean;intentLearningV2Enabled?:boolean};return !settings.privateMode&&settings.intentLearningEnabled!==false&&settings.intentLearningV2Enabled===true;}catch{return false;}}
+  private intentLearningV2Enabled(){const row=this.db.get<{value:string}>("SELECT value FROM settings WHERE key='app'");if(!row)return false;try{const settings=JSON.parse(row.value) as {privateMode?:boolean;intentLearningEnabled?:boolean;intentLearningV2Enabled?:boolean};return intentFeatureFlags().intentLearningV3Enabled&&!settings.privateMode&&settings.intentLearningEnabled!==false&&settings.intentLearningV2Enabled===true;}catch{return false;}}
   private ensureClarificationSchema(){this.db.run(`CREATE TABLE IF NOT EXISTS pending_clarifications (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
