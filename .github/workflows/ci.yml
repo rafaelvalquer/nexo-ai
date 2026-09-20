@@ -15,6 +15,8 @@ jobs:
       - run: pnpm test
       - run: pnpm test:security
       - run: pnpm eval:agent
+      - name: Accuracy Context Learning quality gates
+        run: pnpm eval:agent:accuracy
       - run: pnpm version:check
       - run: pnpm build
 
@@ -37,6 +39,8 @@ jobs:
       - run: corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Core accuracy gates
+        run: pnpm eval:agent:accuracy
       - name: Pull local evaluation model
         if: ${{ vars.NEXO_MODEL_EVAL_URL == '' }}
         shell: bash
