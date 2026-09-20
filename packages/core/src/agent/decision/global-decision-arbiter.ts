@@ -29,8 +29,8 @@ export class GlobalDecisionArbiter{
   scored.sort((a,b)=>b.score-a.score);const top=scored[0],second=scored[1];
   if(!top)return{confidence:0,margin:0,rejectedCandidates:rejected,clarificationNeeded:rejected.length>0,clarificationReason:rejected[0]?.reason};
   const margin=round(top.score-(second?.score??0)),minMargin=top.candidate.mutatesState?MIN_DECISION_MARGIN.MUTATION:MIN_DECISION_MARGIN.READ,minConfidence=top.candidate.mutatesState?.valueOf()?0.90:0.75;
-  if(top.score<minConfidence)return{selectedCandidate:top.candidate,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:top.candidate.mutatesState?"MUTATION_CONFIDENCE_BELOW_THRESHOLD":"READ_CONFIDENCE_BELOW_THRESHOLD"};
   if(second&&margin<minMargin)return{selectedCandidate:top.candidate,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:"DECISION_MARGIN_BELOW_THRESHOLD"};
+  if(top.score<minConfidence)return{selectedCandidate:top.candidate,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:top.candidate.mutatesState?"MUTATION_CONFIDENCE_BELOW_THRESHOLD":"READ_CONFIDENCE_BELOW_THRESHOLD"};
   return{selectedCandidate:top.candidate,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:false};
  }
 }
