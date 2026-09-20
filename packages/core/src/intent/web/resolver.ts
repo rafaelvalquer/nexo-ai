@@ -40,7 +40,7 @@ export function deterministicWebIntent(text:string):CanonicalWebIntent|undefined
   const url=explicitUrl(text),domain=explicitDomain(text),sourceName=extractSourceName(text,domain,url);
   const interaction=hasInteractionGoal(text),information=hasInformationGoal(text);
   const navigate=/\b(acesse|acessar|abra|abrir|entre|entrar|navegue)\b/i.test(text);
-  const explicitFetch=Boolean(url)&&/\b(leia|ler|resum|explique|extraia|conte[uú]do|analise)\b/i.test(text);
+  const explicitFetch=Boolean(url)&&/\b(?:leia|ler|resum(?:a|ir|e)?|explique|extraia|conte[uú]do|analise)\b/i.test(text);
   let operation:CanonicalWebIntent["operation"]="unknown";
   if(interaction||requiresPersonalSession(text))operation="interact";
   else if(explicitFetch)operation="fetch";
