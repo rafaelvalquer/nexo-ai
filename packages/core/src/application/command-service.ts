@@ -156,7 +156,7 @@ export class CommandService {
     }
 
     const exactStrong=entries.some(entry=>entry.candidate.confidence>=.98&&domainEvidenceConfidenceForCandidate(domainEvidence,entry.candidate)>=.75);
-    const needsSemantic=!exactStrong||normalized.routingCorrections.length>0;
+    const hasRoutingCorrections="routingCorrections" in normalized&&Array.isArray((normalized as {routingCorrections?:unknown[]}).routingCorrections)&&(normalized as {routingCorrections:unknown[]}).routingCorrections.length>0;\n    const needsSemantic=!exactStrong||hasRoutingCorrections;
     const webEligible=needsSemantic&&this.shouldInvokeWeb(text,domainEvidence,expectedDomain);
     const hybridEligible=needsSemantic&&!webEligible&&this.shouldInvokeHybrid(text,domainEvidence,expectedDomain);
 
