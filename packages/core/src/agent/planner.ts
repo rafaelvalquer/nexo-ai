@@ -20,6 +20,9 @@ import { IntentMemoryStore } from "./intent-memory/store.js";
 import { IntentMemoryRetriever } from "./intent-memory/retriever.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
 import {semanticMutationAllowed} from "./security/semantic-mutation-guard.js";
+import {ContextResolver} from "./context/context-resolver.js";
+import {contextSnapshotFromActionState} from "./context/context-snapshot.js";
+import {EntityResolverV2} from "../intent/entities/resolver.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata;executionId?:string};
 export type PlanOrigin="fast"|"llm";
@@ -64,7 +67,8 @@ export class AgentPlanner{
     const hint=resolveDomainHint(userText),store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
-    const intent=validateIntentRequirements(enriched);
+    const contextual=applyUnifiedContext(enriched,userText,previous);
+    const intent=validateIntentRequirements(contextual);
     if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"llm",intent,uiFlow:"email_mailbox_preferences"};
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
@@ -98,3 +102,16 @@ function isUnavailableToolPlan(direct:string){return /^A ferramenta necessária 
 function mustUseSemanticOrchestrator(text:string,previous:ConversationActionContextState|undefined,local:Omit<Plan,"origin">|null){if(local?.uiFlow)return false;if(local?.tool&&DETERMINISTIC_SAFE_TOOLS.has(local.tool))return false;if(/\b(e-?mails?|gmail|agenda|calend[aá]rio|compromiss|reuni[aã]o|convite|arquivos?|pastas?|downloads?|baixados|documentos?|documents?|desktop|[aá]rea\s+de\s+trabalho)\b|\.[a-z0-9]{2,8}\b/i.test(text))return true;if(previous?.lastDomain&&["email","calendar","filesystem"].includes(previous.lastDomain)&&/\b(ele|ela|eles|elas|esse|essa|esses|essas|primeir|anteriores?|resum|arquiv|apagu|delete|marque|mova|envie|cancele|altere|remova|leia)\b/i.test(text))return true;if(typeof local?.direct==="string"&&/Integrações como Gmail/i.test(local.direct))return true;return false;}
 function isLikelyConversation(text:string){const normalized=text.trim().toLowerCase();if(/^(me\s+)?ensine\b|^(me\s+)?explique\b|^me\s+ajude\s+(?:a\s+)?(?:aprender|entender|estudar)\b|^vamos\s+conversar\b/i.test(normalized))return true;const computerResource=/\b(arquivos?|pastas?|navegador|aplicativo|programa|processo|disco|mem[oó]ria|downloads?|desktop|documentos?|documents?)\b|\.[a-z0-9]{2,8}\b|\b[a-z]:[\\/]|\\\\/i.test(normalized);if(computerResource)return false;const hasComputerAction=/\b(abra|abrir|liste|listar|procure|pesquise|salve|salvar|guarde|lembre|apague|remova|delete|execute|rode|mova|copie|renomeie|crie\s+(?:uma\s+)?pasta|navegue|acesse|baixe|analise\s+(?:a\s+)?pasta)\b/i.test(normalized);if(hasComputerAction)return false;if(/^\s*(oi|ol[aá]|bom dia|boa tarde|boa noite)\b/i.test(normalized))return true;if(/^\s*(quem|o que|oque|como|por que|porque|qual|quais|quando|onde|explique|resuma|conte|escreva|diga|pode me explicar)\b/i.test(normalized))return true;return true;}
 function domainFromName(name:string){if(name.startsWith("email_"))return"email";if(name.startsWith("calendar_"))return"calendar";if(name.startsWith("browser_"))return"browser";if(name.startsWith("memory_"))return"memory";if(/file|folder/.test(name))return"filesystem";return"system";}
+
+function applyUnifiedContext(intent:AgentIntent,text:string,previous?:ConversationActionContextState):AgentIntent{
+  if(!previous)return intent;
+  const snapshot=contextSnapshotFromActionState({conversationId:"current",turn:0,state:previous});
+  const context=new ContextResolver().resolve(text,snapshot);
+  if(!Object.keys(context.entities).length)return intent;
+  const resolved=new EntityResolverV2().resolve({operation:intent.operation,text,llmEntities:intent.entities as Record<string,unknown>,contextEntities:context.entities as any});
+  const entities=Object.fromEntries(Object.entries(resolved.entities).map(([key,entity])=>[key,entity.value]));
+  const referencesPreviousResult=context.evidence.some(item=>item.source==="previous_result")||intent.referencesPreviousResult;
+  const missing=intent.domain==="filesystem"&&resolved.missing.length?resolved.missing:intent.missing;
+  return{...intent,entities,referencesPreviousResult,...(missing?.length?{status:"needs_clarification" as const,missing,question:contextualQuestion(missing[0])}:{})};
+}
+function contextualQuestion(field:string){if(field==="folder")return"Em qual pasta devo executar essa ação?";if(field==="path"||field==="file")return"Qual arquivo você quer usar?";if(field==="content"||field==="body")return"Qual conteúdo você quer usar?";if(field==="to"||field==="recipient")return"Qual é o destinatário?";return`Qual valor devo usar para ${field}?`;}

@@ -6,12 +6,17 @@ export class ContextResolver{
     if(!snapshot)return{entities:{},evidence:[],unresolved:[]};
     const entities:ContextResolution["entities"]={},evidence:ContextEvidence[]=[],unresolved:string[]=[];
     const ordinal=ordinalIndex(text);
-    const reference=/\b(ele|ela|isso|esse|essa|este|esta|arquivo|e-?mail|not[ií]cia|anterior|mesm[oa])\b/i.test(text)||ordinal!==undefined;
+    const reference=/\b(ele|ela|isso|esse|essa|este|esta|arquivo|e-?mail|not[ií]cia|p[aá]gina|anterior|mesm[oa]|primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa])\b/i.test(text)||ordinal!==undefined;
     if(!reference)return{entities,evidence,unresolved};
-    let candidate:ResolvedContextEntity|undefined;
     const valid=snapshot.recentEntities.filter(item=>withinTtl(item));
-    if(ordinal!==undefined)candidate=valid.filter(item=>item.source==="previous_result")[ordinal]??valid[ordinal];
-    else candidate=valid[0];
+    const expectedKind=/\be-?mail\b/i.test(text)?"email":/\b(?:not[ií]cia|p[aá]gina)\b/i.test(text)?"page":/\b(?:arquivo|documento)\b/i.test(text)?"file":undefined;
+    const preferred=expectedKind?valid.filter(item=>item.kind===expectedKind):valid;
+    const previous=preferred.filter(item=>item.source==="previous_result");
+    let candidate:ResolvedContextEntity|undefined;
+    if(ordinal!==undefined){
+      const rows=previous.length?previous:preferred;
+      candidate=ordinal===-1?rows.at(-1):rows[ordinal];
+    }else candidate=previous[0]??preferred[0];
     if(candidate){
       const field=candidate.kind==="email"?"messageId":candidate.kind==="event"?"eventId":candidate.kind==="document"?"documentId":candidate.kind==="page"?"url":"path";
       entities[field]={value:candidate.path??candidate.id,source:candidate.source,confidence:candidate.confidence};
