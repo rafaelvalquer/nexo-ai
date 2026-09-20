@@ -25,6 +25,9 @@ import type {DecisionCandidate} from "./decision/types.js";
 import type {GoalOutcome} from "./outcome/types.js";
 import {IntentLearningCoordinator} from "./intent-memory/learning-coordinator.js";
 import {isUserCorrection,classifyCorrection} from "./intent-memory/correction-capture.js";
+import {ToolCandidateSelector} from "./orchestrator/tool-candidate-selector.js";
+import {intentOperationContracts} from "../intent/operation-contracts.js";
+import {parseOperationEntities} from "../intent/entities/operation-parser.js";
 
 export type PlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata;executionId?:string};
 export type PlanOrigin="fast"|"llm";
@@ -89,6 +92,15 @@ export class AgentPlanner{
     if(candidates.length)this.activeMetrics()?.record("intent.memory.candidate_used",candidates.length,{domain:domain??"unknown"});
     return{candidates,examples};
   }
+  routingCandidateHints(userText:string):DecisionCandidate[]{
+    const tools=this.toolDescriptors(),selected=new ToolCandidateSelector(3).select(userText,tools),scores=[.70,.62,.55];
+    return selected.map((tool,index)=>{
+      const operation=tool.operation??tool.name,contract=intentOperationContracts[operation],parsed=parseOperationEntities(operation,userText).entities;
+      const missing=contract?.requiredEntities.filter(key=>parsed[key]===undefined||parsed[key]===null||parsed[key]==="")??[];
+      return{source:"planner" as const,domain:canonicalDecisionDomain(tool.domain),operation,entities:parsed,missing,ambiguities:[],confidence:scores[index]??.5,proposedTool:tool.name,mutatesState:tool.mutatesState,evidence:["planner-tool-candidate-selector"]};
+    }).filter(candidate=>Boolean(intentOperationContracts[candidate.operation]));
+  }
+
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult){
@@ -150,3 +162,5 @@ function memoryDomain(domain?:string):AgentIntentDomain|undefined{
   if(["email","calendar","filesystem","document","browser","system","memory","general"].includes(domain))return domain as AgentIntentDomain;
   return undefined;
 }
+
+function canonicalDecisionDomain(domain:string){return domain==="document"?"documents":domain==="general"?"conversation":domain;}
