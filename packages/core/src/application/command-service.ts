@@ -422,7 +422,7 @@ export class CommandService {
   }
 
   private shouldInvokeHybrid(text:string,evidence?:DomainEvidenceSnapshot,expectedDomain?:string){
-    if(!this.hybrid?.enabled()||this.hybrid.shadowMode())return false;
+    if(!this.hybrid?.enabled()||this.hybrid.shadowMode()||hasExplicitPhysicalPath(text))return false;
     if(expectedDomain==="filesystem"&&!this.hybrid.filesystemEnabled())return false;
     if(expectedDomain)return operationsForDomains(structuredDomains(evidence,expectedDomain)).some(operation=>Boolean(this.registry.get(operation)));
     if(evidence?.items.some(item=>item.score>=.45&&operationsForDomains([item.domain]).some(operation=>Boolean(this.registry.get(operation)))))return true;
