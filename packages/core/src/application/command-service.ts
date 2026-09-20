@@ -27,6 +27,7 @@ import {targetedClarification} from "../agent/clarification/targeted-clarificati
 import {DomainEvidenceBuilder,type DomainEvidenceSnapshot} from "../intent/domain/domain-evidence-builder.js";
 import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.js";
 import type {DecisionCandidate} from "../agent/decision/types.js";
+import {intentFeatureFlags} from "../intent/feature-flags.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
@@ -97,6 +98,7 @@ export class CommandService {
   private readonly conversationTurns=new Map<string,number>();
   private readonly contextObservedAt=new Map<string,{updatedAt:string;turn:number}>();
   private readonly contextSnapshotBuilder=new ContextSnapshotBuilder();
+  private readonly refinementFlags=intentFeatureFlags();
 
   constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions,private readonly accuracy?:AccuracyCommandOptions) {}
 
@@ -121,13 +123,13 @@ export class CommandService {
     if(safety.terminal){this.hybrid?.metrics?.record(safety.status==="negated"?"intent.safety.negated":safety.status==="informational"?"intent.safety.informational":"intent.safety.traversal",1);return finish(safety.status==="informational"?{type:"chat",stream:true}:{type:"chat",response:safety.response},"safety");}
 
     if(trace)for(const item of domainEvidence.items)trace.domainCandidates.push({source:"exact",domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence});
-    if(this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
+    if(this.refinementFlags.contextSnapshotV2Enabled&&this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
       const previousResultTurnAge=this.previousResultTurnAge(requestContext.conversationId,previous,turn);
       const snapshot=this.contextSnapshotBuilder.build({conversationId:requestContext.conversationId??"current",turn,state:previous,previousResultTurnAge});
       contextEvidence=this.accuracy.contextResolver.resolve(text,snapshot);if(trace)trace.contextUsed.push(...contextEvidence.evidence);
     }
 
-    if(this.hybrid?.routingV2Enabled?.()===false){
+    if(this.hybrid?.routingV2Enabled?.()===false||this.refinementFlags.candidateArbiterEnabled===false){
       const legacy=this.route(text,previous),final=legacy.type==="unknown"?await this.routeHybrid(text,previous,signal):legacy;
       return finish(final,"legacy-compat");
     }
@@ -185,8 +187,9 @@ export class CommandService {
       const goals=new Map<string,GoalSatisfaction>();
       for(const entry of entries){const goal=this.accuracy?.goalEvaluator.evaluate(text,entry.candidate)??{status:"unknown",score:.7} as GoalSatisfaction;goals.set(decisionKey(entry.candidate),goal);}
       const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
-      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey});
+      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
+      if(this.refinementFlags.candidateArbiterShadowMode){this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});const first=entries[0];if(first)return finish(first.route,first.source);}
       if(decision.clarificationNeeded){
         const selected=decision.selectedCandidate??entries[0].candidate;
         const second=entries.map(item=>item.candidate).find(item=>decisionKey(item)!==decisionKey(selected));
