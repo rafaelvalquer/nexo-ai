@@ -9,7 +9,7 @@ import { materializeDeferredAction } from "./orchestrator/action-preflight.js";
 import { IntentOrchestrator,type IntentDiagnostic } from "./orchestrator/intent-orchestrator.js";
 import { buildIntentPlan,type EmailComposePlanDraft } from "./orchestrator/plan-builder.js";
 import { ResponseSynthesizer } from "./orchestrator/response-synthesizer.js";
-import type { AgentIntent,ApprovalPlanMetadata,DeferredAction } from "./orchestrator/intent-schema.js";
+import type { AgentIntent,ApprovalPlanMetadata,DeferredAction,IntentDomain as AgentIntentDomain } from "./orchestrator/intent-schema.js";
 import type { AgentToolDescriptor } from "./orchestrator/tool-catalog.js";
 import { resolveDomainHint } from "./orchestrator/domain-resolver.js";
 import { deterministicFilesystemIntent,enrichFilesystemIntent } from "./orchestrator/filesystem-intent-enricher.js";
@@ -69,11 +69,9 @@ export class AgentPlanner{
     }
     const hint=resolveDomainHint(userText);
     if(!hint&&isLikelyConversation(userText))return{directStream:true,origin:"fast"};
-    const store=this.activeIntentMemory(),retriever=this.retrieverFor(store),learned=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,hint?.domain,5).catch(()=>[]):[];
-    if(learned.length){
-      this.activeMetrics()?.record("intent.memory.candidate_used",learned.length,{domain:hint?.domain??"unknown"});
-      this.lastMemoryDecisionCandidates=learned.map(item=>({source:"intent_memory",domain:item.intent.domain==="document"?"documents":item.intent.domain,operation:item.intent.operation,entities:item.intent.entities??{},missing:item.intent.missing??[],ambiguities:[],confidence:item.score,mutatesState:item.intent.requiresConfirmation,evidence:[`memory:${item.source}`,`successes:${item.verifiedSuccessCount}`,`failures:${item.failureCount}`]}));
-    }
+    const memory=await this.retrieveMemoryDecisionCandidates(userText,hint?.domain);
+    const learned=memory.examples;
+    this.lastMemoryDecisionCandidates=memory.candidates;
     const interpreted=await this.orchestrator.interpret(userText,tools,{previous,learnedExamples:learned},context,signal);
     if(learned.length&&learned[0].intent.operation!==interpreted.operation)this.activeMetrics()?.record("intent.memory.candidate_rejected",1,{suggested:learned[0].intent.operation,selected:interpreted.operation});
     const enriched=enrichEmailIntent(enrichFilesystemIntent(interpreted,userText),userText);
@@ -83,6 +81,14 @@ export class AgentPlanner{
     const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,steps:built.steps as PlanStep[]|undefined,origin:"llm",intent},intent);
   }
   memoryDecisionCandidates(){return structuredClone(this.lastMemoryDecisionCandidates);}
+  async retrieveMemoryDecisionCandidates(userText:string,domain?:string){
+    const store=this.activeIntentMemory(),retriever=this.retrieverFor(store);
+    const agentDomain=memoryDomain(domain);
+    const examples=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,agentDomain,5).catch(()=>[]):[];
+    const candidates=examples.map(item=>({source:"intent_memory" as const,domain:item.intent.domain==="document"?"documents":item.intent.domain,operation:item.intent.operation,entities:item.intent.entities??{},missing:item.intent.missing??[],ambiguities:[],confidence:item.score,mutatesState:item.intent.requiresConfirmation,evidence:[`memory:${item.source}`,`successes:${item.verifiedSuccessCount}`,`failures:${item.failureCount}`]}));
+    if(candidates.length)this.activeMetrics()?.record("intent.memory.candidate_used",candidates.length,{domain:domain??"unknown"});
+    return{candidates,examples};
+  }
   buildIntentPlan(rawIntent:AgentIntent,previous?:ConversationActionContextState,availableTools?:AgentToolDescriptor[]):Plan{const intent=validateIntentRequirements(rawIntent);if(intent.domain==="email"&&intent.operation==="select_mailboxes")return{origin:"fast",intent,uiFlow:"email_mailbox_preferences"};const tools=availableTools??this.toolDescriptors();const built=buildIntentPlan(intent,tools,previous);return withPresentationPolicy({...built,tool:built.steps?.length===1?built.steps[0].tool:undefined,steps:built.steps as PlanStep[]|undefined,origin:"fast",intent},intent);}
   materialize(plan:Plan,result:ToolResult){return plan.deferredAction?materializeDeferredAction(plan.deferredAction,result):undefined;}
   observe(previous:ConversationActionContextState|undefined,userRequest:string,plan:Pick<Plan,"intent">,step:PlanStep,result:ToolResult){
@@ -136,3 +142,11 @@ function applyUnifiedContext(intent:AgentIntent,text:string,previous?:Conversati
   return{...intent,entities,referencesPreviousResult,...(missing?.length?{status:"needs_clarification" as const,missing,question:contextualQuestion(missing[0])}:{})};
 }
 function contextualQuestion(field:string){if(field==="folder")return"Em qual pasta devo executar essa ação?";if(field==="path"||field==="file")return"Qual arquivo você quer usar?";if(field==="content"||field==="body")return"Qual conteúdo você quer usar?";if(field==="to"||field==="recipient")return"Qual é o destinatário?";return`Qual valor devo usar para ${field}?`;}
+
+function memoryDomain(domain?:string):AgentIntentDomain|undefined{
+  if(!domain)return undefined;
+  if(domain==="documents")return"document";
+  if(domain==="web"||domain==="conversation"||domain==="chat"||domain==="unknown")return"general";
+  if(["email","calendar","filesystem","document","browser","system","memory","general"].includes(domain))return domain as AgentIntentDomain;
+  return undefined;
+}
