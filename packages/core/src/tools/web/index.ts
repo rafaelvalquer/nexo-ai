@@ -28,7 +28,7 @@ export function webReaderTools(options:{metric?:WebToolMetric}={}):ToolDefinitio
 }
 
 
-function formatResearchSummary(result:Awaited<ReturnType<WebResearchService["research"]>>){
+export function formatResearchSummary(result:Awaited<ReturnType<WebResearchService["research"]>>){
   const source=result.source?.name??result.source?.domain??"web";
   const articlesByUrl=new Map(result.articles.map(article=>[canonical(article.url),article]));
   const items=result.headlines.length?result.headlines:result.articles.map(article=>({...article,fullyRead:true,discoveredFrom:"direct" as const}));
