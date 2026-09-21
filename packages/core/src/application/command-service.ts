@@ -36,8 +36,16 @@ import {stableCandidateId} from "../agent/decision/semantic-action-identity.js";
 import {createStructuredClarification} from "../agent/clarification/structured-clarification.js";
 import type {ClarificationOption} from "../agent/clarification/clarification-types.js";
 import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
+import type {CanonicalIntentDecision} from "../agent/action-planning/canonical-intent-decision.js";
+import type {CanonicalActionPlan} from "../agent/action-planning/canonical-action-plan.js";
+import {clarificationOptionsFromDecisions} from "../agent/clarification/clarification-option-builder.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
+
+type CandidateEnvelope={
+  candidate:DecisionCandidate;
+  routeSeed:CanonicalIntentDecision;
+};
 
 export type CommandRoute =
   | { type: "tool"; tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata; executionId?: string; responseMode?: "synthesize" | "deterministic" | "presentation"; intent?: AgentIntent; deferredAction?: DeferredAction }
