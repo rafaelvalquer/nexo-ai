@@ -49,6 +49,7 @@ export type ApprovalBlock = ChatBlockBase & {
 };
 export type ClarificationOption = {
   id: string; label: string; value: unknown; description?: string; icon?: string;
+  metadata?: { path?: string; size?: number; modifiedAt?: string };
 };
 export type ClarificationQuestion = {
   id: string; field: string; prompt: string;
