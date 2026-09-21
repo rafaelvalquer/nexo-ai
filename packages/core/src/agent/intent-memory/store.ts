@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { NexoDatabase } from "../../database/db.js";
 import type { AgentIntent, IntentDomain } from "../orchestrator/intent-schema.js";
 
-export type IntentExampleSource = "user_correction" | "confirmed_execution" | "successful_execution";
+export type IntentExampleSource = "user_correction" | "confirmed_execution" | "successful_execution" | "user_clarification";
 export type IntentExampleEvidence={successCount?:number;failureCount?:number;lastVerifiedAt?:string;resolverVersion?:string;modelId?:string};
 export type StoredIntentExample = {
   id: string;
@@ -39,7 +39,7 @@ export class IntentMemoryStore {
       [normalized, intent.domain, intent.intent, intent.operation]
     );
     const now = new Date().toISOString();
-    const confirmed = source === "user_correction" || source === "confirmed_execution";
+    const confirmed = source === "user_correction" || source === "confirmed_execution" || source === "user_clarification";
     const successCount=Math.max(1,evidence.successCount??1),failureCount=Math.max(0,evidence.failureCount??0),lastVerifiedAt=evidence.lastVerifiedAt??now;
     if (existing) {
       this.db.run(
@@ -58,8 +58,8 @@ export class IntentMemoryStore {
   candidates(domain?: IntentDomain, limit = 120): StoredIntentExample[] {
     const rows = this.db.all<any>(
       domain
-        ? "SELECT * FROM intent_examples WHERE domain=? ORDER BY confirmed_by_user DESC,CASE source WHEN 'user_correction' THEN 3 WHEN 'confirmed_execution' THEN 2 ELSE 1 END DESC,success_count DESC,failure_count ASC,last_verified_at DESC,last_used_at DESC LIMIT ?"
-        : "SELECT * FROM intent_examples ORDER BY confirmed_by_user DESC,CASE source WHEN 'user_correction' THEN 3 WHEN 'confirmed_execution' THEN 2 ELSE 1 END DESC,success_count DESC,failure_count ASC,last_verified_at DESC,last_used_at DESC LIMIT ?",
+        ? "SELECT * FROM intent_examples WHERE domain=? ORDER BY confirmed_by_user DESC,CASE source WHEN 'user_clarification' THEN 4 WHEN 'user_correction' THEN 3 WHEN 'confirmed_execution' THEN 2 ELSE 1 END DESC,success_count DESC,failure_count ASC,last_verified_at DESC,last_used_at DESC LIMIT ?"
+        : "SELECT * FROM intent_examples ORDER BY confirmed_by_user DESC,CASE source WHEN 'user_clarification' THEN 4 WHEN 'user_correction' THEN 3 WHEN 'confirmed_execution' THEN 2 ELSE 1 END DESC,success_count DESC,failure_count ASC,last_verified_at DESC,last_used_at DESC LIMIT ?",
       domain ? [domain, limit] : [limit]
     );
     return rows.map(row => this.map(row));
@@ -79,7 +79,7 @@ export class IntentMemoryStore {
     if (count <= MAX_ACTIVE) return;
     this.db.run(`DELETE FROM intent_examples WHERE id IN (
       SELECT id FROM intent_examples
-      ORDER BY confirmed_by_user ASC,failure_count DESC,success_count ASC,CASE source WHEN 'successful_execution' THEN 1 WHEN 'confirmed_execution' THEN 2 ELSE 3 END ASC,last_used_at ASC,created_at ASC
+      ORDER BY confirmed_by_user ASC,failure_count DESC,success_count ASC,CASE source WHEN 'successful_execution' THEN 1 WHEN 'confirmed_execution' THEN 2 WHEN 'user_correction' THEN 3 ELSE 4 END ASC,last_used_at ASC,created_at ASC
       LIMIT ?
     )`, [count - MAX_ACTIVE]);
   }

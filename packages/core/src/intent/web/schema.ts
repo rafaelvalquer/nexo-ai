@@ -4,6 +4,7 @@ import type {CanonicalWebIntent} from "./types.js";
 
 const entities=z.object({
   sourceName:z.string().trim().min(1).max(120).optional(),
+  searchProvider:z.enum(["default","google"]).optional(),
   domain:z.string().trim().min(3).max(253).optional(),
   url:z.string().url().max(2048).optional(),
   query:z.string().trim().min(1).max(1000).optional(),

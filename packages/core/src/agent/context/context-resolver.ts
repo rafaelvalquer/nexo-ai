@@ -1,13 +1,14 @@
 import type {ContextEvidence} from "../decision/types.js";
 import type {ContextSnapshot,ResolvedContextEntity} from "./context-snapshot.js";
-export type ContextResolution={entities:Record<string,{value:unknown;source:ContextEvidence["source"];confidence:number}>;evidence:ContextEvidence[];unresolved:string[]};
+export type ResolvedContextReference={kind:"file"|"email"|"event"|"page";id?:string;path?:string;url?:string;ordinal?:number;confidence:number};
+export type ContextResolution={entities:Record<string,{value:unknown;source:ContextEvidence["source"];confidence:number}>;evidence:ContextEvidence[];unresolved:string[];resolvedReferences:ResolvedContextReference[]};
 export class ContextResolver{
   resolve(text:string,snapshot?:ContextSnapshot):ContextResolution{
-    if(!snapshot)return{entities:{},evidence:[],unresolved:[]};
-    const entities:ContextResolution["entities"]={},evidence:ContextEvidence[]=[],unresolved:string[]=[];
+    if(!snapshot)return{entities:{},evidence:[],unresolved:[],resolvedReferences:[]};
+    const entities:ContextResolution["entities"]={},evidence:ContextEvidence[]=[],unresolved:string[]=[],resolvedReferences:ResolvedContextReference[]=[];
     const ordinal=ordinalIndex(text);
     const reference=/\b(ele|ela|isso|esse|essa|este|esta|arquivo|e-?mail|not[ií]cia|p[aá]gina|anterior|mesm[oa]|primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa])\b/i.test(text)||ordinal!==undefined;
-    if(!reference)return{entities,evidence,unresolved};
+    if(!reference)return{entities,evidence,unresolved,resolvedReferences};
     const valid=snapshot.recentEntities.filter(item=>withinTtl(item));
     const expectedKind=/\be-?mail\b/i.test(text)?"email":/\b(?:not[ií]cia|p[aá]gina)\b/i.test(text)?"page":/\b(?:arquivo|documento)\b/i.test(text)?"file":undefined;
     const preferred=expectedKind?valid.filter(item=>item.kind===expectedKind):valid;
@@ -21,12 +22,13 @@ export class ContextResolver{
       const field=candidate.kind==="email"?"messageId":candidate.kind==="event"?"eventId":candidate.kind==="document"?"documentId":candidate.kind==="page"?"url":"path";
       entities[field]={value:candidate.path??candidate.id,source:candidate.source,confidence:candidate.confidence};
       evidence.push({field,value:candidate.path??candidate.id,source:candidate.source,confidence:candidate.confidence,turnAge:candidate.turnAge});
+      if(["file","email","event","page"].includes(candidate.kind))resolvedReferences.push({kind:candidate.kind as ResolvedContextReference["kind"],id:candidate.id,path:candidate.path,...(candidate.kind==="page"?{url:candidate.id}:{}),ordinal:candidate.ordinal,confidence:candidate.confidence});
     }else unresolved.push(ordinal!==undefined?"ordinal_reference":"entity_reference");
     if(/\b(mesma pasta|na mesma pasta)\b/i.test(text)){
       const file=valid.find(item=>item.path);
       if(file?.path){const folder=file.path.replace(/[\\/][^\\/]+$/,"");entities.folder={value:folder,source:file.source,confidence:.9};evidence.push({field:"folder",value:folder,source:file.source,confidence:.9,turnAge:file.turnAge});}
     }
-    return{entities,evidence,unresolved};
+    return{entities,evidence,unresolved,resolvedReferences};
   }
 }
 function withinTtl(item:ResolvedContextEntity){return item.source==="previous_result"?item.turnAge<=2:item.source==="entity_ledger"?item.turnAge<=5:true;}

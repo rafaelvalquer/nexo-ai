@@ -15,6 +15,7 @@ import type { ConnectionService } from "../../connections/service.js";
 import type { ConnectionCapability } from "@nexo/shared";
 import {actionFingerprint,canonicalJson,createIdempotencyKey} from "./action-fingerprint.js";
 import { ActionValidator } from "./action-validator.js";
+import {normalizeToolInput} from "./tool-input-normalizer.js";
 import { documentOutputBuffer, type DocumentFormat } from "../../documents/writer.js";
 export {actionFingerprint,canonicalJson} from "./action-fingerprint.js";
 
@@ -35,7 +36,9 @@ export class ActionExecutor {
   }
 
   async preflight(toolName: string, rawInput: Record<string, unknown>, context: ActionExecutionContext = {}): Promise<ActionPreflightResult> {
-    const validation = await this.validator.validateCurrent(toolName, rawInput, context);
+    const normalizedInput=normalizeToolInput(toolName,rawInput);
+    if(normalizedInput.clampedFields.length)this.options.metrics?.record("agent.tool_input.clamped",normalizedInput.clampedFields.length,{tool:toolName,fields:normalizedInput.clampedFields.join(",")});
+    const validation = await this.validator.validateCurrent(toolName, normalizedInput.input, context);
     if (!validation.ok) {
       this.options.metrics?.record(validation.code === "SCHEMA_INVALID" ? "agent.schema_error" : "agent.tool_call_invalid", 1, { tool: toolName, code: validation.code });
       return validation;

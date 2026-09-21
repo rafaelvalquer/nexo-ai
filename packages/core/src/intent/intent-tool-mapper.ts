@@ -5,6 +5,7 @@ import { LocationRegistry } from "../locations/location-registry.js";
 import { PathIntentResolver } from "../locations/path-intent-resolver.js";
 import type { CanonicalIntent } from "./types.js";
 import type { LocalMetricsService } from "../observability/metrics.js";
+import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
 
 export type MappedHybridIntent=
   |{type:"tool";tool:string;input:Record<string,unknown>;explanation:string;responseMode:"deterministic"|"presentation"|"synthesize";intent:AgentIntent;deferredAction?:DeferredAction}
@@ -64,7 +65,9 @@ export class IntentToolMapper{
         const file=entity(intent,"file");if(!file)return{type:"unknown",reason:"MISSING_FILE"};
         const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
         const root=scoped.status==="resolved"?scoped.path:undefined;
-        return{...this.tool("find_file",{name:file,matchMode:path.extname(file)?"full_name":"stem",...(root?{root}:{})},`Localizando ${file} antes da alteração…`,"deterministic",agentIntent),deferredAction:{kind:"filesystem.write_text",fileName:file,content,...(root?{root}:{})}};
+        const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"write_text_file",entities:{file,content,...(root?{root}:{})},decisionSource:"hybrid"});
+        const step=plan?.steps[0];if(!plan||!step)return{type:"unknown",reason:"CANONICAL_WRITE_PLAN_UNAVAILABLE"};
+        return{...this.tool(step.tool,step.input,step.explanation??`Localizando ${file} antes da alteração…`,"deterministic",agentIntent),deferredAction:plan.deferredAction};
       }
       case"read_file":{
         const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};

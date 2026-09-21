@@ -1,7 +1,9 @@
 import type {ToolRegistry} from "../../tools/registry.js";
 import type {CanonicalWebIntent} from "./types.js";
+import {WebDestinationResolver} from "../../web/web-destination-resolver.js";
 export type WebIntentMapResult={type:"tool";tool:string;input:Record<string,unknown>;explanation:string}|{type:"unknown"};
 export class WebIntentMapper{
+  private readonly destinations=new WebDestinationResolver();
   constructor(private readonly registry:ToolRegistry){}
   map(intent:CanonicalWebIntent,originalText:string):WebIntentMapResult{
     if(intent.operation==="research"){
@@ -10,7 +12,7 @@ export class WebIntentMapper{
     }
     if(intent.operation==="fetch"&&intent.entities.url&&this.registry.get("web_fetch"))return{type:"tool",tool:"web_fetch",input:{url:intent.entities.url,maxChars:16000},explanation:"Lendo a página sem abrir navegador…"};
     if(intent.operation==="interact"&&this.registry.get("browser_agent_run"))return{type:"tool",tool:"browser_agent_run",input:{request:originalText,mode:/\b(minha conta|meu perfil|login|autenticad[oa])\b/i.test(originalText)?"personal":"research"},explanation:"Executando a interação solicitada no navegador…"};
-    if(intent.operation==="navigate"){const url=intent.entities.url??(intent.entities.domain?"https://"+intent.entities.domain.replace(/^https?:\/\//,""):undefined);if(url&&this.registry.get("browser_open"))return{type:"tool",tool:"browser_open",input:{url},explanation:"Abrindo "+url+"…"};}
+    if(intent.operation==="navigate"){const known=this.destinations.resolveKnown(intent.entities.sourceName);const url=intent.entities.url??(intent.entities.domain?"https://"+intent.entities.domain.replace(/^https?:\/\//,""):known?.url);if(url&&this.registry.get("browser_open"))return{type:"tool",tool:"browser_open",input:{url},explanation:"Abrindo "+url+"…"};}
     if(intent.operation==="search"&&this.registry.get("web_search"))return{type:"tool",tool:"web_search",input:{query:intent.entities.query??originalText,maxResults:6},explanation:"Pesquisando na web…"};
     return{type:"unknown"};
   }

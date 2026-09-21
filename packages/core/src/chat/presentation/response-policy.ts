@@ -11,7 +11,8 @@ const PRESENTATION_ONLY_TOOLS = new Set([
   "email_latest",
   "email_get_many",
   "calendar_list",
-  "calendar_search"
+  "calendar_search",
+  "web_search"
 ]);
 
 const DETERMINISTIC_READ_TOOLS = new Set(["memory_usage", "disk_usage", "system_info", "process_list", "macro_list"]);

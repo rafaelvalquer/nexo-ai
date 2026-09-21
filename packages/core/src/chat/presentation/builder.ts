@@ -10,6 +10,7 @@ import { safeArraySummaryAdapter } from "./adapters/generic.js";
 import { clarificationAdapter } from "./adapters/clarification.js";
 import { browserAgentAdapter } from "./adapters/browser-agent.js";
 import { emailComposeReviewAdapter } from "./adapters/email-compose.js";
+import {webSearchAdapter} from "./adapters/web.js";
 import { unwrapPresentationData } from "./internal-metadata.js";
 
 export function defaultPresentationRegistry() {
@@ -24,6 +25,7 @@ export function defaultPresentationRegistry() {
     .register(["process_list"],processListAdapter)
     .register(["daily_summary"],dailySummaryAdapter)
     .register(["browser_agent_run"], browserAgentAdapter)
+    .register(["web_search"],webSearchAdapter)
     .register(["__clarification__"], clarificationAdapter)
     .register(["__email_compose_review__"], emailComposeReviewAdapter)
     .registerFallback(safeArraySummaryAdapter);

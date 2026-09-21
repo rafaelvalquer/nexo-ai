@@ -130,6 +130,12 @@ export class AgentPlanner{
       this.activeMetrics()?.record("intent.memory.user_correction_saved",1,{domain:plan.intent.domain,operation:plan.intent.operation});
     }
   }
+  recordClarificationSelection(utterance:string,intent:AgentIntent){
+    if(intent.status!=="ready"||!this.isIntentLearningEnabled())return;
+    const store=this.activeIntentMemory();if(!store)return;
+    store.remember(utterance,intent,"user_clarification",undefined,{successCount:1,failureCount:0,lastVerifiedAt:new Date().toISOString(),resolverVersion:"structured-clarification-v1"});
+    this.activeMetrics()?.record("intent.memory.clarification_saved",1,{domain:intent.domain,operation:intent.operation});
+  }
   recordCorrectionSignal(previous:ConversationActionContextState|undefined,text:string){
     if(!previous?.lastQuery||!isUserCorrection(text)||!defaultLearningCoordinator||!defaultLearningV2Enabled())return;
     const domain=previous.lastDomain??"general",operation=previous.lastTool??previous.lastIntent??"unknown";
