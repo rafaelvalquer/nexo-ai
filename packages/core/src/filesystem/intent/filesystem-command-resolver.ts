@@ -4,8 +4,9 @@ import { PathIntentResolver } from "../../locations/path-intent-resolver.js";
 import { normalizeFilename } from "../filename-normalizer.js";
 import type { FilesystemCommand } from "./filesystem-command-types.js";
 
-const CREATE = /\b(?:crie|criar|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma|o|a)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["“']?([\p{L}\p{N}_ .-]+\.(?:txt|md|csv))["”']?/iu;
+const CREATE = /\b(?:crie|criar|cria|faça|fazer|faz|monte|gere|gerar|salve|salvar|grave|gravar|escreva|escrever)\s+(?:(?:um|uma|o|a)\s+)?(?:arquivo(?:\s+(?:de\s+texto|textual))?(?:\s+chamad[oa])?\s+)?["“']?([\p{L}\p{N}_ .-]+\.(?:txt|md|csv))["”']?/iu;
 const CONTENT = /\s+(?:com\s+(?:o\s+)?(?:conte[uú]do|texto)|contendo|e\s+escreva)\b\s*:?[\s]*/iu;
+export const LOCATION_PREPOSITION="(?:em|no|na|nos|nas|para|dentro\\s+(?:de|do|da|dos|das))";
 const FIND_PREFIX = /\b(?:procure|procurar|pesquise|pesquisar|busque|buscar|encontre|encontrar|localize|ache)\s+(?:(?:o|um|uma)\s+)?(?:(?:arquivo|documento)\s+)?/iu;
 
 /** Shared deterministic grammar for the simple filesystem commands used by both routers. */
@@ -48,7 +49,7 @@ export class FilesystemCommandResolver {
     const fileName = match[1]?.trim().replace(/[.!?]+$/, "");
     if (!fileName) return undefined;
     const tail = text.slice(match.index + match[0].length);
-    const destinationStart = tail.match(/^\s+(?:(?:especificamente|exatamente|diretamente|somente|apenas)\s+)*(?:em|no|na|nos|nas|para|dentro\s+de)\s+/iu);
+    const destinationStart = tail.match(/^\s+(?:(?:especificamente|exatamente|diretamente|somente|apenas)\s+)*(?:em|no|na|nos|nas|para|dentro\s+(?:de|do|da|dos|das))\s+/iu);
     if (!destinationStart) return undefined;
     const rest = tail.slice(destinationStart[0].length);
     const contentMarker = CONTENT.exec(rest);
@@ -61,8 +62,8 @@ export class FilesystemCommandResolver {
 
   private resolveCreateFolder(text: string, roots: string[], locations?: LocationRegistry) {
     if(CREATE.test(text))return undefined;
-    if (!/\b(?:crie|criar)\b/i.test(text) || !/\b(?:pasta|diret[oó]rio)\b/i.test(text)) return undefined;
-    const named = text.match(/\b(?:crie|criar)\s+(?:(?:uma|a)\s+)?(?:pasta|diret[oó]rio)(?:\s+(?:chamad[oa]|com\s+nome))?\s+["“']?([\p{L}\p{N}_ .-]+?)["”']?(?:\s+(?:em|no|na|para|dentro\s+(?:de|da|do|das|dos))\s+(.+?))?[.!?]*$/iu);
+    if (!/\b(?:crie|criar|cria|faça|fazer|faz|monte)\b/i.test(text) || !/\b(?:pasta|pastinha|diret[oó]rio)\b/i.test(text)) return undefined;
+    const named = text.match(/\b(?:crie|criar|cria|faça|fazer|faz|monte)\s+(?:(?:uma|a)\s+)?(?:pasta|pastinha|diret[oó]rio)(?:\s+(?:chamad[oa]|com\s+nome))?\s+["“']?([\p{L}\p{N}_ .-]+?)["”']?(?:\s+(?:em|no|na|nos|nas|para|dentro\s+(?:de|da|do|das|dos))\s+(.+?))?[.!?]*$/iu);
     if (!named?.[1]) return undefined;
     const name = named[1].trim();
     // The deterministic resolver must only accept high-confidence parses. If a
@@ -80,13 +81,13 @@ export class FilesystemCommandResolver {
     if (!prefix) return undefined;
     const tail = text.slice(prefix.index + prefix[0].length).trim();
     const quoted = tail.match(/["“']([^"”']+)["”']/u)?.[1];
-    const source = quoted ?? tail.split(/\s+(?:em|no|na|nos|nas|dentro\s+de)\s+/iu, 1)[0]?.replace(/[.!?]+$/, "").trim();
+    const source = quoted ?? tail.split(/\s+(?:em|no|na|nos|nas|para|dentro\s+(?:de|do|da|dos|das))\s+/iu, 1)[0]?.replace(/[.!?]+$/, "").trim();
     if (!source) return undefined;
     if (/^(?:arquivos?|pastas?|pdfs?|documents?|documentos?|imagens?|fotos?)$/iu.test(source)) return undefined;
     if (/\b(?:contendo|que\s+contenham?|com\s+nome)\b/i.test(source)) return undefined;
     if (/\s/.test(source) && !quoted && !/[.]/.test(source)) return undefined;
     const matchMode: "full_name" | "stem" = path.extname(source) ? "full_name" : "stem";
-    const folderText = tail.match(/\b(?:em|no|na|nos|nas|dentro\s+de)\s+(.+?)\s*[.!?]*$/iu)?.[1];
+    const folderText = tail.match(/\b(?:em|no|na|nos|nas|para|dentro\s+(?:de|do|da|dos|das))\s+(.+?)\s*[.!?]*$/iu)?.[1];
     const folder = folderText ? this.resolveFolder(cleanFolder(folderText), roots, locations) : undefined;
     if (folderText && !folder) return undefined;
     return { kind: "find_file" as const, name: source, matchMode, ...(folder ? { folder } : {}), confidence: 1 };
