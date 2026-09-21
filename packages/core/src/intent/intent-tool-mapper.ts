@@ -1,14 +1,21 @@
 import path from "node:path";
-import type { AgentIntent, DeferredAction } from "../agent/orchestrator/intent-schema.js";
-import type { ToolRegistry } from "../tools/registry.js";
-import { LocationRegistry } from "../locations/location-registry.js";
-import { PathIntentResolver } from "../locations/path-intent-resolver.js";
-import type { CanonicalIntent } from "./types.js";
-import type { LocalMetricsService } from "../observability/metrics.js";
+import type {AgentIntent,DeferredAction} from "../agent/orchestrator/intent-schema.js";
+import type {ToolRegistry} from "../tools/registry.js";
+import {LocationRegistry} from "../locations/location-registry.js";
+import {PathIntentResolver} from "../locations/path-intent-resolver.js";
+import type {CanonicalIntent} from "./types.js";
+import type {LocalMetricsService} from "../observability/metrics.js";
 import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
+import type {CanonicalIntentDecision} from "../agent/action-planning/canonical-intent-decision.js";
+import {stableCandidateId} from "../agent/decision/semantic-action-identity.js";
 
 export type MappedHybridIntent=
   |{type:"tool";tool:string;input:Record<string,unknown>;explanation:string;responseMode:"deterministic"|"presentation"|"synthesize";intent:AgentIntent;deferredAction?:DeferredAction}
+  |{type:"clarification";question:string;intent:AgentIntent}
+  |{type:"unknown";reason:string};
+
+export type MappedHybridDecision=
+  |{type:"decision";decision:CanonicalIntentDecision;intent:AgentIntent}
   |{type:"clarification";question:string;intent:AgentIntent}
   |{type:"unknown";reason:string};
 
@@ -20,92 +27,48 @@ export type ScopeResolution=
 export class IntentToolMapper{
   constructor(private readonly registry:ToolRegistry,private readonly allowedRoots:()=>string[],private readonly metrics?:LocalMetricsService){}
 
-  map(intent:CanonicalIntent):MappedHybridIntent{
+  decision(intent:CanonicalIntent):MappedHybridDecision{
     const agentIntent=toAgentIntent(intent);
-    if(!this.registry.get(intent.operation))return{type:"unknown",reason:`TOOL_NOT_AVAILABLE:${intent.operation}`};
-    if(intent.domain!=="filesystem"){
-      const input=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
-      const mode:intentResponseMode=intent.intent==="find"||intent.intent==="list"||intent.intent==="read"?"synthesize":"deterministic";
-      return this.tool(intent.operation,input,`Preparando ${intent.operation}…`,mode,agentIntent);
+    const entities=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
+    if(intent.domain==="filesystem"){
+      const scoped=this.resolveScope(intent);
+      if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
+      if(scoped.status==="resolved"){
+        if(intent.operation==="find_file"||intent.operation==="write_text_file")entities.root=scoped.path;
+        else entities.folder=scoped.path;
+      }
+      if(["read_file","file_info","copy_file","move_file","rename_file","trash_file"].includes(intent.operation)){
+        const physicalKeys=intent.operation==="copy_file"||intent.operation==="move_file"?["source","destination"]:["path"];
+        for(const key of physicalKeys){
+          const value=typeof entities[key]==="string"?String(entities[key]):undefined;
+          if(value&&!isAbsolutePortable(value))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
+        }
+      }
     }
-    switch(intent.operation){
-      case"create_folder":{
-        const scope=this.resolveScope(intent);const name=entity(intent,"name");
-        if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
-        const folder=scope.status==="resolved"?scope.path:undefined;
-        if(!folder||!name)return{type:"unknown",reason:"UNRESOLVED_CREATE_FOLDER_TARGET"};
-        return this.tool("create_folder",{path:joinPortable(folder,name)},`Preparando a criação da pasta ${name}…`,"deterministic",agentIntent);
-      }
-      case"create_text_file":{
-        const scope=this.resolveScope(intent);const name=entity(intent,"name");
-        if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
-        const folder=scope.status==="resolved"?scope.path:undefined;
-        if(!folder||!name)return{type:"unknown",reason:"UNRESOLVED_CREATE_FILE_TARGET"};
-        return this.tool("create_text_file",{path:joinPortable(folder,name),content:entityRaw(intent,"content")??""},`Preparando a criação de ${name}…`,"deterministic",agentIntent);
-      }
-      case"find_file":{
-        const name=entity(intent,"name");if(!name)return{type:"unknown",reason:"MISSING_FILE_NAME"};
-        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
-        const root=scoped.status==="resolved"?scoped.path:undefined;return this.tool("find_file",{name,matchMode:path.extname(name)?"full_name":"stem",...(root?{root}:{})},`Procurando ${name} nas pastas autorizadas…`,"presentation",agentIntent);
-      }
-      case"list_files":{
-        const scope=this.resolveScope(intent);if(scope.status==="unresolved")return this.scopeClarification(agentIntent,scope.raw);
-        const folder=scope.status==="resolved"?scope.path:undefined;if(!folder)return{type:"unknown",reason:"UNRESOLVED_FOLDER"};
-        return this.tool("list_files",{path:folder},`Listando itens em ${folder}…`,"presentation",agentIntent);
-      }
-      case"search_files":{
-        const query=entity(intent,"query");if(!query)return{type:"unknown",reason:"MISSING_SEARCH_QUERY"};
-        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
-        const folder=scoped.status==="resolved"?scoped.path:undefined;return this.tool("search_files",{query,...(folder?{path:folder}:{})},`Pesquisando ${query}…`,"presentation",agentIntent);
-      }
-      case"write_text_file":{
-        const content=entityRaw(intent,"content");const explicit=entity(intent,"path");
-        if(content===undefined)return{type:"unknown",reason:"MISSING_CONTENT"};
-        if(explicit&&isAbsolutePortable(explicit))return this.tool("write_text_file",{path:explicit,content},"Preparando a alteração do arquivo…","deterministic",agentIntent);
-        const file=entity(intent,"file");if(!file)return{type:"unknown",reason:"MISSING_FILE"};
-        const scoped=this.resolveScope(intent);if(scoped.status==="unresolved")return this.scopeClarification(agentIntent,scoped.raw);
-        const root=scoped.status==="resolved"?scoped.path:undefined;
-        const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"write_text_file",entities:{file,content,...(root?{root}:{})},decisionSource:"hybrid"});
-        const step=plan?.steps[0];if(!plan||!step)return{type:"unknown",reason:"CANONICAL_WRITE_PLAN_UNAVAILABLE"};
-        return{...this.tool(step.tool,step.input,step.explanation??`Localizando ${file} antes da alteração…`,"deterministic",agentIntent),deferredAction:plan.deferredAction};
-      }
-      case"read_file":{
-        const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
-        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("read_file",{path:target},`Lendo ${path.basename(target)}…`,"synthesize",agentIntent);
-      }
-      case"file_info":{
-        const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
-        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("file_info",{path:target},`Consultando ${path.basename(target)}…`,"deterministic",agentIntent);
-      }
-      case"copy_file":{
-        const source=entity(intent,"source"),destination=entity(intent,"destination");if(!source||!destination)return{type:"unknown",reason:"MISSING_COPY_PATH"};
-        if(!isAbsolutePortable(source)||!isAbsolutePortable(destination))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("copy_file",{source,destination},"Preparando a cópia do arquivo…","deterministic",agentIntent);
-      }
-      case"move_file":{
-        const source=entity(intent,"source"),destination=entity(intent,"destination");if(!source||!destination)return{type:"unknown",reason:"MISSING_MOVE_PATH"};
-        if(!isAbsolutePortable(source)||!isAbsolutePortable(destination))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("move_file",{source,destination},"Preparando a movimentação do arquivo…","deterministic",agentIntent);
-      }
-      case"rename_file":{
-        const current=entity(intent,"path"),newName=entity(intent,"newName");if(!current||!newName)return{type:"unknown",reason:"MISSING_RENAME_TARGET"};
-        if(!isAbsolutePortable(current))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("rename_file",{path:current,newPath:joinPortable(path.dirname(current),newName)},"Preparando a renomeação do arquivo…","deterministic",agentIntent);
-      }
-      case"trash_file":{
-        const target=entity(intent,"path");if(!target)return{type:"unknown",reason:"MISSING_PATH"};
-        if(!isAbsolutePortable(target))return{type:"unknown",reason:"PHYSICAL_PATH_REQUIRED"};
-        return this.tool("trash_file",{path:target},"Preparando o envio para a lixeira…","deterministic",agentIntent);
-      }
-      default:return{type:"unknown",reason:`UNMAPPED_OPERATION:${intent.operation}`};
-    }
+    const base={
+      source:"hybrid" as const,domain:intent.domain,operation:intent.operation,entities,
+      missing:intent.missing??[],ambiguities:intent.ambiguities?.map(item=>item.code)??[],
+      confidence:intent.diagnostics?.rawModelConfidence??.9,proposedTool:intent.operation,
+      mutatesState:["create","update","delete"].includes(intent.intent),evidence:["hybrid-intent"]
+    };
+    const decision:CanonicalIntentDecision={
+      candidateId:stableCandidateId(base as any),
+      domain:canonicalDomain(intent.domain),operation:intent.operation,entities,
+      confidence:intent.diagnostics?.rawModelConfidence??.9,source:"hybrid",evidence:["hybrid-intent"]
+    };
+    return{type:"decision",decision,intent:agentIntent};
   }
 
-  private tool(tool:string,input:Record<string,unknown>,explanation:string,responseMode:"deterministic"|"presentation"|"synthesize",intent:AgentIntent):Extract<MappedHybridIntent,{type:"tool"}>{
-    return{type:"tool",tool,input,explanation,responseMode,intent};
+  /** @deprecated Use decision() + CanonicalActionPlanner.planDecision(). */
+  map(intent:CanonicalIntent):MappedHybridIntent{
+    const resolved=this.decision(intent);
+    if(resolved.type!=="decision")return resolved;
+    const plan=new CanonicalActionPlanner(this.registry).planDecision(resolved.decision);
+    const step=plan?.steps[0];
+    if(!plan||!step)return{type:"unknown",reason:"CANONICAL_PLAN_UNAVAILABLE"};
+    return{type:"tool",tool:step.tool,input:step.input,explanation:step.explanation??`Preparando ${resolved.decision.operation}…`,responseMode:plan.responseMode??"deterministic",intent:resolved.intent,deferredAction:plan.deferredAction};
   }
+
   resolveScope(intent:CanonicalIntent):ScopeResolution{
     const raw=entity(intent,"folder");if(!raw)return{status:"absent"};
     const roots=this.allowedRoots();
@@ -122,41 +85,21 @@ export class IntentToolMapper{
     this.metrics?.record("intent.scope.unresolved",1,{reason});
     return{status:"unresolved",raw,reason};
   }
-  private scopeClarification(intent:AgentIntent,raw:string):MappedHybridIntent{
+  private scopeClarification(intent:AgentIntent,raw:string):MappedHybridDecision{
     return{type:"clarification",intent,question:`Não reconheci a pasta "${raw}" como um local autorizado. Qual pasta autorizada devo usar?`};
   }
 }
-
-function entity(intent:CanonicalIntent,key:string){
-  const value=intent.entities[key]?.value;
-  return typeof value==="string"&&value.trim()?value.trim():undefined;
-}
-function entityRaw(intent:CanonicalIntent,key:string){
-  const value=intent.entities[key]?.value;
-  return typeof value==="string"?value:undefined;
-}
-function joinPortable(base:string,relative:string){const segments=relative.split(/[\\/]+/).filter(Boolean);return path.win32.isAbsolute(base)?path.win32.join(base,...segments):path.join(base,...segments);}
+function entity(intent:CanonicalIntent,key:string){const value=intent.entities[key]?.value;return typeof value==="string"&&value.trim()?value.trim():undefined;}
 function isAbsolutePortable(value:string){return path.isAbsolute(value)||path.win32.isAbsolute(value);}
 function toAgentIntent(intent:CanonicalIntent):AgentIntent{
   const mutation=new Set(["create","update","delete"]);
   const mappedIntent:intentName=intent.intent==="find"?"search":intent.intent==="open"?"read":intent.intent==="execute"?"read":intent.intent==="unknown"?"read":intent.intent;
   const entities=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
   const domain:AgentIntent["domain"]=intent.domain==="documents"?"document":intent.domain==="unknown"||intent.domain==="chat"||intent.domain==="conversation"||intent.domain==="web"||intent.domain==="macro"?"general":intent.domain;
-  return{
-    schemaVersion:1,status:"ready",domain,intent:mappedIntent,operation:intent.operation,entities,
-    referencesPreviousResult:intent.referencesPreviousResult,requiresDataLookup:["find","list","read","update","delete"].includes(intent.intent),
-    requiresConfirmation:mutation.has(intent.intent),confidence:intent.diagnostics?.rawModelConfidence??.9
-  };
+  return{schemaVersion:1,status:"ready",domain,intent:mappedIntent,operation:intent.operation,entities,referencesPreviousResult:intent.referencesPreviousResult,requiresDataLookup:["find","list","read","update","delete"].includes(intent.intent),requiresConfirmation:mutation.has(intent.intent),confidence:intent.diagnostics?.rawModelConfidence??.9};
 }
 type intentName=AgentIntent["intent"];
-type intentResponseMode="deterministic"|"presentation"|"synthesize";
-
+function canonicalDomain(value:string):CanonicalIntentDecision["domain"]{if(value==="documents")return"documents";if(value==="filesystem"||value==="web"||value==="browser"||value==="email"||value==="calendar"||value==="system"||value==="memory")return value;return"system";}
 function isAllowedPath(candidate:string,roots:string[]){
-  return roots.some(root=>{
-    const windows=path.win32.isAbsolute(candidate)||path.win32.isAbsolute(root);
-    const api=windows?path.win32:path;
-    const normalizedRoot=api.normalize(root),normalizedCandidate=api.normalize(candidate);
-    const relative=api.relative(normalizedRoot,normalizedCandidate);
-    return relative===""||(!relative.startsWith(`..${api.sep}`)&&relative!==".."&&!api.isAbsolute(relative));
-  });
+  return roots.some(root=>{const windows=path.win32.isAbsolute(candidate)||path.win32.isAbsolute(root);const api=windows?path.win32:path;const normalizedRoot=api.normalize(root),normalizedCandidate=api.normalize(candidate);const relative=api.relative(normalizedRoot,normalizedCandidate);return relative===""||(!relative.startsWith(`..${api.sep}`)&&relative!==".."&&!api.isAbsolute(relative));});
 }
