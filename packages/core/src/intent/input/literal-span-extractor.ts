@@ -33,9 +33,9 @@ export function extractLiteralSpans(original:string){
     explicitPaths.push(value);literalSegments.push({type:"path",value,start,end:start+value.length});
     protectedSpans.push({kind:"path",start,end:start+value.length});
   }
-  addProtected(original,URL,"url",protectedSpans);
-  addProtected(original,EMAIL,"email",protectedSpans);
-  addProtected(original,FILENAME,"filename",protectedSpans);
+  addLiteralProtected(original,URL,"url",literalSegments,protectedSpans);
+  addLiteralProtected(original,EMAIL,"email",literalSegments,protectedSpans);
+  addLiteralProtected(original,FILENAME,"filename",literalSegments,protectedSpans);
   const content=extractContentSegment(original);
   if(content){literalSegments.push(content);protectedSpans.push({kind:"content",start:content.start,end:content.end});}
   return{literalSegments:dedupeSegments(literalSegments),protectedSpans:mergeSpans(protectedSpans),explicitPaths:[...new Set(explicitPaths)]};
@@ -52,8 +52,8 @@ function segmentFromMatch(match:RegExpMatchArray):NormalizedIntentLiteralSegment
   const base=match.index??0,start=base+match[0].lastIndexOf(value);
   return{type:"content",value,start,end:start+value.length};
 }
-function addProtected(text:string,regex:RegExp,kind:ProtectedSpan["kind"],out:ProtectedSpan[]){
-  for(const match of text.matchAll(regex)){const value=match[0];const start=match.index??0;out.push({kind,start,end:start+value.length});}
+function addLiteralProtected(text:string,regex:RegExp,kind:"url"|"email"|"filename",segments:NormalizedIntentLiteralSegment[],out:ProtectedSpan[]){
+  for(const match of text.matchAll(regex)){const value=match[0],start=match.index??0;segments.push({type:kind,value,start,end:start+value.length});out.push({kind,start,end:start+value.length});}
 }
 function mergeSpans(spans:ProtectedSpan[]){
   return spans.sort((a,b)=>a.start-b.start||b.end-a.end).filter((span,index,all)=>!all.slice(0,index).some(previous=>previous.start<=span.start&&previous.end>=span.end));

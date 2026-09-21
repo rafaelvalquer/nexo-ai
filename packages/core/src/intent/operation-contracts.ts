@@ -10,6 +10,17 @@ import {systemIntentContracts} from "./contracts/system.js";
 export type IntentEntityKey=string;
 export type {IntentOperationContract};
 export const intentOperationContracts:Record<string,IntentOperationContract>={
- ...filesystemIntentContracts,...webIntentContracts,...emailIntentContracts,...calendarIntentContracts,...documentIntentContracts,...browserIntentContracts,...systemIntentContracts,
- unknown:{intent:"unknown",allowedEntities:[],requiredEntities:[],optionalEntities:[]}
+ ...filesystemIntentContracts,
+ ...webIntentContracts,
+ ...emailIntentContracts,
+ ...calendarIntentContracts,
+ ...documentIntentContracts,
+ ...browserIntentContracts,
+ ...systemIntentContracts,
+ unknown:{domain:"unknown",intent:"unknown",allowedEntities:[],requiredEntities:[],optionalEntities:[]}
 };
+
+export function operationsForDomains(domains?:readonly string[]){
+ const allowed=domains?.length?new Set(domains):undefined;
+ return Object.entries(intentOperationContracts).filter(([operation,contract])=>operation!=="unknown"&&(!allowed||allowed.has(contract.domain))).map(([operation])=>operation);
+}

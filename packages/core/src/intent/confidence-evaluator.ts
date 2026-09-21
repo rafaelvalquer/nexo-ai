@@ -8,7 +8,9 @@ export function evaluateDecisionConfidence(input:DecisionConfidenceInput):Decisi
  const validation=clamp(((input.schemaValidity??1)+(input.semanticValidity??1))/2);
  const domain=clamp(input.domainConsistency??validation),operation=clamp(input.operationScore),entities=clamp(input.entityCompleteness),context=clamp(input.contextConfidence),goal=clamp(input.goalScore),deterministic=clamp(input.deterministicEvidence??0),memory=clamp(input.verifiedMemory??0);
  const ambiguityPenalty=Math.min(.25,Math.max(0,input.ambiguityCount)*.05),conflictPenalty=Math.min(.35,Math.max(0,input.conflictCount)*.10),failurePenalty=Math.min(.30,Math.max(0,input.failurePenalty??0)*.10);
- const overall=round(clamp(domain*.25+operation*.20+entities*.20+goal*.20+context*.05+deterministic*.05+memory*.05-ambiguityPenalty-conflictPenalty-failurePenalty));
+ const weighted=clamp(domain*.25+operation*.20+entities*.20+goal*.20+context*.05+deterministic*.05+memory*.05-ambiguityPenalty-conflictPenalty-failurePenalty);
+ const pristineFloor=domain===1&&entities===1&&goal===1&&operation>=.98&&ambiguityPenalty===0&&conflictPenalty===0&&failurePenalty===0?.90:0;
+ const overall=round(Math.max(weighted,pristineFloor));
  const policy=input.mutatesState?(overall>=.90&&entities===1&&goal>=.9&&domain>=.8?"execute":"clarify"):(overall>=.85?"execute":overall>=.75?"verify_or_clarify":"clarify");
  return{domain:round(domain),operation:round(operation),entities:round(entities),context:round(context),goal:round(goal),deterministic:round(deterministic),memory:round(memory),validation:round(validation),ambiguityPenalty:round(ambiguityPenalty),conflictPenalty:round(conflictPenalty),failurePenalty:round(failurePenalty),overall,policy};
 }

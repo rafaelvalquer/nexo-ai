@@ -3,7 +3,7 @@ import {goalContracts} from "./goal-contracts.js";
 export type GoalSatisfaction={status:"satisfied"|"partial"|"unsatisfied"|"unknown";score:number;reason?:string;requiredEffect?:string};
 export class GoalSatisfactionEvaluator{
  evaluate(userText:string,candidate:DecisionCandidate):GoalSatisfaction{
-  const contract=goalContracts[candidate.proposedTool??candidate.operation];
+  const contract=goalContracts[candidate.operation]??goalContracts[candidate.proposedTool??""];
   const info=informationGoal(userText),interaction=interactionGoal(userText),creation=creationGoal(userText),mutation=mutationGoal(userText);
   if(info&&candidate.proposedTool==="browser_open")return{status:"unsatisfied",score:0,reason:"NAVIGATION_DOES_NOT_RETURN_INFORMATION",requiredEffect:"information_returned"};
   if(interaction&&candidate.proposedTool&&!/browser_agent_run|browser_(click|type|download)/.test(candidate.proposedTool))return{status:"unsatisfied",score:.1,reason:"INTERACTION_REQUIRED",requiredEffect:"interaction"};

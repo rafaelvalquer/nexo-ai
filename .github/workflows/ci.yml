@@ -17,6 +17,8 @@ jobs:
       - run: pnpm eval:agent
       - name: Accuracy Context Learning quality gates
         run: pnpm eval:agent:accuracy
+      - name: Refinement V2 1200-case deterministic gate
+        run: pnpm eval:intents:refinement-v2
       - run: pnpm version:check
       - run: pnpm build
 
