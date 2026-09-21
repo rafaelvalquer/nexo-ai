@@ -87,6 +87,7 @@ export class AgentEngine{
           this.recordEmailPreferenceSaved(pendingAttempt.value);
           if(this.emailPreferenceMode(pendingAttempt.value.pending)==="update")return this.emailPreferenceUpdatedReply(pendingAttempt.value,hooks);
         }
+        if(pendingAttempt.value.selectedRoute)return this.executeStructuredSelection(pendingAttempt.value,hooks,context);
         const plan=this.planner.buildIntentPlan(pendingAttempt.value.intent,previous,this.toolCatalog.list());
         const mailboxReply=this.prepareEmailMailboxPlan(pendingAttempt.value.originalRequest,plan,conversationId,hooks);
         if(mailboxReply)return mailboxReply;
@@ -150,10 +151,13 @@ export class AgentEngine{
       this.recordEmailPreferenceSaved(attempt.value);reply=this.emailPreferenceUpdatedReply(attempt.value,capturedHooks);
     }else{
       if(this.isEmailPreferenceClarification(attempt.value.pending))this.recordEmailPreferenceSaved(attempt.value);
+      if(attempt.value.selectedRoute)reply=await this.executeStructuredSelection(attempt.value,capturedHooks,context);
+      else{
       const previous=this.runtime?.getConversationActionContext(existing.conversationId),plan=this.planner.buildIntentPlan(attempt.value.intent,previous,this.toolCatalog.list());
       const mailboxReply=this.prepareEmailMailboxPlan(attempt.value.originalRequest,plan,existing.conversationId,capturedHooks);
       const composeReply=this.prepareEmailComposeReview(plan,existing.conversationId,capturedHooks);
       reply=mailboxReply??composeReply??await this.executePlan(attempt.value.originalRequest,plan,capturedHooks,context);
+      }
     }
     const approval=reply.approvalId?this.approvals.list().find(item=>item.id===reply.approvalId):undefined;
     const presentation=session.finish(reply.text,approval)?.presentation;
@@ -257,6 +261,15 @@ export class AgentEngine{
 
   private async handleCommandRoute(userText:string,route:CommandRoute,hooks:AgentRunHooks,context:LLMMessage[],conversationId?:string):Promise<AgentReply|undefined>{
     if(route.type==="unknown")return undefined;
+    if(route.type==="structured_clarification"){
+      if(!conversationId||!this.clarifications){
+        const text=[route.clarification.question,...route.clarification.options.map((option,index)=>`${index+1}. ${option.label}`)].join("\n");
+        hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando esclarecimento.");
+        return{text,engine:"fast-path"};
+      }
+      const pending=this.clarifications.createStructured(conversationId,route.clarification);
+      return this.clarificationReply(pending,hooks);
+    }
     if(route.type==="clarification"){
       if(!conversationId||!this.clarifications){
         const text=route.intent.question??"Escolha um dos arquivos encontrados para continuar.";
@@ -287,6 +300,14 @@ export class AgentEngine{
       }
     }
     return undefined;
+  }
+
+  private async executeStructuredSelection(value:ClarificationResume,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
+    const route=value.selectedRoute;if(!route)throw new Error("A seleção não possui rota executável.");
+    this.metrics?.record("intent.clarification.selected",1,{option:value.selectedOptionId??"unknown",tool:route.tool});
+    if(route.intent&&typeof (this.planner as any).recordClarificationSelection==="function")(this.planner as any).recordClarificationSelection(value.originalRequest,route.intent);
+    const command:Extract<CommandRoute,{type:"tool"}>={type:"tool",tool:route.tool,input:{...route.input},explanation:route.explanation,approval:route.approval,deferredAction:route.deferredAction,responseMode:route.responseMode,intent:route.intent};
+    return this.executeDeterministicRoute(value.originalRequest,command,hooks,context);
   }
 
   private recordCommandRoute(route:CommandRoute){
