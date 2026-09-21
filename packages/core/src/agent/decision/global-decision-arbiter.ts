@@ -6,7 +6,7 @@ import {HardVetoMatrix} from "./hard-veto-matrix.js";
 import {SemanticCandidateDeduper,type SemanticCandidateGroup} from "./semantic-candidate-deduper.js";
 
 export const MIN_DECISION_MARGIN={READ:.08,MUTATION:.12} as const;
-export type GlobalDecisionResult={selectedCandidate?:DecisionCandidate;selectedGroupId?:string;candidateGroups:SemanticCandidateGroup[];confidence:number;margin:number;rejectedCandidates:Array<{candidate:DecisionCandidate;reason:string}>;clarificationNeeded:boolean;clarificationReason?:string};
+export type GlobalDecisionResult={selectedCandidate?:DecisionCandidate;selectedGroupId?:string;candidateGroups:SemanticCandidateGroup[];rankedGroupIds:string[];confidence:number;margin:number;rejectedCandidates:Array<{candidate:DecisionCandidate;reason:string}>;clarificationNeeded:boolean;clarificationReason?:string};
 
 export class GlobalDecisionArbiter{
  constructor(private readonly veto=new HardVetoMatrix(),private readonly deduper=new SemanticCandidateDeduper()){}
@@ -30,11 +30,12 @@ export class GlobalDecisionArbiter{
    scored.push({group,candidate:{...candidate,confidence:score},score});
   }
   scored.sort((a,b)=>b.score-a.score);const top=scored[0],second=scored[1];
-  if(!top)return{candidateGroups:groups,confidence:0,margin:0,rejectedCandidates:rejected,clarificationNeeded:rejected.length>0,clarificationReason:rejected[0]?.reason};
+  const rankedGroupIds=scored.map(item=>item.group.groupId);
+  if(!top)return{candidateGroups:groups,rankedGroupIds,confidence:0,margin:0,rejectedCandidates:rejected,clarificationNeeded:rejected.length>0,clarificationReason:rejected[0]?.reason};
   const margin=round(top.score-(second?.score??0)),minMargin=top.candidate.mutatesState?MIN_DECISION_MARGIN.MUTATION:MIN_DECISION_MARGIN.READ,minConfidence=top.candidate.mutatesState?.valueOf()?0.90:0.75;
-  if(second&&margin<minMargin)return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:"DECISION_MARGIN_BELOW_THRESHOLD"};
-  if(top.score<minConfidence)return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:top.candidate.mutatesState?"MUTATION_CONFIDENCE_BELOW_THRESHOLD":"READ_CONFIDENCE_BELOW_THRESHOLD"};
-  return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:false};
+  if(second&&margin<minMargin)return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,rankedGroupIds,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:"DECISION_MARGIN_BELOW_THRESHOLD"};
+  if(top.score<minConfidence)return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,rankedGroupIds,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:true,clarificationReason:top.candidate.mutatesState?"MUTATION_CONFIDENCE_BELOW_THRESHOLD":"READ_CONFIDENCE_BELOW_THRESHOLD"};
+  return{selectedCandidate:top.candidate,selectedGroupId:top.group.groupId,candidateGroups:groups,rankedGroupIds,confidence:top.score,margin,rejectedCandidates:rejected,clarificationNeeded:false};
  }
 }
 function deterministicScore(candidate:DecisionCandidate){if(candidate.source==="exact"||candidate.source==="filesystem")return 1;if(candidate.source==="web")return .85;if(candidate.source==="hybrid")return .65;if(candidate.source==="planner")return .5;if(candidate.source==="intent_memory")return .2;return .35;}
