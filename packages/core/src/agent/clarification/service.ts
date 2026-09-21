@@ -5,6 +5,7 @@ import { buildClarificationQuestion,buildEmailMailboxQuestion } from "./option-b
 import { ClarificationRepository } from "./repository.js";
 import { ClarificationResolver,type ClarificationAnswer } from "./resolver.js";
 import type { ClarificationAttempt,ClarificationResume,PendingClarification } from "./types.js";
+import type {StructuredClarification} from "./clarification-types.js";
 import type { EmailMailboxPreferenceCategory } from "../../email/preferences/types.js";
 import { normalizeRecipients } from "../../email/compose/normalizer.js";
 import type {LocalMetricsService} from "../../observability/metrics.js";
@@ -42,6 +43,20 @@ export class ClarificationService {
     return this.repository.save(record);
   }
 
+
+  createStructured(conversationId:string,clarification:StructuredClarification){
+    const createdAt=new Date().toISOString();
+    const snapshot:AgentIntent={schemaVersion:1,status:"needs_clarification",domain:"general",intent:"read",operation:"structured_clarification",entities:{},referencesPreviousResult:false,requiresDataLookup:false,requiresConfirmation:false,confidence:1,missing:["__structuredOption"],question:clarification.question};
+    const record:PendingClarification={
+      id:clarification.id,conversationId,domain:"general",intent:"read",operation:"structured_clarification",originalRequest:clarification.originalRequest,
+      partialEntities:{__structuredClarification:clarification},
+      questions:[{id:"__structuredOption",field:"__structuredOption",prompt:clarification.question,type:"single_choice",options:clarification.options.map(option=>({id:option.id,label:option.label,value:option.id,description:option.description,icon:option.metadata?.icon,metadata:option.metadata?{path:option.metadata.path,size:option.metadata.size,modifiedAt:option.metadata.modifiedAt}:undefined})),allowCustomValue:clarification.allowFreeText,required:true,submitLabel:"Selecionar"}],
+      status:"pending",createdAt,expiresAt:clarification.expiresAt,intentSnapshot:snapshot,values:{}
+    };
+    this.metrics?.record("intent.clarification.created",1,{field:"structured",type:clarification.type});
+    return this.repository.save(record);
+  }
+
   pending(conversationId: string) {return this.repository.pendingForConversation(conversationId);}
   get(id: string) {return this.repository.get(id);}
 
@@ -69,6 +84,17 @@ export class ClarificationService {
     if (!answer.resolved) {const questions = pending.questions.map((item) => item.id === question.id && answer.suggestedOptionId ? { ...item, suggestedOptionId: answer.suggestedOptionId } : item);const updated = this.repository.update({ ...pending, questions });return { kind: "pending", pending: updated, message: answer.message };}
 
     const values = { ...pending.values, [question.field]: answer.value };
+    if(question.field==="__structuredOption"){
+      const structured=pending.partialEntities.__structuredClarification as StructuredClarification|undefined;
+      const selected=structured?.options.find(option=>option.id===answer.value);
+      if(!structured||!selected)return{kind:"pending",pending,message:"Essa opção não está mais disponível."};
+      const resolvedAt=new Date().toISOString();
+      const resolved=this.repository.update({...pending,values,status:"resolved",resolvedAt});
+      this.metrics?.record("intent.clarification.selected",1,{type:structured.type,option:selected.id});
+      const resolution:ClarificationResolution={clarificationId:pending.id,values,source:answer.source,status:"resolved"};
+      const value:ClarificationResume={pending:resolved,intent:pending.intentSnapshot,originalRequest:pending.originalRequest,resolution,selectedRoute:selected.route,selectedOptionId:selected.id};
+      return{kind:"resolved",value};
+    }
     const entityPatch = this.entityPatch(question.field, answer.value);
     const entities = { ...pending.partialEntities, ...entityPatch };
     const remaining = (pending.intentSnapshot.missing ?? []).filter((field) => field !== question.field && values[field] === undefined);
