@@ -300,7 +300,7 @@ export class CommandService {
     const namedOpen=namedFileOpenRequest(text);
     if(namedOpen){
       const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"open_file",entities:{file:namedOpen},decisionSource:"filesystem"});
-      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation,deferredAction:plan.deferredAction});
+      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation},undefined,plan.deferredAction);
     }
     const unsupportedSpreadsheet = this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if (unsupportedSpreadsheet) return { type: "chat", response: unsupportedSpreadsheet };
@@ -418,7 +418,7 @@ export class CommandService {
     const namedOpen=namedFileOpenRequest(text);
     if(namedOpen){
       const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"open_file",entities:{file:namedOpen},decisionSource:"filesystem"});
-      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation,deferredAction:plan.deferredAction});
+      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation},undefined,plan.deferredAction);
     }
     const unsupportedSpreadsheet=this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if(unsupportedSpreadsheet)return{type:"chat",response:unsupportedSpreadsheet};
@@ -500,7 +500,7 @@ export class CommandService {
 }
 
 function previousFileAtRequestedPosition(text:string,files:ActionContextFile[]){
-  if(files.length<2||!/\b(?:arquivos?|deles|delas|anteriores?|resultados?|lista)\b/i.test(text))return undefined;
+  if(files.length<2||!/\b(?:arquivos?|deles|delas|anteriores?|resultados?|lista|abra|abrir|analise|analisar|leia|ler|resuma|resumir)\b/i.test(text))return undefined;
   const ordinal=text.match(/\b(primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa])\b|\b(\d+)(?:[ºª])\b/i);
   if(!ordinal)return undefined;
   const word=ordinal[1]?.toLowerCase();
