@@ -31,25 +31,28 @@ export class WebIntentResolver{
 }
 
 export function mayBeWebRequest(text:string){
-  return /https?:\/\/|\bwww\.|\b(site|internet|web|p[aá]gina|navegador|github|g1|uol|infomoney|techcrunch|cnn|react|microsoft|google|linkedin|instagram|youtube)\b|\.[a-z]{2,}\b/i.test(text)
+  return /https?:\/\/|\bwww\.|\b(site|internet|web|p[aá]gina|navegador|github|g1|uol|infomoney|techcrunch|cnn|react|microsoft|google|linkedin|instagram|youtube)\b|\b(?:[a-z0-9-]+\.)+(?:com\.br|com|org|net|io|dev|ai|br)\b/i.test(text)
     || /\b(acesse|acessar|abra|abrir|entre|pesquise|pesquisar|procure|buscar|consulte|not[ií]cias?|manchetes?)\b/i.test(text)&&/\b(no|na|do|da)\b/i.test(text);
 }
 
 export function deterministicWebIntent(text:string):CanonicalWebIntent|undefined{
   if(!mayBeWebRequest(text))return undefined;
   const url=explicitUrl(text),domain=explicitDomain(text),sourceName=extractSourceName(text,domain,url);
+  const googleSearch=/\b(?:pesquise|pesquisar|procure|buscar?)\s+(?:no|na)\s+google\s+(?:por\s+)?(.+)/i.exec(text);
+  const searchProvider=googleSearch?"google" as const:undefined;
   const interaction=hasInteractionGoal(text),information=hasInformationGoal(text);
   const navigate=/\b(acesse|acessar|abra|abrir|entre|entrar|navegue)\b/i.test(text);
   const explicitFetch=Boolean(url)&&/\b(?:leia|ler|resum(?:a|ir|e)?|explique|extraia|conte[uú]do|analise)\b/i.test(text);
   let operation:CanonicalWebIntent["operation"]="unknown";
   if(interaction||requiresPersonalSession(text))operation="interact";
+  else if(searchProvider)operation="search";
   else if(explicitFetch)operation="fetch";
   else if(information)operation="research";
   else if(navigate&&(url||domain||sourceName||/\bnavegador\b/i.test(text)))operation="navigate";
   if(operation==="unknown")return undefined;
-  const query=operation==="research"?extractResearchQuery(text,sourceName,domain,url):undefined;
+  const query=operation==="research"?extractResearchQuery(text,sourceName,domain,url):operation==="search"?(googleSearch?.[1]?.trim()||extractResearchQuery(text,undefined,undefined,undefined)):undefined;
   const requestedAction=operation==="interact"?text.trim():undefined;
-  return{schemaVersion:1,domain:"web",operation,entities:{...(sourceName?{sourceName}:{}),...(domain?{domain}:{}),...(url?{url}:{}),...(query?{query}:{}),...(requestedAction?{requestedAction}:{})},requiresInformation:operation==="research"||operation==="fetch",requiresInteraction:operation==="interact",confidence:.92,ambiguities:[],missing:operation==="research"&&!query?["query"]:[]};
+  return{schemaVersion:1,domain:"web",operation,entities:{...(searchProvider?{searchProvider}:{}),...(!searchProvider&&sourceName?{sourceName}:{}),...(domain?{domain}:{}),...(url?{url}:{}),...(query?{query}:{}),...(requestedAction?{requestedAction}:{})},requiresInformation:operation==="research"||operation==="fetch",requiresInteraction:operation==="interact",confidence:.92,ambiguities:[],missing:operation==="research"&&!query?["query"]:[]};
 }
 
 function explicitUrl(text:string){return text.match(/https?:\/\/[^\s<>"\x27)]+/i)?.[0];}
