@@ -281,6 +281,19 @@ export class AgentEngine{
       const pending=this.clarifications.create(conversationId,userText,route.intent);
       return this.clarificationReply(pending,hooks);
     }
+    if(route.type==="canonical_plan"){
+      this.metrics?.record("agent.route",1,{route:"canonical-plan"});
+      const canonical=route.plan;
+      const plan:Plan={
+        origin:"fast",
+        steps:canonical.steps.map(step=>({tool:step.tool,input:step.input,explanation:step.explanation,approval:step.approval})),
+        direct:canonical.direct,directStream:canonical.directStream,deferredAction:canonical.deferredAction,responseMode:canonical.responseMode,emailDraft:canonical.emailDraft
+      };
+      const compose=this.prepareEmailComposeReview(plan,conversationId,hooks);if(compose)return compose;
+      if(plan.directStream){hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);return{text:streamed,engine:"fast-path"};}
+      if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);return{text:plan.direct,engine:"fast-path"};}
+      return this.executePlan(userText,plan,hooks,context);
+    }
     if(route.type==="tool"||route.type==="macro"){
       this.metrics?.record("agent.route",1,{route:"command"});
       return this.executeDeterministicRoute(userText,route,hooks,context);
@@ -335,6 +348,7 @@ export class AgentEngine{
     this.metrics?.record("agent.command_route.source",1,{source});
     this.metrics?.record("agent.command_route.type",1,{type:route.type,source});
     if(route.type==="tool")this.metrics?.record("agent.command_route.tool",1,{tool:route.tool,source});
+    if(route.type==="canonical_plan"&&route.plan.steps[0])this.metrics?.record("agent.command_route.tool",1,{tool:route.plan.steps[0].tool,source});
   }
 
   private async executeDeterministicRoute(userText:string,route:Extract<CommandRoute,{type:"tool"|"macro"}>,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
