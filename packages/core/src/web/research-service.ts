@@ -1,7 +1,7 @@
 import {extractArticleCandidates} from "./article-extractor.js";
 import {WebReaderService} from "./reader-service.js";
 import {WebSourceResolver} from "./source-resolver.js";
-import type {WebArticleCandidate,WebResearchInput,WebResearchResult} from "./types.js";
+import type {WebArticleCandidate,WebFailureStage,WebResearchInput,WebResearchResult} from "./types.js";
 
 type Metric=(name:string,value:number,tags?:Record<string,string|number|boolean>)=>void;
 const MAX_SEARCH_RESULTS=8,MAX_FETCHED_SOURCES=5,MAX_CHARS_PER_SOURCE=5_000,MAX_TOTAL_CHARS=25_000;
@@ -12,10 +12,12 @@ export class WebResearchService{
   async research(input:WebResearchInput,signal?:AbortSignal):Promise<WebResearchResult>{
     const started=Date.now();this.metric?.("web.research.started",1);
     const maxSources=Math.min(Math.max(input.maxSources??MAX_FETCHED_SOURCES,1),MAX_FETCHED_SOURCES);
-    const source=await this.sourceResolver.resolve(input,signal);
     const query=input.query.trim();
+    let source;
+    try{source=await this.sourceResolver.resolve(input,signal);}
+    catch(error){this.metric?.("web.source.resolve_failed",1);return{query,articles:[],failedSources:[{url:input.url??input.domain??input.sourceName??"source",error:message(error),stage:"SOURCE_RESOLUTION"}],partial:true,untrustedExternalContent:true};}
     const candidates:WebArticleCandidate[]=[];
-    const failedSources:Array<{url:string;error:string}>=[];
+    const failedSources:Array<{url:string;error:string;stage:WebFailureStage}>=[];
 
     if(input.url)candidates.push({title:"",url:input.url,searchRank:0});
     else{
@@ -24,12 +26,15 @@ export class WebResearchService{
         try{
           const home=await this.reader.fetchHtml(source.url,signal);
           candidates.push(...extractArticleCandidates(home.html,home.url).slice(0,20));
-        }catch(error){failedSources.push({url:source.url,error:message(error)});}
+        }catch(error){const stage=failureStage(error);failedSources.push({url:source.url,error:message(error),stage});this.metric?.(failureMetric(stage,error),1);}
         this.metric?.("web.research.fetch_duration_ms",Date.now()-homeStarted,{phase:"homepage"});
       }
       const searchStarted=Date.now(),searchQuery=source?.domain?`site:${source.domain} ${query}`:query;
-      const search=await this.reader.search(searchQuery,MAX_SEARCH_RESULTS,signal);
+      let search;
+      try{search=await this.reader.search(searchQuery,MAX_SEARCH_RESULTS,signal);}
+      catch(error){failedSources.push({url:searchQuery,error:message(error),stage:"SEARCH"});this.metric?.("web.search.zero_results",1);return{query,source:source?{name:source.name,domain:source.domain,url:source.url}:undefined,articles:[],failedSources,partial:true,untrustedExternalContent:true};}
       this.metric?.("web.research.search_duration_ms",Date.now()-searchStarted);
+      if(!search.results.length)this.metric?.("web.search.zero_results",1);
       search.results.forEach((item,index)=>{
         if(source?.domain&&!sameDomain(item.url,source.domain))return;
         candidates.push({title:item.title,url:item.url,snippet:item.snippet,searchRank:index});
@@ -48,7 +53,7 @@ export class WebResearchService{
         if(!doc.text.trim())continue;
         totalChars+=doc.text.length;
         articles.push({title:doc.title||candidate.title||candidate.url,url:doc.url,snippet:candidate.snippet??doc.text.slice(0,280),text:doc.text,publishedAt:candidate.publishedAt,source:source?.name??source?.domain});
-      }catch(error){failedSources.push({url:candidate.url,error:message(error)});}
+      }catch(error){const stage=failureStage(error);failedSources.push({url:candidate.url,error:message(error),stage});this.metric?.(failureMetric(stage,error),1);}
     }
     this.metric?.("web.research.fetch_duration_ms",Date.now()-fetchStarted,{phase:"articles"});
     this.metric?.("web.research.sources_fetched",articles.length);
@@ -66,3 +71,6 @@ function rankCandidates(items:WebArticleCandidate[],query:string){const terms=fo
 function recencyScore(value?:string){if(!value)return 0;const time=Date.parse(value);if(!Number.isFinite(time))return 0;const days=(Date.now()-time)/86_400_000;return days<=1?15:days<=7?10:days<=30?5:0;}
 function fold(value:string){return value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();}
 function message(error:unknown){return error instanceof Error?error.message:String(error);}
+
+function failureStage(error:unknown):WebFailureStage{const value=message(error);if(/redirecion/i.test(value))return"REDIRECT";if(/conte[uú]do|content[- ]type|HTML|texto simples/i.test(value))return"CONTENT_TYPE";if(/privado|reservado|porta|HTTP\/HTTPS públicas|bloquead/i.test(value))return"SECURITY";if(/extra[cç]|vazio|empty/i.test(value))return"EXTRACTION";return"FETCH";}
+function failureMetric(stage:WebFailureStage,error:unknown){const value=message(error);if(stage==="FETCH"&&/HTTP\s*403/i.test(value))return"web.fetch.http_403";if(stage==="FETCH"&&/tempo limite|timeout/i.test(value))return"web.fetch.timeout";if(stage==="CONTENT_TYPE")return"web.fetch.invalid_content_type";if(stage==="EXTRACTION")return"web.extract.empty";if(stage==="SOURCE_RESOLUTION")return"web.source.resolve_failed";return"web.research.no_readable_sources";}
