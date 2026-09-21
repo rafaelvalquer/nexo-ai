@@ -7,13 +7,19 @@ export type CanonicalActionStep={
   approval?:ApprovalPlanMetadata;
 };
 
+export type CanonicalEmailDraft={to:string[];subject:string;bodyText:string;connectionId?:string};
+
 export type CanonicalActionPlan={
   id:string;
-  domain:"filesystem"|"web"|"browser"|"email"|"calendar"|"documents"|"system";
+  domain:"filesystem"|"web"|"browser"|"email"|"calendar"|"documents"|"system"|"memory";
   operation:string;
   entities:Record<string,unknown>;
   steps:CanonicalActionStep[];
   deferredAction?:DeferredAction;
+  direct?:string;
+  directStream?:boolean;
+  responseMode?:"synthesize"|"deterministic"|"presentation";
+  emailDraft?:CanonicalEmailDraft;
   requiresApproval:boolean;
   expectedEffect:string;
   source:{
