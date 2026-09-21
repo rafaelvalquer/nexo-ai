@@ -1,4 +1,4 @@
-import type {ApprovalPlanMetadata,DeferredAction} from "../orchestrator/intent-schema.js";
+import type {AgentIntent,ApprovalPlanMetadata,DeferredAction} from "../orchestrator/intent-schema.js";
 
 export type ClarificationType=
   |"DOMAIN_AMBIGUITY"
@@ -14,6 +14,7 @@ export type StructuredExecutableRoute={
   approval?:ApprovalPlanMetadata;
   deferredAction?:DeferredAction;
   responseMode?:"synthesize"|"deterministic"|"presentation";
+  intent?:AgentIntent;
 };
 
 export type ClarificationOption={
