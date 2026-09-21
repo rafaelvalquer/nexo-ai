@@ -55,7 +55,7 @@ export function ClarificationBlock({ block, conversationId }: {block: Clarificat
       ? <input className="clarificationTextInput" type="email" value={customValue} placeholder={question.customPlaceholder} disabled={busy} onChange={event=>changeCustom(event.target.value)} onKeyDown={event=>{if(event.key==="Enter"&&canSubmit){event.preventDefault();void submit();}}}/>
       : <CustomChoiceInput value={customValue} placeholder={question.customPlaceholder} disabled={busy} onChange={changeCustom}/>;
 
-  return <section className="clarificationBlock" aria-label="Esclarecimento necessário">
+  return <section className="clarificationBlock" aria-label="Esclarecimento necessário" aria-busy={busy}>
     <h3>{block.title}</h3>
     {pending ? <div className="clarificationQuestion">
       <p className="clarificationPrompt">{question.prompt}</p>
@@ -63,7 +63,7 @@ export function ClarificationBlock({ block, conversationId }: {block: Clarificat
         ? <MultiChoiceQuestion question={question} selectedIds={selectedIds} disabled={busy} onChange={changeMultiple}/>
         : question.options?.length
           ? question.field==="__structuredOption"
-            ? <ClarificationCard question={question.prompt} options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>
+            ? <ClarificationCard options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>
             : <ChoiceGroup options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>
           : null}
       {question.type !== "multi_choice" && question.allowCustomValue
@@ -73,11 +73,12 @@ export function ClarificationBlock({ block, conversationId }: {block: Clarificat
         : null}
       {question.helperText?<p className="clarificationHelper">{question.helperText}</p>:null}
       <ClarificationActions busy={busy} canSubmit={canSubmit} submitLabel={question.submitLabel} onCancel={() => void cancel()} onSubmit={() => void submit()} />
-    </div> : block.state === "submitted" ? <div className="clarificationSubmitted">
-      <p className="clarificationResolved">{question.field==="__structuredOption"?"✓ Opção selecionada":"✓ Configuração salva"}</p>
-      {question.type === "multi_choice"?<MultiChoiceQuestion question={question} selectedIds={resolvedIds} disabled onChange={() => undefined}/>:<p className="clarificationResolvedValue">{formatValue(resolved)}</p>}
+    </div> : block.state === "submitted" ? <div className="clarificationSubmitted" aria-live="polite">
+      <p className="clarificationResolved">{question.field==="__structuredOption"&&block.selectedOptionLabel?`✓ ${block.selectedOptionLabel}`:"✓ Configuração salva"}</p>
+      {question.field==="__structuredOption"?null:question.type === "multi_choice"?<MultiChoiceQuestion question={question} selectedIds={resolvedIds} disabled onChange={() => undefined}/>:<p className="clarificationResolvedValue">{formatValue(resolved)}</p>}
     </div> : <p className="clarificationCancelled">{block.state === "expired" ? "Pergunta expirada." : "Pergunta cancelada."}</p>}
-    {error ? <p className="clarificationError" role="alert">{error}</p> : null}
+    {busy?<p className="clarificationHelper" aria-live="polite">Resolvendo seleção…</p>:null}
+    {error ? <p className="clarificationError" role="alert" aria-live="assertive">{error}</p> : null}
   </section>;
 }
 
