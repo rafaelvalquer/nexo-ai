@@ -41,6 +41,11 @@ export type DeferredAction =
       fileName: string;
       content: string;
       root?: string;
+    }
+  | {
+      kind: "filesystem.open";
+      fileName: string;
+      root?: string;
     };
 
 export type OrchestrationContext = {
