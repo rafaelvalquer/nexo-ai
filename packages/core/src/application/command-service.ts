@@ -31,10 +31,8 @@ import {DomainEvidenceBuilder,type DomainEvidenceSnapshot} from "../intent/domai
 import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.js";
 import type {DecisionCandidate} from "../agent/decision/types.js";
 import {intentFeatureFlags} from "../intent/feature-flags.js";
-import {semanticActionKey} from "../agent/decision/semantic-candidate-deduper.js";
 import {stableCandidateId} from "../agent/decision/semantic-action-identity.js";
 import {createStructuredClarification} from "../agent/clarification/structured-clarification.js";
-import type {ClarificationOption} from "../agent/clarification/clarification-types.js";
 import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
 import type {CanonicalIntentDecision} from "../agent/action-planning/canonical-intent-decision.js";
 import type {CanonicalActionPlan} from "../agent/action-planning/canonical-action-plan.js";
@@ -742,34 +740,9 @@ function domainEvidenceConfidenceForCandidate(evidence:DomainEvidenceSnapshot,ca
   return evidence.items.find(item=>(item.domain==="browser"?"web":item.domain)===domain)?.score??0;
 }
 function decisionKey(candidate:DecisionCandidate){return`${candidate.source}:${candidate.proposedTool??candidate.operation}`;}
-function sameDecision(left:DecisionCandidate,right:DecisionCandidate){
-  return left.source===right.source&&(left.proposedTool??left.operation)===(right.proposedTool??right.operation)&&left.operation===right.operation&&JSON.stringify(left.entities)===JSON.stringify(right.entities);
-}
 function namedFileOpenRequest(text:string){
   const match=text.match(/^\s*(?:abra|abrir|abre|open)\s+(?:(?:esse|este|o|um)\s+)?(?:arquivo\s+)?["“']?([^"”'\s]+\.[a-z0-9]{1,12})["”']?(?:\s+(?:em|no|na|nos|nas|dentro\s+(?:de|do|da|dos|das))\s+.+)?\s*[.!?]*$/iu);
   return match?.[1]?.trim();
-}
-function candidateLabel(candidate:DecisionCandidate){
-  if(candidate.proposedTool==="find_file")return"Procurar arquivo no computador";
-  if(candidate.proposedTool==="web_search"||candidate.proposedTool==="web_research")return"Pesquisar na internet";
-  if(candidate.proposedTool==="browser_agent_run")return"Interagir no navegador";
-  if(candidate.proposedTool==="create_text_file")return"Criar arquivo";
-  if(candidate.proposedTool==="create_folder")return"Criar pasta";
-  return humanOperation(candidate.operation);
-}
-function candidateDescription(candidate:DecisionCandidate){
-  if(candidate.domain==="filesystem")return"Usar as pastas autorizadas deste computador";
-  if(candidate.domain==="web")return"Buscar informações em fontes públicas online";
-  if(candidate.domain==="browser")return"Executar a interação no navegador";
-  return undefined;
-}
-function candidateChoiceQuestion(first:DecisionCandidate,second:DecisionCandidate){
-  const a=humanOperation(first.operation),b=humanOperation(second.operation);
-  return `O pedido pode significar “${a}” ou “${b}”. Qual dessas ações você quer executar?`;
-}
-function humanOperation(operation:string){
-  const names:Record<string,string>={write_text_file:"alterar o conteúdo do arquivo",create_text_file:"criar um arquivo",create_folder:"criar uma pasta",find_file:"procurar um arquivo",search_files:"pesquisar arquivos",web_research:"pesquisar informações na web",browser_open:"abrir uma página",email_send:"enviar um e-mail",calendar_create:"agendar um compromisso"};
-  return names[operation]??operation.replace(/_/g," ");
 }
 
 function structuredDomains(evidence:DomainEvidenceSnapshot|undefined,expectedDomain?:string){
