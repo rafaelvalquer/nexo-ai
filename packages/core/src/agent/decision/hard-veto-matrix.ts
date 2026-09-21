@@ -2,10 +2,10 @@ import type {DomainEvidenceSnapshot} from "../../intent/domain/domain-evidence-b
 import type {DecisionCandidate} from "./types.js";
 export type HardVetoDecision={veto:boolean;reason?:string};
 export class HardVetoMatrix{
- evaluate(userText:string,candidate:DecisionCandidate,evidence:DomainEvidenceSnapshot):HardVetoDecision{
+ evaluate(userText:string,candidate:DecisionCandidate,evidence:DomainEvidenceSnapshot,options:{webFilenameVetoEnabled?:boolean}={}):HardVetoDecision{
   const tool=candidate.proposedTool??candidate.operation,folded=fold(userText);
   if(evidence.strongFilesystem&&!evidence.explicitWeb&&(candidate.domain==="web"||candidate.domain==="browser"))return{veto:true,reason:"FILESYSTEM_EVIDENCE_VETO_WEB"};
-  if(evidence.explicitFilenameWithoutWebSignal&&(candidate.domain==="web"||candidate.domain==="browser"))return{veto:true,reason:"EXPLICIT_FILENAME_WITHOUT_WEB_SIGNAL"};
+  if(options.webFilenameVetoEnabled!==false&&evidence.explicitFilenameWithoutWebSignal&&(candidate.domain==="web"||candidate.domain==="browser"))return{veto:true,reason:"EXPLICIT_FILENAME_WITHOUT_WEB_SIGNAL"};
   if(/\b(envie|enviar|responda|responder)\b.*\be-?mail\b/.test(folded)&&candidate.domain==="filesystem")return{veto:true,reason:"EMAIL_GOAL_VETO_FILESYSTEM"};
   if(/\b(agende|agendar|marque|marcar|reuniao|compromisso)\b/.test(folded)&&(candidate.domain==="web"||candidate.domain==="browser"))return{veto:true,reason:"CALENDAR_GOAL_VETO_WEB"};
   if(/\b(clique|preencha|login|entrar na conta)\b/.test(folded)&&tool==="web_research")return{veto:true,reason:"INTERACTION_VETO_BACKGROUND_RESEARCH"};
