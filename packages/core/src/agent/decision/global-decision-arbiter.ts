@@ -3,15 +3,16 @@ import {evaluateDecisionConfidence} from "../../intent/confidence-evaluator.js";
 import type {ContextEvidence,DecisionCandidate} from "./types.js";
 import type {GoalSatisfaction} from "./goal-satisfaction.js";
 import {HardVetoMatrix} from "./hard-veto-matrix.js";
+import {SemanticCandidateDeduper} from "./semantic-candidate-deduper.js";
 
 export const MIN_DECISION_MARGIN={READ:.08,MUTATION:.12} as const;
 export type GlobalDecisionResult={selectedCandidate?:DecisionCandidate;confidence:number;margin:number;rejectedCandidates:Array<{candidate:DecisionCandidate;reason:string}>;clarificationNeeded:boolean;clarificationReason?:string};
 
 export class GlobalDecisionArbiter{
- constructor(private readonly veto=new HardVetoMatrix()){}
+ constructor(private readonly veto=new HardVetoMatrix(),private readonly deduper=new SemanticCandidateDeduper()){}
  decide(input:{userText:string;candidates:DecisionCandidate[];supportingCandidates?:DecisionCandidate[];domainEvidence:DomainEvidenceSnapshot;expectedDomain?:string;context?:ContextEvidence[];goalByKey?:Map<string,GoalSatisfaction>;failurePenaltyByKey?:Map<string,number>;hardVetoEnabled?:boolean}):GlobalDecisionResult{
   const rejected:GlobalDecisionResult["rejectedCandidates"]=[],scored:Array<{candidate:DecisionCandidate;score:number}>=[];
-  for(const candidate of dedupe(input.candidates)){
+  for(const candidate of this.deduper.dedupe(input.candidates)){
    const veto=input.hardVetoEnabled===false?{veto:false}:this.veto.evaluate(input.userText,candidate,input.domainEvidence);
    if(veto.veto){rejected.push({candidate,reason:veto.reason??"HARD_VETO"});continue;}
    const goal=input.goalByKey?.get(key(candidate))??{status:"unknown",score:.7} as GoalSatisfaction;
@@ -37,19 +38,6 @@ export class GlobalDecisionArbiter{
 function deterministicScore(candidate:DecisionCandidate){if(candidate.source==="exact"||candidate.source==="filesystem")return 1;if(candidate.source==="web")return .85;if(candidate.source==="hybrid")return .65;if(candidate.source==="planner")return .5;if(candidate.source==="intent_memory")return .2;return .35;}
 function contextConfidence(context?:ContextEvidence[]){if(!context?.length)return 1;return context.reduce((sum,item)=>sum+item.confidence,0)/context.length;}
 function key(candidate:DecisionCandidate){return`${candidate.source}:${candidate.proposedTool??candidate.operation}`;}
-function dedupe(candidates:DecisionCandidate[]){
- const merged=new Map<string,DecisionCandidate>();
- for(const candidate of candidates){
-  const id=`${candidate.domain}:${candidate.operation}:${candidate.proposedTool??candidate.operation}:${stableEntities(candidate.entities)}`;
-  const current=merged.get(id);
-  if(!current){merged.set(id,{...candidate,evidence:[...candidate.evidence]});continue;}
-  const preferred=sourceRank(candidate.source)>sourceRank(current.source)?candidate:current;
-  merged.set(id,{...preferred,confidence:Math.max(current.confidence,candidate.confidence),missing:[...new Set([...current.missing,...candidate.missing])],ambiguities:[...new Set([...current.ambiguities,...candidate.ambiguities])],evidence:[...new Set([...current.evidence,...candidate.evidence,`also:${current.source}`,`also:${candidate.source}`])]});
- }
- return[...merged.values()];
-}
-function sourceRank(source:DecisionCandidate["source"]){return source==="exact"?7:source==="filesystem"?6:source==="hybrid"?5:source==="web"?4:source==="planner"?3:source==="intent_memory"?2:1;}
-function stableEntities(entities:Record<string,unknown>){return JSON.stringify(Object.fromEntries(Object.entries(entities).sort(([a],[b])=>a.localeCompare(b))));}
 function round(value:number){return Math.round(value*1000)/1000;}
 
 function verifiedMemoryScore(candidate:DecisionCandidate,supporting?:DecisionCandidate[]){
