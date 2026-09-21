@@ -11,6 +11,7 @@ export function materializeDeferredAction(action: DeferredAction, result: ToolRe
   if (action.kind === "calendar.delete") return materializeCalendarDelete(action, result.data);
   if (action.kind === "calendar.update") return materializeCalendarUpdate(action, result.data);
   if (action.kind === "filesystem.write_text") return materializeFilesystemWrite(action, result.data);
+  if (action.kind === "filesystem.open") return materializeFilesystemOpen(action, result.data);
   return materializeFilesystemTrash(action, result.data);
 }
 
@@ -104,6 +105,17 @@ function materializeFilesystemWrite(action:Extract<DeferredAction,{kind:"filesys
       expiresInMs:5*60_000
     }
   }};
+}
+
+function materializeFilesystemOpen(action:Extract<DeferredAction,{kind:"filesystem.open"}>,data:unknown):MaterializedAction{
+  const matches=Array.isArray((data as any)?.matches)?(data as any).matches.filter((item:any)=>item&&typeof item.path==="string"):[];
+  if(!matches.length)return{direct:`Não encontrei ${action.fileName} nas pastas autorizadas.`};
+  if(matches.length>1){
+    const list=matches.slice(0,10).map((item:any,index:number)=>`${index+1}. ${item.path}`).join("\n");
+    return{direct:`Encontrei ${matches.length} arquivos chamados ${action.fileName}. Escolha um deles para abrir:\n${list}`};
+  }
+  const target=String(matches[0].path);
+  return{step:{tool:"open_path",input:{path:target},explanation:`Abrindo ${path.basename(target)}…`}};
 }
 
 function materializeFilesystemTrash(action: Extract<DeferredAction, { kind: "filesystem.trash" }>, data: unknown): MaterializedAction {
