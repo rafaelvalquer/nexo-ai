@@ -121,6 +121,7 @@ export class CommandService {
   private readonly conversationTurns=new Map<string,number>();
   private readonly contextObservedAt=new Map<string,{updatedAt:string;turn:number}>();
   private readonly contextSnapshotBuilder=new ContextSnapshotBuilder();
+  private readonly localContextResolver=new ContextResolver();
   private readonly refinementFlags=intentFeatureFlags();
 
   constructor(private readonly registry: ToolRegistry, private readonly allowedRoots: () => string[] = () => [], private readonly hybrid?: HybridCommandOptions, private readonly web?:WebCommandOptions,private readonly accuracy?:AccuracyCommandOptions) {}
@@ -155,6 +156,15 @@ export class CommandService {
     const safety=this.safetyGuard.evaluate(normalized);
     diagnostics.safety={status:safety.status,reason:safety.terminal?safety.reason:undefined};
     if(safety.terminal){this.hybrid?.metrics?.record(safety.status==="negated"?"intent.safety.negated":safety.status==="informational"?"intent.safety.informational":"intent.safety.traversal",1);return finish(safety.status==="informational"?{type:"chat",stream:true}:{type:"chat",response:safety.response},"safety");}
+
+    if(this.refinementFlags.ordinalContextExecutionEnabled){
+      const ordinalDecision=this.ordinalContextDecision(text,previous);
+      if(ordinalDecision){
+        this.hybrid?.metrics?.record("intent.context.ordinal_resolved",1,{operation:ordinalDecision.operation});
+        return finish(this.routeCanonicalDecision(ordinalDecision,previous,text),"ordinal-context");
+      }
+      if(hasOrdinalReference(text))this.hybrid?.metrics?.record("intent.context.ordinal_failed",1);
+    }
 
     if(trace)for(const item of domainEvidence.items){const base={source:"exact" as const,domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence};trace.domainCandidates.push({candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base});}
     if(this.refinementFlags.contextSnapshotV2Enabled&&this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
@@ -316,6 +326,17 @@ export class CommandService {
     return{type:"structured_clarification",clarification};
   }
 
+  private ordinalContextDecision(text:string,previous?:ConversationActionContextState):CanonicalIntentDecision|undefined{
+    const file=this.localContextResolver.resolveFileOrdinal(text,previous?.files??[]);
+    if(!file)return undefined;
+    let domain:CanonicalIntentDecision["domain"]="filesystem",operation="file_info",entities:Record<string,unknown>={path:file.path};
+    if(/\b(?:abra|abrir|abre|open)\b/i.test(text))operation="open_file";
+    else if(/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text)){domain="documents";operation="document_summarize";entities={path:file.path,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."};}
+    else return undefined;
+    const base={source:"exact" as const,domain,operation,entities,missing:[],ambiguities:[],confidence:1,proposedTool:operation==="open_file"?"open_path":operation,mutatesState:false,evidence:["context:ordinal"]};
+    return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),domain,operation,entities,confidence:1,source:"exact",evidence:["context:ordinal"]};
+  }
+
   private nextConversationTurn(conversationId?:string){
     if(!conversationId)return 1;const next=(this.conversationTurns.get(conversationId)??0)+1;this.conversationTurns.set(conversationId,next);return next;
   }
@@ -335,7 +356,7 @@ export class CommandService {
     }
     const unsupportedSpreadsheet = this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if (unsupportedSpreadsheet) return { type: "chat", response: unsupportedSpreadsheet };
-    const indexedFile=previousFileAtRequestedPosition(text,previous?.files??[]);
+    const indexedFile=this.localContextResolver.resolveFileOrdinal(text,previous?.files??[]);
     if(indexedFile){
       if(/\b(?:abra|abrir|abre|open)\b/i.test(text))return this.fromToolStep({tool:"open_path",input:{path:indexedFile.path},explanation:`Abrindo ${indexedFile.name} da lista anterior…`});
       if(/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text))return this.fromToolStep({tool:"document_summarize",input:{path:indexedFile.path,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},explanation:`Analisando ${indexedFile.name} da lista anterior…`});
@@ -461,7 +482,7 @@ export class CommandService {
     }
     const unsupportedSpreadsheet=this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if(unsupportedSpreadsheet)return{type:"chat",response:unsupportedSpreadsheet};
-    const indexedFile=previousFileAtRequestedPosition(text,previous?.files??[]);
+    const indexedFile=this.localContextResolver.resolveFileOrdinal(text,previous?.files??[]);
     if(indexedFile){
       if(/\b(?:abra|abrir|abre|open)\b/i.test(text))return this.fromToolStep({tool:"open_path",input:{path:indexedFile.path},explanation:`Abrindo ${indexedFile.name} da lista anterior…`});
       if(/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text))return this.fromToolStep({tool:"document_summarize",input:{path:indexedFile.path,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},explanation:`Analisando ${indexedFile.name} da lista anterior…`});
@@ -639,14 +660,7 @@ function agentIntentFromDecision(decision:CanonicalIntentDecision):AgentIntent{
   return{schemaVersion:1,status:"ready",domain,intent,operation:decision.operation,entities:{...decision.entities},referencesPreviousResult:false,requiresDataLookup:!mutation,requiresConfirmation:mutation,confidence:decision.confidence};
 }
 
-function previousFileAtRequestedPosition(text:string,files:ActionContextFile[]){
-  if(files.length<2||!/\b(?:arquivos?|deles|delas|anteriores?|resultados?|lista|abra|abrir|analise|analisar|leia|ler|resuma|resumir)\b/i.test(text))return undefined;
-  const ordinal=text.match(/\b(primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa])\b|\b(\d+)(?:[ºª])\b/i);
-  if(!ordinal)return undefined;
-  const word=ordinal[1]?.toLowerCase();
-  const index=word?.startsWith("primeir")?0:word?.startsWith("segund")?1:word?.startsWith("terceir")?2:word?.startsWith("quart")?3:word?.startsWith("quint")?4:word?.startsWith("últim")||word?.startsWith("ultim")?files.length-1:ordinal[2]?Number(ordinal[2])-1:-1;
-  return index>=0&&index<files.length?files[index]:undefined;
-}
+function hasOrdinalReference(text:string){return /\b(?:primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa]|[1-5][ºª])\b/i.test(text);}
 
 function previousFileAction(text:string):"open_file"|"analyze_file"|undefined{
   if(!/\b(?:esse|este|essa|esta|anterior|encontrado)\b/i.test(text)||! /\barquivo\b/i.test(text))return undefined;
