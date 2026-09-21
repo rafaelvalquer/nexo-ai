@@ -601,7 +601,7 @@ function candidateLabel(candidate:DecisionCandidate){
   if(candidate.proposedTool==="browser_agent_run")return"Interagir no navegador";
   if(candidate.proposedTool==="create_text_file")return"Criar arquivo";
   if(candidate.proposedTool==="create_folder")return"Criar pasta";
-  return humanOperation(candidate);
+  return humanOperation(candidate.operation);
 }
 function candidateDescription(candidate:DecisionCandidate){
   if(candidate.domain==="filesystem")return"Usar as pastas autorizadas deste computador";
