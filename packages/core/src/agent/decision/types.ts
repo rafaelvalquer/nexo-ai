@@ -2,6 +2,7 @@ export type DecisionCandidateSource="exact"|"filesystem"|"hybrid"|"web"|"legacy"
 export type ContextEvidenceSource="user"|"clarification"|"current_turn"|"previous_result"|"entity_ledger"|"conversation_history"|"intent_memory";
 export type ContextEvidence={field?:string;value?:unknown;source:ContextEvidenceSource;confidence:number;turnAge?:number};
 export type DecisionCandidate={
+  candidateId:string;
   source:DecisionCandidateSource;
   domain:string;
   operation:string;
@@ -26,7 +27,7 @@ export type DecisionTrace={
   contextUsed:ContextEvidence[];
   finalTool?:string;
   confidence?:number;
-  clarification?:{reason:string;candidateIds:string[];options:Array<{id:string;candidateId?:string}>;selectedOptionId?:string};
+  clarification?:{id?:string;reason:string;candidateIds:string[];options:Array<{id:string;candidateId?:string}>;selectedOptionId?:string;selectedCandidateId?:string};
   outcome?:{status:DecisionOutcomeStatus};
   createdAt:string;
 };
