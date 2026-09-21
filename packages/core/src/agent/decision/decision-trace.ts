@@ -1,9 +1,10 @@
 import type {CommandRoute} from "../../application/command-service.js";
 import type {DecisionCandidate,DecisionCandidateSource,DecisionTrace} from "./types.js";
+import {stableCandidateId} from "./semantic-action-identity.js";
 
 export function candidateFromCommandRoute(route:CommandRoute,source:DecisionCandidateSource,confidence=.99):DecisionCandidate|undefined{
   if(route.type!=="tool")return undefined;
-  return{
+  const base={
     source,
     domain:domainFromTool(route.tool),
     operation:route.intent?.operation??route.tool,
@@ -15,6 +16,7 @@ export function candidateFromCommandRoute(route:CommandRoute,source:DecisionCand
     mutatesState:isMutationRoute(route),
     evidence:[`route:${route.tool}`]
   };
+  return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base};
 }
 export function createDecisionTrace(input:{requestId:string;conversationId?:string;normalizedInput:string}):DecisionTrace{
   return{...input,domainCandidates:[],intentCandidates:[],rejected:[],contextUsed:[],createdAt:new Date().toISOString()};

@@ -39,6 +39,7 @@ import {resolveSimpleCoreference} from "./context/conversation-entity-context.js
 import type { AgentResourceContext } from "./goal/goal-types.js";
 import {OutcomeVerifier} from "./outcome/verifier.js";
 import type {GoalOutcome} from "./outcome/types.js";
+import {CanonicalActionPlanner} from "./action-planning/canonical-action-planner.js";
 
 const EMAIL_DISCOVERY_TOOLS=new Set(["email_search","email_latest","email_stats"]);
 
@@ -88,7 +89,7 @@ export class AgentEngine{
           this.recordEmailPreferenceSaved(pendingAttempt.value);
           if(this.emailPreferenceMode(pendingAttempt.value.pending)==="update")return this.emailPreferenceUpdatedReply(pendingAttempt.value,hooks);
         }
-        if(pendingAttempt.value.selectedRoute)return this.executeStructuredSelection(pendingAttempt.value,hooks,context);
+        if(pendingAttempt.value.selectedDecision||pendingAttempt.value.selectedRoute)return this.executeStructuredSelection(pendingAttempt.value,hooks,context);
         const plan=this.planner.buildIntentPlan(pendingAttempt.value.intent,previous,this.toolCatalog.list());
         const mailboxReply=this.prepareEmailMailboxPlan(pendingAttempt.value.originalRequest,plan,conversationId,hooks);
         if(mailboxReply)return mailboxReply;
@@ -152,7 +153,7 @@ export class AgentEngine{
       this.recordEmailPreferenceSaved(attempt.value);reply=this.emailPreferenceUpdatedReply(attempt.value,capturedHooks);
     }else{
       if(this.isEmailPreferenceClarification(attempt.value.pending))this.recordEmailPreferenceSaved(attempt.value);
-      if(attempt.value.selectedRoute)reply=await this.executeStructuredSelection(attempt.value,capturedHooks,context);
+      if(attempt.value.selectedDecision||attempt.value.selectedRoute)reply=await this.executeStructuredSelection(attempt.value,capturedHooks,context);
       else{
       const previous=this.runtime?.getConversationActionContext(existing.conversationId),plan=this.planner.buildIntentPlan(attempt.value.intent,previous,this.toolCatalog.list());
       const mailboxReply=this.prepareEmailMailboxPlan(attempt.value.originalRequest,plan,existing.conversationId,capturedHooks);
@@ -280,6 +281,19 @@ export class AgentEngine{
       const pending=this.clarifications.create(conversationId,userText,route.intent);
       return this.clarificationReply(pending,hooks);
     }
+    if(route.type==="canonical_plan"){
+      this.metrics?.record("agent.route",1,{route:"canonical-plan"});
+      const canonical=route.plan;
+      const plan:Plan={
+        origin:"fast",
+        steps:canonical.steps.map(step=>({tool:step.tool,input:step.input,explanation:step.explanation,approval:step.approval})),
+        direct:canonical.direct,directStream:canonical.directStream,deferredAction:canonical.deferredAction,responseMode:canonical.responseMode,emailDraft:canonical.emailDraft
+      };
+      const compose=this.prepareEmailComposeReview(plan,conversationId,hooks);if(compose)return compose;
+      if(plan.directStream){hooks.onStatus?.("A IA local está gerando a resposta…");const streamed=await this.streamDirectAnswer(userText,token=>hooks.onToken?.(token),context,hooks.signal);return{text:streamed,engine:"fast-path"};}
+      if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);return{text:plan.direct,engine:"fast-path"};}
+      return this.executePlan(userText,plan,hooks,context);
+    }
     if(route.type==="tool"||route.type==="macro"){
       this.metrics?.record("agent.route",1,{route:"command"});
       return this.executeDeterministicRoute(userText,route,hooks,context);
@@ -304,9 +318,26 @@ export class AgentEngine{
   }
 
   private async executeStructuredSelection(value:ClarificationResume,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
+    if(value.selectedDecision){
+      const previous=this.runtime?.getConversationActionContext(value.pending.conversationId);
+      const canonical=new CanonicalActionPlanner(this.registry).planDecision(value.selectedDecision,{previous,originalText:value.originalRequest});
+      if(!canonical)throw new Error("A seleção não pôde ser convertida em um plano canônico.");
+      this.metrics?.record("intent.clarification.selected",1,{option:value.selectedOptionId??"unknown",operation:value.selectedDecision.operation});
+      (this.commandService as any).recordClarificationSelection?.(value.pending.id,value.selectedOptionId,value.selectedDecision.candidateId);
+      const plan:Plan={
+        origin:"fast",
+        steps:canonical.steps.map(step=>({tool:step.tool,input:step.input,explanation:step.explanation,approval:step.approval})),
+        direct:canonical.direct,directStream:canonical.directStream,deferredAction:canonical.deferredAction,responseMode:canonical.responseMode,emailDraft:canonical.emailDraft
+      };
+      const compose=this.prepareEmailComposeReview(plan,value.pending.conversationId,hooks);if(compose)return compose;
+      if(plan.directStream){const streamed=await this.streamDirectAnswer(value.originalRequest,token=>hooks.onToken?.(token),context,hooks.signal);return{text:streamed,engine:"fast-path"};}
+      if(typeof plan.direct==="string"){hooks.onReplaceText?.(plan.direct);return{text:plan.direct,engine:"fast-path"};}
+      return this.executePlan(value.originalRequest,plan,hooks,context);
+    }
     const route=value.selectedRoute;if(!route)throw new Error("A seleção não possui rota executável.");
     this.metrics?.record("intent.clarification.selected",1,{option:value.selectedOptionId??"unknown",tool:route.tool});
     if(route.intent&&typeof (this.planner as any).recordClarificationSelection==="function")(this.planner as any).recordClarificationSelection(value.originalRequest,route.intent);
+    (this.commandService as any).recordClarificationSelection?.(value.pending.id,value.selectedOptionId,undefined);
     const command:Extract<CommandRoute,{type:"tool"}>={type:"tool",tool:route.tool,input:{...route.input},explanation:route.explanation,approval:route.approval,deferredAction:route.deferredAction,responseMode:route.responseMode,intent:route.intent};
     return this.executeDeterministicRoute(value.originalRequest,command,hooks,context);
   }
@@ -317,6 +348,7 @@ export class AgentEngine{
     this.metrics?.record("agent.command_route.source",1,{source});
     this.metrics?.record("agent.command_route.type",1,{type:route.type,source});
     if(route.type==="tool")this.metrics?.record("agent.command_route.tool",1,{tool:route.tool,source});
+    if(route.type==="canonical_plan"&&route.plan.steps[0])this.metrics?.record("agent.command_route.tool",1,{tool:route.plan.steps[0].tool,source});
   }
 
   private async executeDeterministicRoute(userText:string,route:Extract<CommandRoute,{type:"tool"|"macro"}>,hooks:AgentRunHooks,context:LLMMessage[]):Promise<AgentReply>{
@@ -374,7 +406,7 @@ export class AgentEngine{
           this.metrics?.record("intent.clarification.entity",1,{options:structured.options.length});
           if(conversationId&&this.clarifications){
             const pending=this.clarifications.createStructured(conversationId,structured);
-            const clarificationReply=this.clarificationReply(pending,hooks);
+            const clarificationReply=await this.clarificationReply(pending,hooks);
             if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",clarificationReply.text);
             return{...clarificationReply,result:reply.result,results:done.map(x=>x.result)};
           }

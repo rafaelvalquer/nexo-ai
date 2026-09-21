@@ -1,6 +1,7 @@
 import type { ToolResult } from "@nexo/shared";
 import type { AgentIntent } from "../orchestrator/intent-schema.js";
 import type { PlanStep } from "../planner.js";
+import {extractFilesFromToolResult,FILE_CONTEXT_TOOLS} from "./file-result-context.js";
 
 export type ActionContextEmail = {
   id: string;
@@ -54,11 +55,9 @@ export function observeConversationActionContext(
 
   if (!result.ok) return next;
 
-  if (step.tool === "find_file") {
-    const data=result.data as any;
-    const matches=Array.isArray(data?.matches)?data.matches:[];
+  if(FILE_CONTEXT_TOOLS.has(step.tool)){
     next.lastDomain="filesystem";
-    next.files=matches.filter((item:any)=>typeof item?.name==="string"&&typeof item?.path==="string").slice(0,50).map((item:any)=>({name:String(item.name),path:String(item.path),...(typeof item.root==="string"?{root:item.root}:{}),...(typeof item.size==="number"?{size:item.size}:{}),...(typeof item.modifiedAt==="string"?{modifiedAt:item.modifiedAt}:{})}));
+    next.files=extractFilesFromToolResult(step.tool,result.data);
   }
 
   if (step.tool === "web_research") {

@@ -22,6 +22,7 @@ import {ContextResolver} from "./context/context-resolver.js";
 import {ContextSnapshotBuilder} from "./context/context-snapshot-builder.js";
 import {EntityResolverV3} from "../intent/entities/resolver.js";
 import type {DecisionCandidate} from "./decision/types.js";
+import {stableCandidateId} from "./decision/semantic-action-identity.js";
 import type {GoalOutcome} from "./outcome/types.js";
 import {IntentLearningCoordinator} from "./intent-memory/learning-coordinator.js";
 import {isUserCorrection,classifyCorrection} from "./intent-memory/correction-capture.js";
@@ -101,7 +102,7 @@ export class AgentPlanner{
     const store=this.activeIntentMemory(),retriever=this.retrieverFor(store);
     const agentDomain=memoryDomain(domain);
     const examples=retriever&&this.isIntentLearningEnabled()?await retriever.retrieve(userText,agentDomain,5).catch(()=>[]):[];
-    const candidates=examples.map(item=>({source:"intent_memory" as const,domain:item.intent.domain==="document"?"documents":item.intent.domain,operation:item.intent.operation,entities:item.intent.entities??{},missing:item.intent.missing??[],ambiguities:[],confidence:item.score,mutatesState:item.intent.requiresConfirmation,evidence:[`memory:${item.source}`,`successes:${item.verifiedSuccessCount}`,`failures:${item.failureCount}`]}));
+    const candidates:DecisionCandidate[]=examples.map(item=>{const base={source:"intent_memory" as const,domain:item.intent.domain==="document"?"documents":item.intent.domain,operation:item.intent.operation,entities:item.intent.entities??{},missing:item.intent.missing??[],ambiguities:[],confidence:item.score,mutatesState:item.intent.requiresConfirmation,evidence:[`memory:${item.source}`,`successes:${item.verifiedSuccessCount}`,`failures:${item.failureCount}`]};return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base};});
     if(candidates.length)this.activeMetrics()?.record("intent.memory.candidate_used",candidates.length,{domain:domain??"unknown"});
     return{candidates,examples};
   }
@@ -110,7 +111,7 @@ export class AgentPlanner{
     return selected.map((tool,index)=>{
       const operation=tool.operation??tool.name,contract=intentOperationContracts[operation],parsed=parseOperationEntities(operation,userText).entities;
       const missing=contract?.requiredEntities.filter(key=>parsed[key]===undefined||parsed[key]===null||parsed[key]==="")??[];
-      return{source:"planner" as const,domain:canonicalDecisionDomain(tool.domain),operation,entities:parsed,missing,ambiguities:[],confidence:scores[index]??.5,proposedTool:tool.name,mutatesState:tool.mutatesState,evidence:["planner-tool-candidate-selector"]};
+      const base={source:"planner" as const,domain:canonicalDecisionDomain(tool.domain),operation,entities:parsed,missing,ambiguities:[],confidence:scores[index]??.5,proposedTool:tool.name,mutatesState:tool.mutatesState,evidence:["planner-tool-candidate-selector"]};return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base};
     }).filter(candidate=>Boolean(intentOperationContracts[candidate.operation]));
   }
 

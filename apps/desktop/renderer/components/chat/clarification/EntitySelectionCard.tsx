@@ -2,7 +2,7 @@ import type {ClarificationOption} from "@nexo/shared";
 
 export function EntitySelectionCard({option,selected,disabled,onSelect}:{option:ClarificationOption;selected:boolean;disabled:boolean;onSelect:(option:ClarificationOption)=>void}){
   const meta=option.metadata;
-  return <button type="button" className={`entitySelectionCard${selected?" selected":""}`} disabled={disabled} aria-pressed={selected} onClick={()=>onSelect(option)}>
+  return <button type="button" className={`entitySelectionCard${selected?" selected":""}`} disabled={disabled} aria-pressed={selected} aria-selected={selected} role="option" onClick={()=>onSelect(option)}>
     <strong>{selected?"✓ ":""}{option.label}</strong>
     {meta?.path?<span>{meta.path}</span>:option.description?<span>{option.description}</span>:null}
     <small>{[formatBytes(meta?.size),formatModified(meta?.modifiedAt)].filter(Boolean).join(" · ")}</small>

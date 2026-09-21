@@ -1,4 +1,5 @@
 import type {AgentIntent,ApprovalPlanMetadata,DeferredAction} from "../orchestrator/intent-schema.js";
+import type {CanonicalIntentDecision} from "../action-planning/canonical-intent-decision.js";
 
 export type ClarificationType=
   |"DOMAIN_AMBIGUITY"
@@ -25,6 +26,7 @@ export type ClarificationOption={
   entities?:Record<string,unknown>;
   action?:{domain:string;operation:string;proposedTool?:string};
   route?:StructuredExecutableRoute;
+  decision?:CanonicalIntentDecision;
   metadata?:{icon?:string;path?:string;size?:number;modifiedAt?:string};
 };
 

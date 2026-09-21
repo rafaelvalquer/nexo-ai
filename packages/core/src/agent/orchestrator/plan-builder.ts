@@ -1,239 +1,87 @@
-import type { ConversationActionContextState } from "../context/conversation-action-context.js";
-import { selectedPreviousEmailIds, selectedPreviousEventIds } from "../context/conversation-action-context.js";
-import type { AgentIntent, ApprovalPlanMetadata, DeferredAction } from "./intent-schema.js";
-import type { AgentToolDescriptor } from "./tool-catalog.js";
-import { describeDomainTools } from "./tool-catalog.js";
-import { addMinutes, resolveDateTime, resolvePeriod } from "./temporal-resolver.js";
-import { resolveKnownFolder, resolveUserPath } from "../../filesystem/path-resolver.js";
-import { defaultEmailSubject,normalizeBody,normalizeRecipientsFromEntities } from "../../email/compose/normalizer.js";
+import type {ConversationActionContextState} from "../context/conversation-action-context.js";
+import type {AgentIntent,ApprovalPlanMetadata,DeferredAction} from "./intent-schema.js";
+import type {AgentToolDescriptor} from "./tool-catalog.js";
+import {describeDomainTools} from "./tool-catalog.js";
+import {CanonicalActionPlanner} from "../action-planning/canonical-action-planner.js";
+import type {CanonicalActionPlan,CanonicalEmailDraft} from "../action-planning/canonical-action-plan.js";
+import type {CanonicalIntentDecision} from "../action-planning/canonical-intent-decision.js";
+import {stableCandidateId} from "../decision/semantic-action-identity.js";
 
-export type BuiltPlanStep = { tool: string; input: Record<string, unknown>; explanation?: string; approval?: ApprovalPlanMetadata };
-export type EmailComposePlanDraft={to:string[];subject:string;bodyText:string;connectionId?:string};
-export type BuiltIntentPlan = {
-  steps?: BuiltPlanStep[];
-  direct?: string;
-  directStream?: boolean;
-  deferredAction?: DeferredAction;
-  responseMode?: "synthesize" | "deterministic";
+export type BuiltPlanStep={tool:string;input:Record<string,unknown>;explanation?:string;approval?:ApprovalPlanMetadata};
+export type EmailComposePlanDraft=CanonicalEmailDraft;
+export type BuiltIntentPlan={
+  steps?:BuiltPlanStep[];
+  direct?:string;
+  directStream?:boolean;
+  deferredAction?:DeferredAction;
+  responseMode?:"synthesize"|"deterministic"|"presentation";
   emailDraft?:EmailComposePlanDraft;
 };
 
-export function buildIntentPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previous?: ConversationActionContextState): BuiltIntentPlan {
-  if (intent.status === "needs_clarification") return { direct: intent.question ?? "Preciso de mais detalhes antes de continuar." };
-  if (intent.domain === "general" && intent.intent === "answer") return { directStream: true };
-  if (intent.intent === "help") return { direct: describeDomainTools(intent.domain, tools) };
-  if (intent.domain === "email") return buildEmailPlan(intent, tools, previous);
-  if (intent.domain === "calendar") return buildCalendarPlan(intent, tools, previous);
-  if (intent.domain === "filesystem") return buildFilesystemPlan(intent, tools);
-  return { directStream: true };
+/**
+ * @deprecated Compatibility wrapper. CanonicalActionPlanner is the only
+ * post-intent authority for executable plans.
+ */
+export function buildIntentPlan(intent:AgentIntent,tools:AgentToolDescriptor[],previous?:ConversationActionContextState):BuiltIntentPlan{
+  if(intent.status==="needs_clarification")return{direct:intent.question??"Preciso de mais detalhes antes de continuar."};
+  if(intent.domain==="general"&&intent.intent==="answer")return{directStream:true};
+  if(intent.intent==="help")return{direct:describeDomainTools(intent.domain,tools)};
+
+  const domain=canonicalDomain(intent.domain),operation=canonicalOperation(intent);
+  const entities={...(intent.entities as Record<string,unknown>),...(intent.reference?{reference:intent.reference}:{})};
+  const base={
+    source:"planner" as const,domain,operation,entities,
+    missing:intent.missing??[],ambiguities:[],confidence:intent.confidence,
+    proposedTool:intent.operation,mutatesState:intent.requiresConfirmation,evidence:["agent-intent"]
+  };
+  const decision:CanonicalIntentDecision={
+    candidateId:stableCandidateId(base as any),
+    domain,operation,entities,confidence:intent.confidence,
+    source:"planner",evidence:["agent-intent"]
+  };
+  const availability={get:(name:string)=>tools.find(tool=>tool.name===name)};
+  const plan=new CanonicalActionPlanner(availability).planDecision(decision,{previous});
+  return plan?toBuiltPlan(plan):{direct:`Não consegui mapear a operação ${intent.operation} para uma ação segura.`};
 }
 
-function buildEmailPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previous?: ConversationActionContextState): BuiltIntentPlan {
-  const entities = intent.entities as Record<string, unknown>;
-  const previousIds = intent.referencesPreviousResult ? selectedPreviousEmailIds(previous, intent.reference) : [];
-  const sender = stringValue(entities.sender ?? entities.from);
-  const subject = stringValue(entities.subject);
-  const query = stringValue(entities.query) ?? ([sender ? `from:${sender}` : "", subject ? `subject:"${subject.replace(/"/g, "")}"` : ""].filter(Boolean).join(" ") || undefined);
-  const unread = boolValue(entities.unread);
-  const maxResults = numberValue(entities.maxResults ?? entities.limit, 20, 1, 50);
-
-  if (intent.intent === "stats") return readStep("email_stats", {}, "Consultando as estatísticas da sua conta…", tools);
-
-  if (intent.intent === "read" && /latest|ultimo|último|most_recent/.test(intent.operation) && maxResults === 1) {
-    return readStep("email_latest", {}, "Buscando o e-mail mais recente…", tools, "synthesize");
-  }
-
-  if (["read", "list", "search", "summarize"].includes(intent.intent)) {
-    if (previousIds.length) {
-      return readStep("email_get_many", { messageIds: previousIds.slice(0, 30), ...(previous?.emailConnectionId ? {connectionId:previous.emailConnectionId} : {}) }, "Carregando os e-mails selecionados da conversa…", tools, "synthesize");
-    }
-    return readStep("email_search", { query, unread, maxResults }, intent.intent === "summarize" ? "Buscando os e-mails que serão resumidos…" : "Consultando os e-mails…", tools, "synthesize");
-  }
-
-  if (intent.intent === "send" || /send|compose/.test(intent.operation)) {
-    if(intent.status!=="ready")throw new Error("Intent de envio de e-mail chegou ao planner sem estar pronto.");
-    const recipients=normalizeRecipientsFromEntities(entities),body=normalizeBody(entities);
-    if(!recipients.length||!body)throw new Error("Intent READY de envio de e-mail não possui destinatário e mensagem válidos.");
-    const resolvedSubject=typeof entities.subject==="string"?entities.subject:defaultEmailSubject(body);
-    const connectionId=stringValue(entities.connectionId);
-    return{emailDraft:{to:recipients,subject:resolvedSubject,bodyText:body,...(connectionId?{connectionId}:{})},responseMode:"deterministic"};
-  }
-
-  if (["delete", "update", "move"].includes(intent.intent)) {
-    const action = emailMutation(intent);
-    if (!action) return { direct: "Não consegui determinar qual alteração você quer fazer nos e-mails." };
-    if (previousIds.length) {
-      const selected = filterPreviousEmailIds(previousIds, previous, sender);
-      if (!selected.length) return { direct: "Nenhum e-mail do resultado anterior corresponde ao filtro informado." };
-      const lookup=readStepOnly("email_get_many", {messageIds:selected.slice(0,30),...(previous?.emailConnectionId ? {connectionId:previous.emailConnectionId} : {})}, "Verificando os e-mails selecionados…", tools);
-      if(!lookup)return unavailable("email_get_many");
-      return {steps:[lookup],deferredAction:{kind:"email.bulk",action,sender,subject,receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true||Boolean(intent.reference?.selection.type==="indices"&&intent.reference.selection.indices?.length||intent.reference?.selection.type==="first"&&(intent.reference.selection.count??1)>1)},responseMode:"deterministic"};
-    }
-    const search = readStepOnly("email_search", { query, unread, maxResults: Math.max(maxResults, 20) }, "Localizando exatamente os e-mails que podem ser alterados…", tools);
-    if (!search) return unavailable("email_search");
-    return { steps: [search], deferredAction: { kind: "email.bulk", action, sender, subject, receivedAt:stringValue(entities.receivedAt),messageId:stringValue(entities.messageId),allowMultiple:entities.allowMultiple===true }, responseMode: "deterministic" };
-  }
-
-  return { direct: "Não consegui mapear essa solicitação para uma operação segura de e-mail." };
+function toBuiltPlan(plan:CanonicalActionPlan):BuiltIntentPlan{
+  return{
+    ...(plan.steps.length?{steps:plan.steps.map(step=>({tool:step.tool,input:step.input,explanation:step.explanation,approval:step.approval}))}:{}),
+    ...(plan.direct!==undefined?{direct:plan.direct}:{}),
+    ...(plan.directStream?{directStream:true}:{}),
+    ...(plan.deferredAction?{deferredAction:plan.deferredAction}:{}),
+    ...(plan.responseMode?{responseMode:plan.responseMode}:{}),
+    ...(plan.emailDraft?{emailDraft:plan.emailDraft}:{})
+  };
 }
-
-function buildCalendarPlan(intent: AgentIntent, tools: AgentToolDescriptor[], previous?: ConversationActionContextState): BuiltIntentPlan {
-  const entities = intent.entities as Record<string, unknown>;
-  const period = entities.period ?? entities.dateRange ?? entities.date ?? "today";
-  const range = resolvePeriod(typeof period === "object" && period ? (period as any).kind ?? "today" : period, new Date(), entities.dayPart);
-  const query = stringValue(entities.query ?? entities.title);
-
-  if (/free|available|livre|availability/.test(intent.operation)) {
-    const durationMinutes = numberValue(entities.durationMinutes ?? entities.duration, 30, 5, 1440);
-    return readStep("calendar_find_free_time", { start: range.start, end: range.end, durationMinutes }, "Procurando horários livres…", tools, "synthesize");
-  }
-
-  if (["list", "read", "search", "summarize"].includes(intent.intent)) {
-    return readStep("calendar_list", { start: range.start, end: range.end }, `Consultando sua agenda para ${range.label}…`, tools, "synthesize");
-  }
-
-  if (intent.intent === "create") {
-    const title = stringValue(entities.title);
-    const explicitStart = stringValue(entities.start);
-    const explicitEnd = stringValue(entities.end);
-    const start = explicitStart && !Number.isNaN(Date.parse(explicitStart)) ? new Date(explicitStart).toISOString() : resolveDateTime(period, entities.time ?? entities.startTime);
-    const duration = numberValue(entities.durationMinutes ?? entities.duration, 60, 5, 1440);
-    const end = explicitEnd && !Number.isNaN(Date.parse(explicitEnd)) ? new Date(explicitEnd).toISOString() : start ? addMinutes(start, duration) : undefined;
-    if (!title) return { direct: "Qual é o título do compromisso?" };
-    if (!start || !end) return { direct: "Qual é a data e o horário do compromisso?" };
-    const input = { title, start, end, location: stringValue(entities.location), description: stringValue(entities.description) };
-    return writeStep("calendar_create", input, "Preparando o compromisso para sua confirmação…", tools, {
-      domain: "calendar", actionType: "create", preview: `${title}\n${formatDate(start)} – ${formatDate(end)}`,
-      affectedCount: 1, consequence: "Um novo compromisso será criado na sua agenda.", expiresInMs: 10 * 60_000
-    });
-  }
-
-  if (intent.intent === "delete" || intent.intent === "update") {
-    const previousIds = intent.referencesPreviousResult ? selectedPreviousEventIds(previous, intent.reference) : [];
-    if (previousIds.length === 1) {
-      if (intent.intent === "delete") return calendarDelete(previousIds[0], previous?.events?.find(event => event.id === previousIds[0]), tools, previous?.calendarConnectionId);
-      const patch = calendarPatch(entities, period);
-      if (!Object.keys(patch).length) return { direct: "O que você quer alterar nesse compromisso?" };
-      return calendarUpdate(previousIds[0], patch, previous?.events?.find(event => event.id === previousIds[0]), tools, previous?.calendarConnectionId);
-    }
-    const search = readStepOnly("calendar_search", { start: range.start, end: range.end, query }, "Localizando o compromisso exato…", tools);
-    if (!search) return unavailable("calendar_search");
-    return {
-      steps: [search],
-      deferredAction: intent.intent === "delete" ? { kind: "calendar.delete", query } : { kind: "calendar.update", query, patch: calendarPatch(entities, period) },
-      responseMode: "deterministic"
+function canonicalOperation(intent:AgentIntent){
+  const op=intent.operation;
+  if(intent.domain==="email"){
+    const map:Record<string,string>={
+      recent_messages:"email_latest",latest_message:"email_latest",
+      search_messages:"email_search",search:"email_search",
+      summarize_previous:"email_get_many",read_previous:"email_get_many",get_many:"email_get_many",
+      bulk_trash:"email_trash",trash:"email_trash",delete_messages:"email_trash",
+      bulk_archive:"email_archive",archive:"email_archive",
+      bulk_mark_read:"email_mark_read",mark_read:"email_mark_read",
+      bulk_mark_unread:"email_mark_unread",mark_unread:"email_mark_unread",
+      send_message:"email_send",send:"email_send",reply:"email_reply"
     };
+    return map[op]??op;
   }
-
-  return { direct: "Não consegui mapear essa solicitação para uma operação segura de agenda." };
-}
-
-function buildFilesystemPlan(intent: AgentIntent, tools: AgentToolDescriptor[]): BuiltIntentPlan {
-  const entities = intent.entities as Record<string, unknown>;
-  const resolvedPath = resolveUserPath({ path: entities.path, folder: entities.folder, file: entities.file ?? entities.name });
-  const folderPath = resolveUserPath({ path: entities.path, folder: entities.folder }) ?? (stringValue(entities.folder) ? resolveKnownFolder(stringValue(entities.folder)!) : undefined);
-
-  if(intent.intent==="create"&&intent.operation==="create_folder"){
-    if(!resolvedPath)return{direct:"Qual é o nome da pasta e onde ela deve ser criada?"};
-    return writeStep("create_folder",{path:resolvedPath},"Preparando a criação da pasta para sua confirmação…",tools,{domain:"filesystem",actionType:"create",preview:resolvedPath,affectedCount:1,consequence:"Uma nova pasta será criada.",expiresInMs:10*60_000});
+  if(intent.domain==="calendar"){
+    const map:Record<string,string>={
+      list_events:"calendar_list",search_events:"calendar_search",find_free_time:"calendar_find_free_time",
+      create_event:"calendar_create",update_event:"calendar_update",delete_event:"calendar_delete",rsvp:"calendar_rsvp"
+    };
+    return map[op]??op;
   }
-
-  if (intent.intent === "list") {
-    if (!folderPath) return { direct: "Qual pasta você quer listar? Você pode usar Downloads, Documentos ou Desktop." };
-    return readStep("list_files", { path: folderPath,kind:entities.kind,sortBy:entities.sortBy,sortDirection:entities.sortDirection,limit:entities.limit }, `Listando arquivos em ${folderPath}…`, tools, "synthesize");
+  if(intent.domain==="document"){
+    const map:Record<string,string>={read:"document_read",summarize:"document_summarize",extract:"document_extract",compare:"document_compare",create:"document_create"};
+    return map[op]??op;
   }
-
-  if (intent.intent === "search") {
-    if (!folderPath) return { direct: "Em qual pasta devo pesquisar?" };
-    const query = stringValue(entities.query ?? entities.file ?? entities.name);
-    if (!query) return { direct: "Qual arquivo ou termo você quer pesquisar?" };
-    return readStep("search_files", { path: folderPath, query }, "Pesquisando os arquivos…", tools, "synthesize");
-  }
-
-  if (intent.intent === "read") {
-    if (!resolvedPath) return { direct: "Qual arquivo você quer ler e em qual pasta ele está?" };
-    if(intent.operation==="open_file")return readStep("open_path",{path:resolvedPath},`Abrindo ${resolvedPath}…`,tools,"deterministic");
-    return readStep("read_file", { path: resolvedPath }, `Lendo ${resolvedPath}…`, tools, "synthesize");
-  }
-
-  if(intent.intent==="summarize"&&intent.operation==="analyze_file"){
-    if(!resolvedPath)return{direct:"Qual arquivo você quer analisar?"};
-    return readStep("document_summarize",{path:resolvedPath,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},`Analisando ${resolvedPath}…`,tools,"synthesize");
-  }
-
-  if (intent.intent === "delete") {
-    if (!resolvedPath) return { direct: "Qual arquivo você quer mover para a lixeira e em qual pasta ele está?" };
-    const inspect = readStepOnly("file_info", { path: resolvedPath }, "Confirmando o arquivo antes de preparar a remoção…", tools);
-    if (!inspect) return unavailable("file_info");
-    return { steps: [inspect], deferredAction: { kind: "filesystem.trash", path: resolvedPath }, responseMode: "deterministic" };
-  }
-
-  return { direct: "Não consegui mapear essa solicitação para uma operação segura de arquivos." };
+  return op;
 }
-
-function emailMutation(intent: AgentIntent): "trash" | "archive" | "mark_read" | "mark_unread" | undefined {
-  const operation = intent.operation.toLowerCase();
-  if (intent.intent === "delete" || /trash|delete|lixeira|apagar|remov/.test(operation)) return "trash";
-  if (/archive|arquiv/.test(operation)) return "archive";
-  if (/unread|nao_lido|não_lido/.test(operation)) return "mark_unread";
-  if (/read|lido/.test(operation)) return "mark_read";
-  return undefined;
+function canonicalDomain(domain:AgentIntent["domain"]):CanonicalIntentDecision["domain"]{
+  return domain==="document"?"documents":domain==="general"?"system":domain;
 }
-
-function bulkEmailWrite(action: "trash" | "archive" | "mark_read" | "mark_unread", ids: string[], sender: string | undefined, tools: AgentToolDescriptor[]): BuiltIntentPlan {
-  const tool = `email_bulk_${action === "trash" ? "trash" : action === "archive" ? "archive" : action}`;
-  const verbs = { trash: "movidos para a lixeira", archive: "arquivados", mark_read: "marcados como lidos", mark_unread: "marcados como não lidos" } as const;
-  const target = sender ? `${ids.length} e-mail(s) de ${sender}` : `${ids.length} e-mail(s)`;
-  return writeStep(tool, { messageIds: ids }, `Preparando ${target}…`, tools, {
-    domain: "email", actionType: action, affectedCount: ids.length,
-    preview: `${target}.`, consequence: `${target} serão ${verbs[action]}.`, expiresInMs: action === "trash" ? 5 * 60_000 : 10 * 60_000
-  });
-}
-
-function calendarDelete(id: string, event: any, tools: AgentToolDescriptor[], connectionId?:string): BuiltIntentPlan {
-  return writeStep("calendar_delete", { eventId: id, ...(connectionId?{connectionId}:{}) }, "Preparando o cancelamento para sua confirmação…", tools, {
-    domain: "calendar", actionType: "delete", affectedCount: 1,
-    preview: event ? `${event.title ?? "Compromisso"}\n${event.start ? formatDate(event.start) : ""}` : `Compromisso ${id}`,
-    consequence: "O compromisso será cancelado.", expiresInMs: 5 * 60_000
-  });
-}
-function calendarUpdate(id: string, patch: Record<string, unknown>, event: any, tools: AgentToolDescriptor[], connectionId?:string): BuiltIntentPlan {
-  return writeStep("calendar_update", { eventId: id, ...patch, ...(connectionId?{connectionId}:{}) }, "Preparando a alteração para sua confirmação…", tools, {
-    domain: "calendar", actionType: "update", affectedCount: 1,
-    preview: `${event?.title ?? "Compromisso"}\nAlterações: ${JSON.stringify(patch)}`,
-    consequence: "O compromisso será alterado.", expiresInMs: 10 * 60_000
-  });
-}
-function calendarPatch(entities: Record<string, unknown>, period: unknown) {
-  const patch: Record<string, unknown> = {};
-  const title = stringValue(entities.newTitle ?? entities.title); if (title) patch.title = title;
-  const time = entities.newTime ?? entities.time ?? entities.startTime;
-  const start = time ? resolveDateTime(entities.newDate ?? entities.date ?? period, time) : undefined;
-  if (start) { patch.start = start; patch.end = addMinutes(start, numberValue(entities.durationMinutes ?? entities.duration, 60, 5, 1440)); }
-  const location = stringValue(entities.location); if (location) patch.location = location;
-  const description = stringValue(entities.description); if (description) patch.description = description;
-  return patch;
-}
-
-function filterPreviousEmailIds(ids: string[], previous: ConversationActionContextState | undefined, sender?: string) {
-  if (!sender) return ids;
-  const normalized = sender.toLowerCase();
-  const allowed = new Set((previous?.emails ?? []).filter(item => item.from?.toLowerCase().includes(normalized)).map(item => item.id));
-  return ids.filter(id => allowed.has(id));
-}
-function readStep(tool: string, input: Record<string, unknown>, explanation: string, tools: AgentToolDescriptor[], responseMode: "synthesize" | "deterministic" = "deterministic"): BuiltIntentPlan {
-  const step = readStepOnly(tool, input, explanation, tools); return step ? { steps: [step], responseMode } : unavailable(tool);
-}
-function readStepOnly(tool: string, input: Record<string, unknown>, explanation: string, tools: AgentToolDescriptor[]): BuiltPlanStep | undefined {
-  return hasTool(tools, tool) ? { tool, input: cleanUndefined(input), explanation } : undefined;
-}
-function writeStep(tool: string, input: Record<string, unknown>, explanation: string, tools: AgentToolDescriptor[], approval: ApprovalPlanMetadata): BuiltIntentPlan {
-  return hasTool(tools, tool) ? { steps: [{ tool, input: cleanUndefined(input), explanation, approval }], responseMode: "deterministic" } : unavailable(tool);
-}
-function unavailable(tool: string): BuiltIntentPlan { return { direct: `A ferramenta necessária (${tool}) não está disponível com as conexões e permissões atuais.` }; }
-function hasTool(tools: AgentToolDescriptor[], name: string) { return tools.some(tool => tool.name === name); }
-function stringValue(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
-function boolValue(value: unknown) { return typeof value === "boolean" ? value : undefined; }
-function numberValue(value: unknown, fallback: number, min: number, max: number) { const parsed = Number(value); return Number.isFinite(parsed) ? Math.min(max, Math.max(min, Math.round(parsed))) : fallback; }
-function cleanUndefined(input: Record<string, unknown>) { return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)); }
-function formatDate(value: string) { return new Date(value).toLocaleString("pt-BR"); }

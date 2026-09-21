@@ -4,12 +4,23 @@ export type WebHtmlDocument={url:string;title:string;html:string};
 export type WebArticleCandidate={title:string;url:string;snippet?:string;publishedAt?:string;homepageRank?:number;searchRank?:number};
 export type WebResearchInput={query:string;sourceName?:string;domain?:string;url?:string;maxSources?:number};
 export type WebResearchArticle={title:string;url:string;snippet:string;text:string;publishedAt?:string;source?:string};
-export type WebFailureStage="SEARCH"|"SOURCE_RESOLUTION"|"FETCH"|"REDIRECT"|"CONTENT_TYPE"|"EXTRACTION"|"SECURITY";
+export type WebFailureStage="SOURCE_RESOLUTION"|"SEARCH"|"HOMEPAGE"|"FETCH"|"REDIRECT"|"CONTENT_TYPE"|"EXTRACTION"|"SECURITY";
+export type WebDiagnostic={
+  stage:WebFailureStage;
+  provider?:string;
+  url?:string;
+  errorCode?:string;
+  message:string;
+};
+export type WebResearchStatus="full"|"partial"|"search_only"|"failed";
 export type WebResearchResult={
   query:string;
   source?:{name?:string;domain?:string;url?:string};
   articles:WebResearchArticle[];
+  searchResults:WebSearchResult[];
   failedSources:Array<{url:string;error:string;stage:WebFailureStage}>;
+  diagnostics:WebDiagnostic[];
+  status:WebResearchStatus;
   partial:boolean;
   untrustedExternalContent:true;
 };
