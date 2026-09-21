@@ -564,6 +564,81 @@ export class CommandService {
   }
 }
 
+function canonicalDecisionFromCandidate(candidate:DecisionCandidate):CanonicalIntentDecision{
+  return{
+    candidateId:candidate.candidateId,
+    domain:canonicalDecisionDomain(candidate.domain),
+    operation:candidate.operation,
+    entities:{...candidate.entities},
+    confidence:candidate.confidence,
+    source:canonicalDecisionSource(candidate.source),
+    evidence:[...candidate.evidence]
+  };
+}
+function decisionCandidateFromSeed(decision:CanonicalIntentDecision,proposedTool:string|undefined,registry:ToolRegistry):DecisionCandidate{
+  const tool=proposedTool??decision.operation,definition=registry.get(tool);
+  return{
+    candidateId:decision.candidateId,
+    source:decision.source==="clarification"?"exact":decision.source,
+    domain:decision.domain,
+    operation:decision.operation,
+    entities:{...decision.entities},
+    missing:[],
+    ambiguities:[],
+    confidence:decision.confidence,
+    proposedTool:tool,
+    mutatesState:Boolean(definition?.mutatesState)||isMutationOperation(decision.operation),
+    evidence:[...decision.evidence]
+  };
+}
+function envelopeForGroup(entries:CandidateEnvelope[],group:import("../agent/decision/semantic-candidate-deduper.js").SemanticCandidateGroup|undefined){
+  if(!group)return undefined;
+  const ids=new Set(group.memberCandidateIds);
+  return entries.find(entry=>ids.has(entry.candidate.candidateId));
+}
+function decisionForGroup(group:import("../agent/decision/semantic-candidate-deduper.js").SemanticCandidateGroup|undefined,envelope:CandidateEnvelope):CanonicalIntentDecision{
+  if(!group)return envelope.routeSeed;
+  return{
+    ...envelope.routeSeed,
+    candidateId:group.candidate.candidateId,
+    domain:canonicalDecisionDomain(group.candidate.domain),
+    operation:group.candidate.operation,
+    entities:{...group.candidate.entities},
+    confidence:group.candidate.confidence,
+    source:canonicalDecisionSource(group.candidate.source),
+    evidence:[...group.candidate.evidence]
+  };
+}
+function canonicalDecisionFromWebIntent(intent:NonNullable<ReturnType<typeof deterministicWebIntent>>,originalText:string):CanonicalIntentDecision{
+  const operation=intent.operation,domain=operation==="interact"||operation==="navigate"?"browser":"web";
+  const entities={...intent.entities,...(operation==="interact"&&!intent.entities.requestedAction?{requestedAction:originalText}:{})};
+  const base={source:"web" as const,domain,operation,entities,missing:[],ambiguities:[],confidence:intent.confidence,proposedTool:webToolForOperation(operation),mutatesState:false,evidence:["web-intent"]};
+  return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),domain,operation,entities,confidence:intent.confidence,source:"web",evidence:["web-intent"]};
+}
+function webToolForOperation(operation:string){
+  if(operation==="research")return"web_research";
+  if(operation==="search")return"web_search";
+  if(operation==="fetch")return"web_fetch";
+  if(operation==="interact")return"browser_agent_run";
+  if(operation==="navigate")return"browser_open";
+  return operation;
+}
+function canonicalDecisionSource(source:DecisionCandidateSource):CanonicalIntentDecision["source"]{
+  return source==="legacy"?"exact":source;
+}
+function canonicalDecisionDomain(domain:string):CanonicalIntentDecision["domain"]{
+  if(domain==="document"||domain==="documents")return"documents";
+  if(domain==="web"||domain==="browser"||domain==="email"||domain==="calendar"||domain==="filesystem"||domain==="memory"||domain==="system")return domain;
+  return"system";
+}
+function isMutationOperation(operation:string){return /^(?:create_|write_|move_|rename_|trash_|delete_|email_(?:send|reply|trash|archive|mark)|calendar_(?:create|update|delete|rsvp)|document_create)/.test(operation);}
+function agentIntentFromDecision(decision:CanonicalIntentDecision):AgentIntent{
+  const mutation=isMutationOperation(decision.operation);
+  const intent:AgentIntent["intent"]=decision.operation==="email_send"||decision.operation==="email_send_composed"?"send":decision.operation.includes("create")?"create":/trash|delete/.test(decision.operation)?"delete":/move/.test(decision.operation)?"move":mutation?"update":/search|find|research/.test(decision.operation)?"search":/list|latest/.test(decision.operation)?"list":"read";
+  const domain:AgentIntent["domain"]=decision.domain==="documents"?"document":decision.domain==="web"?"general":decision.domain;
+  return{schemaVersion:1,status:"ready",domain,intent,operation:decision.operation,entities:{...decision.entities},referencesPreviousResult:false,requiresDataLookup:!mutation,requiresConfirmation:mutation,confidence:decision.confidence};
+}
+
 function previousFileAtRequestedPosition(text:string,files:ActionContextFile[]){
   if(files.length<2||!/\b(?:arquivos?|deles|delas|anteriores?|resultados?|lista|abra|abrir|analise|analisar|leia|ler|resuma|resumir)\b/i.test(text))return undefined;
   const ordinal=text.match(/\b(primeir[oa]|segund[oa]|terceir[oa]|quart[oa]|quint[oa]|[uú]ltim[oa])\b|\b(\d+)(?:[ºª])\b/i);
@@ -608,7 +683,7 @@ function hasExplicitPhysicalPath(text:string){
 }
 
 function routeLabel(route:CommandRoute){
-  return route.type==="tool"?route.tool:route.type==="macro"?`macro_${route.operation}`:route.type;
+  return route.type==="tool"?route.tool:route.type==="canonical_plan"?(route.plan.steps[0]?.tool??"canonical_plan"):route.type==="macro"?`macro_${route.operation}`:route.type;
 }
 
 
