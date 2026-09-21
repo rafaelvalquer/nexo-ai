@@ -12,6 +12,7 @@ export type DecisionCandidate={
   proposedTool?:string;
   mutatesState:boolean;
   evidence:string[];
+  provenance?:DecisionCandidateSource[];
 };
 export type DecisionOutcomeStatus="success"|"partial"|"failed"|"needs_clarification"|"unknown";
 export type DecisionTrace={
@@ -25,6 +26,7 @@ export type DecisionTrace={
   contextUsed:ContextEvidence[];
   finalTool?:string;
   confidence?:number;
+  clarification?:{reason:string;candidateIds:string[];options:Array<{id:string;candidateId?:string}>;selectedOptionId?:string};
   outcome?:{status:DecisionOutcomeStatus};
   createdAt:string;
 };
