@@ -21,6 +21,7 @@ import { ClarificationRepository } from "./clarification/repository.js";
 import { ClarificationResolver } from "./clarification/resolver.js";
 import { ClarificationService } from "./clarification/service.js";
 import type { ClarificationResume,PendingClarification } from "./clarification/types.js";
+import {createStructuredClarification} from "./clarification/structured-clarification.js";
 import { ChatPresentationSession } from "../chat/presentation/session.js";
 import { defaultMailboxCategories,mailboxCategoryListLabel,normalizeMailboxCategories } from "../email/preferences/category-resolver.js";
 import type { EmailMailboxCategory,EmailMailboxPreferenceCategory } from "../email/preferences/types.js";
@@ -368,6 +369,18 @@ export class AgentEngine{
           this.metrics?.record(metric,1,{matches:matches.length});
         }
         const materialized=this.planner.materialize({deferredAction:plan.deferredAction} as Plan,reply.result);deferredConsumed=true;
+        if(materialized?.clarification){
+          const structured=createStructuredClarification({type:materialized.clarification.type,question:materialized.clarification.question,options:materialized.clarification.options,originalRequest:userText});
+          this.metrics?.record("intent.clarification.entity",1,{options:structured.options.length});
+          if(conversationId&&this.clarifications){
+            const pending=this.clarifications.createStructured(conversationId,structured);
+            const clarificationReply=this.clarificationReply(pending,hooks);
+            if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",clarificationReply.text);
+            return{...clarificationReply,result:reply.result,results:done.map(x=>x.result)};
+          }
+          const text=[structured.question,...structured.options.map((option,index)=>`${index+1}. ${option.label}${option.description?` — ${option.description}`:""}`)].join("\n");
+          hooks.onReplaceText?.(text);hooks.onStatus?.("Aguardando esclarecimento.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",text);return{text,result:reply.result,results:done.map(x=>x.result)};
+        }
         if(materialized?.direct){hooks.onReplaceText?.(materialized.direct);hooks.onStatus?.("Prévia concluída sem alterações.");if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",materialized.direct);return{text:materialized.direct,result:reply.result,results:done.map(x=>x.result)};}
         if(materialized?.step){if(data.connectionId&&/^(email|calendar)_/.test(materialized.step.tool))materialized.step.input.connectionId=data.connectionId;if(steps.length>=AGENT_LIMITS.maxToolCalls){const text="A ação exigiria etapas demais para o limite seguro.";return{text,results:done.map(x=>x.result)};}steps.push(materialized.step);}
       }
