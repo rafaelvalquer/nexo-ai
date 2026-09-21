@@ -4,7 +4,8 @@ import { useAppStore } from "../stores/app";
 
 type Candidate={source:string;domain:string;operation:string;confidence:number;proposedTool?:string;entities:Record<string,unknown>;evidence:string[]};
 type DecisionTrace={normalizedInput:string;domainCandidates:Candidate[];intentCandidates:Candidate[];selected?:Candidate;rejected:Array<{candidate:Candidate;reason:string}>;contextUsed:Array<{field?:string;value?:unknown;source:string;confidence:number}>;finalTool?:string;confidence?:number};
-type Status = { llm?:{ok:boolean;detail:string}; settings?:{model:string;embeddingModel:string}; metrics?:Array<{metric:string;count:number;average:number;latest:string}>;agentDiagnostics?:{engine:string;model:string;lastFallback?:string;lastTool?:string;lastFailure?:string;pendingApprovals:number;recoverableRuns:number;resultUnknown:number;reconciliationStatus?:string;decisionTrace?:DecisionTrace} };
+type WebDiagnostic={stage:string;provider?:string;url?:string;errorCode?:string;message:string};
+type Status = { llm?:{ok:boolean;detail:string}; settings?:{model:string;embeddingModel:string;developerDiagnosticsEnabled?:boolean}; metrics?:Array<{metric:string;count:number;average:number;latest:string}>;agentDiagnostics?:{engine:string;model:string;lastFallback?:string;lastTool?:string;lastFailure?:string;pendingApprovals:number;recoverableRuns:number;resultUnknown:number;reconciliationStatus?:string;decisionTrace?:DecisionTrace;webDiagnostics?:WebDiagnostic[]} };
 export function Diagnostics() {
   const [status,setStatus]=useState<Status|null>(null);const [loading,setLoading]=useState(false);const setPage=useAppStore(s=>s.setPage);
   const refresh=async()=>{setLoading(true);try{setStatus(await window.nexo.status());}finally{setLoading(false);}};
@@ -23,6 +24,7 @@ export function Diagnostics() {
       <div className="row"><div><b>CONTEXT</b><span>{trace.contextUsed.map(item=>`${item.field??"entity"}:${String(item.value??"")}[${item.source}]`).join(" · ")||"nenhum"}</span></div></div>
       <div className="row"><div><b>FINAL</b><span>{trace.finalTool??trace.selected?.operation??"—"} · {trace.confidence!==undefined?`${Math.round(trace.confidence*100)}%`:"—"}</span></div></div>
     </div>}</section>
+    {status?.settings?.developerDiagnosticsEnabled&&status?.agentDiagnostics?.webDiagnostics?.length?<section className="panel"><h3>Detalhes técnicos — Web Research</h3><div className="list">{status.agentDiagnostics.webDiagnostics.map((item,index)=><div className="row" key={`${item.stage}:${item.url??item.provider??index}`}><div><b>{item.stage}{item.errorCode?` · ${item.errorCode}`:""}</b><span>{item.url??item.provider??"web"} — {item.message}</span></div></div>)}</div></section>:null}
     <section className="panel"><h3>Execução e falhas</h3>{!status?.metrics?.length?<div className="empty">Ainda não há métricas. Execute uma ferramenta para registrar duração e falhas.</div>:<div className="list">{status.metrics.map(metric=><div className="row" key={metric.metric}><div><b>{metric.metric}</b><span>{metric.count} amostra(s) · média {metric.average} · última {new Date(metric.latest).toLocaleString()}</span></div></div>)}</div>}<button className="ghost" onClick={()=>setPage("Configurações")}><Settings size={15}/> Abrir configurações</button></section>
   </div>;
 }
