@@ -216,27 +216,24 @@ export class CommandService {
       diagnostics.hybrid!.invoked=true;
       this.hybrid?.metrics?.record("intent.route.structured.invoked",1);
       const hybridStarted=Date.now();
-      const structured=await this.routeStructuredInternal(text,previous,signal,structuredDomains(domainEvidence,expectedDomain));
+      const structured=await this.resolveStructuredDecisionInternal(text,previous,signal,structuredDomains(domainEvidence,expectedDomain));
       diagnostics.latency.hybridMs=Date.now()-hybridStarted;
       const resolverDiag=this.hybrid?.resolver.diagnostics();
       diagnostics.hybrid={invoked:true,model:resolverDiag?.model,status:resolverDiag?.status,operation:resolverDiag?.operation,entities:resolverDiag?.entities,missing:resolverDiag?.missing,ambiguities:resolverDiag?.ambiguities,confidence:resolverDiag?.confidence};
       diagnostics.latency.parserMs=resolverDiag?.parserMs;
       diagnostics.latency.validationMs=resolverDiag?.validationMs;
       diagnostics.latency.mappingMs=Math.max(0,(diagnostics.latency.hybridMs??0)-(resolverDiag?.latencyMs??0));
-      if(structured.type!=="unknown"){
-        const conflict=this.conflictGuard.evaluate(text,structured);
-        if(conflict.accepted)add(structured,"hybrid",structured.type==="tool"?(structured.intent?.confidence??resolverDiag?.confidence??.9):(resolverDiag?.confidence??.9));
-        else if(structured.type==="tool"){const candidate=candidateFromCommandRoute(structured,"hybrid",resolverDiag?.confidence??.9);if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
-      }
+      if(structured.type==="decision")addDecision(structured.decision,structured.decision.operation);
+      else if(structured.type==="clarification")clarifications.push({type:"chat",response:structured.question});
     }else if(needsStructured&&!this.hybrid&&this.shouldInvokeWeb(text,domainEvidence,expectedDomain)){
       diagnostics.webIntent={invoked:true,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact)};
       const webStarted=Date.now();
       const resolution=await this.web!.resolver.resolve(text,signal);
       diagnostics.latency.webMs=Date.now()-webStarted;
       if(resolution.status==="resolved"){
-        const intent=resolution.intent,mapped=this.web!.mapper.map(intent,text);
-        diagnostics.webIntent={invoked:true,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query,finalRoute:mapped.type==="tool"?mapped.tool:undefined};
-        if(mapped.type==="tool")add(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web",intent.confidence);
+        const intent=resolution.intent,routeSeed=canonicalDecisionFromWebIntent(intent,text),proposedTool=webToolForOperation(intent.operation);
+        diagnostics.webIntent={invoked:true,operation:intent.operation,confidence:intent.confidence,sourceName:intent.entities.sourceName,domain:intent.entities.domain,query:intent.entities.query,finalRoute:proposedTool};
+        addDecision(routeSeed,proposedTool);
       }
     }
 
@@ -244,33 +241,49 @@ export class CommandService {
       const goals=new Map<string,GoalSatisfaction>();
       for(const entry of entries){const goal=(this.accuracy?.goalEvaluator??this.goalEvaluator).evaluate(text,entry.candidate);goals.set(decisionKey(entry.candidate),goal);}
       const failurePenaltyByKey=new Map(entries.map(entry=>[decisionKey(entry.candidate),this.accuracy?.failurePenaltyFor?.(text,entry.candidate)??0]));
-      const decision=this.globalArbiter.decide({userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates,domainEvidence,expectedDomain,context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled});
+      const decision=this.globalArbiter.decide({
+        userText:text,candidates:entries.map(entry=>entry.candidate),supportingCandidates,domainEvidence,expectedDomain,
+        context:contextEvidence?.evidence,goalByKey:goals,failurePenaltyByKey,
+        hardVetoEnabled:this.refinementFlags.domainHardVetoEnabled,
+        semanticCandidateDedupEnabled:this.refinementFlags.semanticCandidateDedupEnabled,
+        webFilenameVetoEnabled:this.refinementFlags.webFilenameVetoEnabled
+      });
+      const duplicateCount=decision.candidateGroups.reduce((sum,group)=>sum+group.duplicateCount,0);
+      if(duplicateCount){this.hybrid?.metrics?.record("intent.candidate.semantic_merge",decision.candidateGroups.filter(group=>group.duplicateCount>0).length);this.hybrid?.metrics?.record("intent.candidate.duplicate_removed",duplicateCount);}
+      if(decision.rejectedCandidates.some(item=>item.reason==="EXPLICIT_FILENAME_WITHOUT_WEB_SIGNAL"))this.hybrid?.metrics?.record("intent.domain.filename_web_veto",1);
       if(trace){trace.rejected.push(...decision.rejectedCandidates);trace.selected=decision.selectedCandidate;trace.confidence=decision.confidence;}
-      if(this.refinementFlags.candidateArbiterShadowMode){this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});const first=entries[0];if(first)return finish(first.route,first.source);}
+      if(this.refinementFlags.candidateArbiterShadowMode){
+        this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});
+        const first=entries[0];if(first)return finish(this.routeCanonicalDecision(first.routeSeed,previous,text),"arbiter-shadow");
+      }
       if(decision.clarificationNeeded){
         const selected=decision.selectedCandidate??entries[0].candidate;
-        const semanticEntries=[...new Map(entries.map(entry=>[semanticActionKey(entry.candidate),entry])).values()];
-        const selectedEntry=semanticEntries.find(entry=>semanticActionKey(entry.candidate)===semanticActionKey(selected))??semanticEntries[0];
-        const secondEntry=semanticEntries.find(entry=>semanticActionKey(entry.candidate)!==semanticActionKey(selected));
-        if(this.refinementFlags.structuredClarificationEnabled&&decision.clarificationReason==="DECISION_MARGIN_BELOW_THRESHOLD"&&selectedEntry&&secondEntry){
-          const type=selectedEntry.candidate.domain!==secondEntry.candidate.domain?"DOMAIN_AMBIGUITY":"OPERATION_AMBIGUITY";
-          const options=[selectedEntry,secondEntry].map((entry,index):ClarificationOption=>({
-            id:`candidate-${index+1}`,candidateId:semanticActionKey(entry.candidate),
-            label:candidateLabel(entry.candidate),description:candidateDescription(entry.candidate),
-            action:{domain:entry.candidate.domain,operation:entry.candidate.operation,proposedTool:entry.candidate.proposedTool},
-            entities:{...entry.candidate.entities},
-            route:{tool:entry.route.tool,input:{...entry.route.input},explanation:entry.route.explanation,approval:entry.route.approval,deferredAction:entry.route.deferredAction,responseMode:entry.route.responseMode,intent:entry.route.intent}
-          }));
+        const selectedGroup=decision.candidateGroups.find(group=>group.groupId===decision.selectedGroupId);
+        const secondGroupId=decision.rankedGroupIds.find(id=>id!==decision.selectedGroupId);
+        const secondGroup=decision.candidateGroups.find(group=>group.groupId===secondGroupId);
+        const selectedEnvelope=envelopeForGroup(entries,selectedGroup)??entries[0];
+        const secondEnvelope=envelopeForGroup(entries,secondGroup);
+        if(this.refinementFlags.structuredClarificationEnabled&&decision.clarificationReason==="DECISION_MARGIN_BELOW_THRESHOLD"&&selectedEnvelope&&secondEnvelope){
+          const firstDecision=decisionForGroup(selectedGroup,selectedEnvelope);
+          const secondDecision=decisionForGroup(secondGroup,secondEnvelope);
+          const type=firstDecision.domain!==secondDecision.domain?"DOMAIN_AMBIGUITY":"OPERATION_AMBIGUITY";
+          const options=clarificationOptionsFromDecisions([
+            {candidate:selectedGroup?.candidate??selectedEnvelope.candidate,decision:firstDecision},
+            {candidate:secondGroup?.candidate??secondEnvelope.candidate,decision:secondDecision}
+          ]);
           const clarification=createStructuredClarification({type,question:type==="DOMAIN_AMBIGUITY"?"O que você quer fazer?":"Qual ação você quer executar?",options,originalRequest:text});
-          if(trace)trace.clarification={reason:decision.clarificationReason??type,candidateIds:options.map(option=>option.candidateId!).filter(Boolean),options:options.map(option=>({id:option.id,candidateId:option.candidateId}))};
+          if(trace)trace.clarification={id:clarification.id,reason:decision.clarificationReason??type,candidateIds:options.map(option=>option.candidateId!).filter(Boolean),options:options.map(option=>({id:option.id,candidateId:option.candidateId}))};
           return finish({type:"structured_clarification",clarification},"global-arbiter-clarification");
         }
         const response=targetedClarification(selected,decision.clarificationReason);
         return finish({type:"chat",response},"global-arbiter-clarification");
       }
       if(decision.selectedCandidate){
-        const chosen=entries.find(entry=>sameDecision(entry.candidate,decision.selectedCandidate!));
-        if(chosen){this.hybrid?.metrics?.record("intent.route.global_arbiter.selected",1,{route:chosen.route.tool,source:chosen.source});return finish(chosen.route,chosen.source);}
+        const group=decision.candidateGroups.find(item=>item.groupId===decision.selectedGroupId);
+        const envelope=envelopeForGroup(entries,group);
+        const selectedDecision=envelope?decisionForGroup(group,envelope):canonicalDecisionFromCandidate(decision.selectedCandidate);
+        this.hybrid?.metrics?.record("intent.route.global_arbiter.selected",1,{operation:selectedDecision.operation,source:selectedDecision.source});
+        return finish(this.routeCanonicalDecision(selectedDecision,previous,text),selectedDecision.source);
       }
     }
 
