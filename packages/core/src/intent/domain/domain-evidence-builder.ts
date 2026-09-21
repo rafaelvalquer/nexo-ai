@@ -3,7 +3,7 @@ import {normalizeIntentInputV3} from "../input/input-normalizer-v3.js";
 import type {ResolvedIntentDomain} from "./types.js";
 
 export type DomainEvidenceItem={domain:ResolvedIntentDomain;score:number;evidence:string[]};
-export type DomainEvidenceSnapshot={input:NormalizedIntentInput;items:DomainEvidenceItem[];top?:DomainEvidenceItem;explicitUrl:boolean;explicitWeb:boolean;strongFilesystem:boolean};
+export type DomainEvidenceSnapshot={input:NormalizedIntentInput;items:DomainEvidenceItem[];top?:DomainEvidenceItem;explicitUrl:boolean;explicitWeb:boolean;strongFilesystem:boolean;explicitFilenameWithoutWebSignal:boolean};
 
 export class DomainEvidenceBuilder{
   build(text:string|NormalizedIntentInput):DomainEvidenceSnapshot{
@@ -12,7 +12,7 @@ export class DomainEvidenceBuilder{
     const add=(domain:ResolvedIntentDomain,weight:number,label:string)=>{const row=scores.get(domain)??{score:0,evidence:[]};row.score=Math.min(1,row.score+weight);row.evidence.push(label);scores.set(domain,row);};
     const explicitUrl=/https?:\/\/|\bwww\./i.test(input.original);
     const explicitDomain=/\b(?:[a-z0-9-]+\.)+(?:com\.br|com|org|net|io|dev|ai|br)\b/i.test(input.original);
-    const filename=/\b[^\s\\/:*?"<>|]+\.[a-z0-9]{1,12}\b/i.test(input.original)&&!explicitDomain;
+    const filename=input.literalSegments.some(segment=>segment.type==="filename")&&!explicitDomain;
     const fileWord=/\b(arquivo|arquivos)\b/.test(folded);
     const folderWord=/\b(pasta|pastas|downloads?|documents?|documentos?|desktop|area de trabalho)\b/.test(folded);
     if(filename)add("filesystem",.48,"filename_extension");
@@ -31,8 +31,9 @@ export class DomainEvidenceBuilder{
     if(/\b(lembre|memorize|memoria do nexo|guarde que)\b/.test(folded))add("memory",.75,"memory_marker");
     const items=[...scores.entries()].map(([domain,row])=>({domain,score:round(row.score),evidence:row.evidence})).sort((a,b)=>b.score-a.score);
     const explicitWeb=explicitUrl||explicitDomain||/\b(site|internet|web|pagina)\b/.test(folded);
-    const strongFilesystem=Boolean(filename&&folderWord&&(fileWord||/\b(altere|edite|escreva|mova|renomeie|apague|abra|procure)\b/.test(folded)));
-    return{input,items,top:items[0],explicitUrl,explicitWeb,strongFilesystem};
+    const explicitFilenameWithoutWebSignal=Boolean(filename&&!explicitWeb);
+    const strongFilesystem=Boolean(filename&&(folderWord||fileWord||/\b(altere|edite|escreva|mova|renomeie|apague|abra|procure|pesquise|busque)\b/.test(folded)));
+    return{input,items,top:items[0],explicitUrl,explicitWeb,strongFilesystem,explicitFilenameWithoutWebSignal};
   }
 }
 export function domainEvidenceConfidence(snapshot:DomainEvidenceSnapshot,domain:string){return snapshot.items.find(item=>compatibleDomainEvidence(domain,item.domain))?.score??0;}
