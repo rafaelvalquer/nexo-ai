@@ -3,7 +3,7 @@ export type CanonicalWebIntent={
   schemaVersion:1;
   domain:"web";
   operation:WebIntentOperation;
-  entities:{sourceName?:string;domain?:string;url?:string;query?:string;topic?:string;requestedAction?:string};
+  entities:{sourceName?:string;searchProvider?:"default"|"google";domain?:string;url?:string;query?:string;topic?:string;requestedAction?:string};
   requiresInformation:boolean;
   requiresInteraction:boolean;
   confidence:number;
