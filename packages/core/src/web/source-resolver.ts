@@ -1,9 +1,11 @@
 import type {WebReaderService} from "./reader-service.js";
+import {WebDestinationResolver} from "./web-destination-resolver.js";
 
 export type ResolvedWebSource={name?:string;domain?:string;url?:string};
 
 export class WebSourceResolver{
   private readonly cache=new Map<string,ResolvedWebSource>();
+  private readonly destinations=new WebDestinationResolver();
   constructor(private readonly reader:WebReaderService){}
   async resolve(input:{sourceName?:string;domain?:string;url?:string},signal?:AbortSignal):Promise<ResolvedWebSource|undefined>{
     if(input.url){
@@ -14,6 +16,8 @@ export class WebSourceResolver{
       return{name:input.sourceName,domain,url:`https://${domain}/`};
     }
     const name=input.sourceName?.trim();if(!name)return undefined;
+    const known=this.destinations.resolveKnown(name);
+    if(known)return{name:known.name,domain:known.domain,url:known.url};
     const key=fold(name),cached=this.cache.get(key);if(cached)return cached;
     const search=await this.reader.search(`${name} site oficial`,5,signal);
     const ranked=search.results.map((item,index)=>({item,index,score:sourceScore(name,item.title,item.url,index)})).sort((a,b)=>b.score-a.score);
