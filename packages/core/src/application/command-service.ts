@@ -53,6 +53,7 @@ export type CommandRoute =
   | { type: "chat"; response?: string; stream?: true }
   | { type:"clarification"; action:"open_file"|"analyze_file"; files:ActionContextFile[]; intent:AgentIntent }
   | { type:"structured_clarification"; clarification:ReturnType<typeof createStructuredClarification> }
+  | { type:"canonical_plan"; plan:CanonicalActionPlan }
   | { type: "unknown" };
 
 export type HybridIntentDiagnosticsV2={
@@ -146,8 +147,8 @@ export class CommandService {
       if(store)queueMicrotask(()=>{try{store.save(snapshot);}catch{}});
     };
     const finish=(route:CommandRoute,source:string)=>{
-      diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:undefined};diagnostics.latency.totalMs=Date.now()-started;this.lastDiagnostics=diagnostics;
-      if(trace){trace.finalTool=route.type==="tool"?route.tool:undefined;if(route.type==="chat"&&route.response&&!trace.outcome)trace.outcome={status:"needs_clarification"};saveTrace();}
+      diagnostics.finalRoute={source,type:route.type,tool:route.type==="tool"?route.tool:route.type==="canonical_plan"?route.plan.steps[0]?.tool:undefined};diagnostics.latency.totalMs=Date.now()-started;this.lastDiagnostics=diagnostics;
+      if(trace){trace.finalTool=route.type==="tool"?route.tool:route.type==="canonical_plan"?route.plan.steps[0]?.tool:undefined;if(route.type==="chat"&&route.response&&!trace.outcome)trace.outcome={status:"needs_clarification"};saveTrace();}
       return route;
     };
 
@@ -421,6 +422,14 @@ export class CommandService {
   }
   decisionTrace(detailed=false){return this.lastTrace?sanitizeDecisionTrace(this.lastTrace,detailed):undefined;}
 
+  recordClarificationSelection(clarificationId:string,selectedOptionId?:string,selectedCandidateId?:string){
+    if(!this.lastTrace?.clarification)return;
+    if(this.lastTrace.clarification.id&&this.lastTrace.clarification.id!==clarificationId)return;
+    this.lastTrace.clarification.selectedOptionId=selectedOptionId;
+    this.lastTrace.clarification.selectedCandidateId=selectedCandidateId;
+    this.accuracy?.traceStore?.save(this.lastTrace);
+  }
+
   hybridDiagnostics(){
     if(!this.lastDiagnostics)return this.hybrid?.resolver.diagnostics();
     if(this.hybrid?.diagnosticsEnabled?.()){
@@ -478,6 +487,32 @@ export class CommandService {
       if(domain!=="filesystem")return this.fromToolStep({tool:other.tool,input:other.input,explanation:other.explanation});
     }
     return{type:"unknown"};
+  }
+
+  private routeCanonicalDecision(decision:CanonicalIntentDecision,previous:ConversationActionContextState|undefined,originalText:string):CommandRoute{
+    const plan=new CanonicalActionPlanner(this.registry).planDecision(decision,{previous,originalText});
+    if(!plan)return{type:"unknown"};
+    if(plan.emailDraft||plan.steps.length>1)return{type:"canonical_plan",plan};
+    if(plan.directStream)return{type:"chat",stream:true};
+    if(typeof plan.direct==="string")return{type:"chat",response:plan.direct};
+    const step=plan.steps[0];if(!step)return{type:"unknown"};
+    return this.fromToolStep(step,agentIntentFromDecision(decision),plan.deferredAction,plan.responseMode);
+  }
+
+  private async resolveStructuredDecisionInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal,allowedDomains?:string[]):Promise<
+    {type:"decision";decision:CanonicalIntentDecision}|{type:"clarification";question:string}|{type:"unknown"}
+  >{
+    if(!this.hybrid||!this.hybrid.enabled()||this.hybrid.shadowMode())return{type:"unknown"};
+    const availableOperations=operationsForDomains(allowedDomains).filter(operation=>Boolean(this.registry.get(operation)));
+    if(!availableOperations.length)return{type:"unknown"};
+    const resolution=await this.hybrid.resolver.resolve({text,allowedDomains,availableOperations,context:{previousDomain:previous?.lastDomain,previousOperation:previous?.lastTool},signal});
+    if(resolution.status==="unknown")return{type:"unknown"};
+    if(resolution.status==="clarification")return{type:"clarification",question:resolution.question};
+    const intent=resolution.intent.domain==="filesystem"?preserveExplicitScope(resolution.intent,text):resolution.intent;
+    const mapped=this.hybrid.mapper.decision(intent);
+    if(mapped.type==="unknown")return{type:"unknown"};
+    if(mapped.type==="clarification")return{type:"clarification",question:mapped.question};
+    return{type:"decision",decision:mapped.decision};
   }
 
   private async routeHybridInternal(text:string,previous?:ConversationActionContextState,signal?:AbortSignal):Promise<CommandRoute>{
