@@ -1,8 +1,14 @@
 import type {ContextEvidence} from "../decision/types.js";
 import type {ContextSnapshot,ResolvedContextEntity} from "./context-snapshot.js";
+import type {ActionContextFile} from "./conversation-action-context.js";
 export type ResolvedContextReference={kind:"file"|"email"|"event"|"page";id?:string;path?:string;url?:string;ordinal?:number;confidence:number};
 export type ContextResolution={entities:Record<string,{value:unknown;source:ContextEvidence["source"];confidence:number}>;evidence:ContextEvidence[];unresolved:string[];resolvedReferences:ResolvedContextReference[]};
 export class ContextResolver{
+  resolveFileOrdinal(text:string,files:ActionContextFile[]):ActionContextFile|undefined{
+    const ordinal=ordinalIndex(text);if(ordinal===undefined||!files.length)return undefined;
+    return ordinal===-1?files.at(-1):files[ordinal];
+  }
+
   resolve(text:string,snapshot?:ContextSnapshot):ContextResolution{
     if(!snapshot)return{entities:{},evidence:[],unresolved:[],resolvedReferences:[]};
     const entities:ContextResolution["entities"]={},evidence:ContextEvidence[]=[],unresolved:string[]=[],resolvedReferences:ResolvedContextReference[]=[];
@@ -32,4 +38,4 @@ export class ContextResolver{
   }
 }
 function withinTtl(item:ResolvedContextEntity){return item.source==="previous_result"?item.turnAge<=2:item.source==="entity_ledger"?item.turnAge<=5:true;}
-function ordinalIndex(text:string){const value=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();const words:[RegExp,number][]=[[/\bprimeir[oa]\b/,0],[/\bsegund[oa]\b/,1],[/\bterceir[oa]\b/,2],[/\bquart[oa]\b/,3],[/\bquint[oa]\b/,4],[/\bultim[oa]\b/,-1]];for(const [pattern,index] of words)if(pattern.test(value))return index;const number=value.match(/\b(\d+)(?:o|a|º|ª)?\b/);return number?Math.max(0,Number(number[1])-1):undefined;}
+export function ordinalIndex(text:string){const value=text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();const words:[RegExp,number][]=[[/\bprimeir[oa]\b/,0],[/\bsegund[oa]\b/,1],[/\bterceir[oa]\b/,2],[/\bquart[oa]\b/,3],[/\bquint[oa]\b/,4],[/\bultim[oa]\b/,-1]];for(const [pattern,index] of words)if(pattern.test(value))return index;const number=value.match(/\b(\d+)(?:o|a|º|ª)?\b/);return number?Math.max(0,Number(number[1])-1):undefined;}
