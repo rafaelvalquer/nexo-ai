@@ -61,7 +61,16 @@ export class ClarificationService {
   get(id: string) {return this.repository.get(id);}
 
   block(record: PendingClarification): ClarificationBlock {
-    return {id: `clarification:${record.id}`,version: 1,type: "clarification",clarificationId: record.id,title: record.questions[0]?.prompt ?? "Preciso de uma informação",questions: record.questions,state: record.status === "resolved" ? "submitted" : record.status,values: Object.keys(record.values).length ? record.values : undefined};
+    const selectedId=typeof record.values.__structuredOption==="string"?record.values.__structuredOption:undefined;
+    const selectedOption=selectedId?record.questions.flatMap(question=>question.options??[]).find(option=>option.id===selectedId||option.value===selectedId):undefined;
+    return {
+      id:`clarification:${record.id}`,version:1,type:"clarification",clarificationId:record.id,
+      title:record.questions[0]?.prompt??"Preciso de uma informação",questions:record.questions,
+      state:record.status==="resolved"?"submitted":record.status,
+      values:Object.keys(record.values).length?record.values:undefined,
+      ...(selectedId?{selectedOptionId:selectedId}:{}),
+      ...(selectedOption?.label?{selectedOptionLabel:selectedOption.label}:{})
+    };
   }
 
   tryResolveText(conversationId: string, text: string): ClarificationAttempt {
@@ -78,7 +87,11 @@ export class ClarificationService {
     const answer = this.resolver.resolve(question, { optionId: request.optionId, optionIds: request.optionIds, customValue: request.customValue });return this.applyAnswer(pending, question.id, answer);
   }
 
-  cancel(id: string) {return this.repository.cancel(id);}
+  cancel(id:string){
+    const cancelled=this.repository.cancel(id);
+    if(cancelled)this.metrics?.record("intent.clarification.cancelled",1,{operation:cancelled.operation});
+    return cancelled;
+  }
 
   private applyAnswer(pending: PendingClarification, questionId: string, answer: ClarificationAnswer): ClarificationAttempt {
     const question = pending.questions.find((item) => item.id === questionId) ?? pending.questions[0];if (!question) return { kind: "pending", pending };
@@ -93,7 +106,7 @@ export class ClarificationService {
       const resolved=this.repository.update({...pending,values,status:"resolved",resolvedAt});
       this.metrics?.record("intent.clarification.selected",1,{type:structured.type,option:selected.id});
       const resolution:ClarificationResolution={clarificationId:pending.id,values,source:answer.source,status:"resolved"};
-      const value:ClarificationResume={pending:resolved,intent:pending.intentSnapshot,originalRequest:pending.originalRequest,resolution,selectedRoute:selected.route,selectedOptionId:selected.id};
+      const value:ClarificationResume={pending:resolved,intent:pending.intentSnapshot,originalRequest:pending.originalRequest,resolution,selectedRoute:selected.route,selectedDecision:selected.decision,selectedOptionId:selected.id,selectedOptionLabel:selected.label};
       return{kind:"resolved",value};
     }
     const entityPatch = this.entityPatch(question.field, answer.value);
