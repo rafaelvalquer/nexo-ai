@@ -8,6 +8,8 @@ import { ClarificationActions } from "./ClarificationActions";
 import "./clarification.css";
 import { useDeveloperDiagnosticsEnabled } from "../../../hooks/useDeveloperDiagnostics";
 import { userFacingError } from "../../../utils/user-facing-error";
+import {ClarificationCard} from "../clarification/ClarificationCard";
+import {ClarificationFreeText} from "../clarification/ClarificationFreeText";
 
 export function ClarificationBlock({ block, conversationId }: {block: ClarificationModel;conversationId?: string;}) {
   const diagnostics=useDeveloperDiagnosticsEnabled();
@@ -57,12 +59,22 @@ export function ClarificationBlock({ block, conversationId }: {block: Clarificat
     <h3>{block.title}</h3>
     {pending ? <div className="clarificationQuestion">
       <p className="clarificationPrompt">{question.prompt}</p>
-      {question.type === "multi_choice"?<MultiChoiceQuestion question={question} selectedIds={selectedIds} disabled={busy} onChange={changeMultiple}/>:question.options?.length?<ChoiceGroup options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>:null}
-      {question.type !== "multi_choice" && question.allowCustomValue ? customControl : null}
+      {question.type === "multi_choice"
+        ? <MultiChoiceQuestion question={question} selectedIds={selectedIds} disabled={busy} onChange={changeMultiple}/>
+        : question.options?.length
+          ? question.field==="__structuredOption"
+            ? <ClarificationCard question={question.prompt} options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>
+            : <ChoiceGroup options={question.options} selectedId={selectedId} disabled={busy} onSelect={select}/>
+          : null}
+      {question.type !== "multi_choice" && question.allowCustomValue
+        ? question.field==="__structuredOption"
+          ? <ClarificationFreeText value={customValue} placeholder={question.customPlaceholder} disabled={busy} multiline={question.type==="textarea"} onChange={changeCustom}/>
+          : customControl
+        : null}
       {question.helperText?<p className="clarificationHelper">{question.helperText}</p>:null}
       <ClarificationActions busy={busy} canSubmit={canSubmit} submitLabel={question.submitLabel} onCancel={() => void cancel()} onSubmit={() => void submit()} />
     </div> : block.state === "submitted" ? <div className="clarificationSubmitted">
-      <p className="clarificationResolved">✓ Configuração salva</p>
+      <p className="clarificationResolved">{question.field==="__structuredOption"?"✓ Opção selecionada":"✓ Configuração salva"}</p>
       {question.type === "multi_choice"?<MultiChoiceQuestion question={question} selectedIds={resolvedIds} disabled onChange={() => undefined}/>:<p className="clarificationResolvedValue">{formatValue(resolved)}</p>}
     </div> : <p className="clarificationCancelled">{block.state === "expired" ? "Pergunta expirada." : "Pergunta cancelada."}</p>}
     {error ? <p className="clarificationError" role="alert">{error}</p> : null}
