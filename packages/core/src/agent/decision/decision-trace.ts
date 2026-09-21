@@ -16,7 +16,7 @@ export function candidateFromCommandRoute(route:CommandRoute,source:DecisionCand
     mutatesState:isMutationRoute(route),
     evidence:[`route:${route.tool}`]
   };
-  return{candidateId:stableCandidateId(base as DecisionCandidate),...base};
+  return{candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base};
 }
 export function createDecisionTrace(input:{requestId:string;conversationId?:string;normalizedInput:string}):DecisionTrace{
   return{...input,domainCandidates:[],intentCandidates:[],rejected:[],contextUsed:[],createdAt:new Date().toISOString()};
