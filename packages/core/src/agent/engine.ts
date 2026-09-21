@@ -374,7 +374,7 @@ export class AgentEngine{
           this.metrics?.record("intent.clarification.entity",1,{options:structured.options.length});
           if(conversationId&&this.clarifications){
             const pending=this.clarifications.createStructured(conversationId,structured);
-            const clarificationReply=this.clarificationReply(pending,hooks);
+            const clarificationReply=await this.clarificationReply(pending,hooks);
             if(persistedRun)this.runtime?.finish(persistedRun.id,"COMPLETED",clarificationReply.text);
             return{...clarificationReply,result:reply.result,results:done.map(x=>x.result)};
           }
