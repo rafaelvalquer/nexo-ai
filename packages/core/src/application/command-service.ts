@@ -32,6 +32,7 @@ import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.j
 import type {DecisionCandidate} from "../agent/decision/types.js";
 import {intentFeatureFlags} from "../intent/feature-flags.js";
 import {semanticActionKey} from "../agent/decision/semantic-candidate-deduper.js";
+import {stableCandidateId} from "../agent/decision/semantic-action-identity.js";
 import {createStructuredClarification} from "../agent/clarification/structured-clarification.js";
 import type {ClarificationOption} from "../agent/clarification/clarification-types.js";
 import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
@@ -146,7 +147,7 @@ export class CommandService {
     diagnostics.safety={status:safety.status,reason:safety.terminal?safety.reason:undefined};
     if(safety.terminal){this.hybrid?.metrics?.record(safety.status==="negated"?"intent.safety.negated":safety.status==="informational"?"intent.safety.informational":"intent.safety.traversal",1);return finish(safety.status==="informational"?{type:"chat",stream:true}:{type:"chat",response:safety.response},"safety");}
 
-    if(trace)for(const item of domainEvidence.items)trace.domainCandidates.push({source:"exact",domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence});
+    if(trace)for(const item of domainEvidence.items){const base={source:"exact" as const,domain:item.domain,operation:"domain_evidence",entities:{},missing:[],ambiguities:[],confidence:item.score,mutatesState:false,evidence:item.evidence};trace.domainCandidates.push({candidateId:stableCandidateId(base as unknown as DecisionCandidate),...base});}
     if(this.refinementFlags.contextSnapshotV2Enabled&&this.accuracy&&(this.accuracy.contextEnabled()||this.accuracy.shadowMode())){
       const previousResultTurnAge=this.previousResultTurnAge(requestContext.conversationId,previous,turn);
       const conversationId=requestContext.conversationId??"current";
