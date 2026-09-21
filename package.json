@@ -36,7 +36,10 @@
     "eval:intents:goal": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs goal",
     "eval:intents:learning": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs learning",
     "eval:agent:accuracy": "pnpm --filter @nexo/core build && node scripts/eval-accuracy.mjs all",
-    "eval:intents:refinement-v2": "pnpm --filter @nexo/core build && node scripts/eval-refinement-v2.mjs"
+    "eval:intents:refinement-v2": "pnpm --filter @nexo/core build && node scripts/eval-refinement-v2.mjs",
+    "check:action-planning-boundaries": "node scripts/check-action-planning-boundaries.mjs",
+    "test:regression:caderno": "vitest run tests/regression/caderno",
+    "verify:caderno-phase": "pnpm typecheck && pnpm check:action-planning-boundaries && pnpm test && pnpm test:security && pnpm test:regression:caderno && pnpm eval:agent && pnpm eval:intents:refinement-v2 && pnpm eval:agent:accuracy"
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",
