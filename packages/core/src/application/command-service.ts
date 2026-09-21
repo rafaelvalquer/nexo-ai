@@ -292,24 +292,27 @@ export class CommandService {
   }
 
   private createOperationClarification(text:string):CommandRoute|undefined{
-    if(!this.refinementFlags.structuredClarificationEnabled)return undefined;
     const match=text.match(/^\s*(?:crie|criar|cria|faça|fazer|faz|monte)\s+(?!(?:(?:um|uma|o|a)\s+)?(?:arquivo|pasta|pastinha|diret[oó]rio)\b)(.+?)\s+(?:em|no|na|nos|nas|para|dentro\s+(?:de|do|da|dos|das))\s+(.+?)\s*[.!?]*$/iu);
     if(!match)return undefined;
     const name=match[1]?.trim(),folder=match[2]?.trim();
     if(!name||!folder||/\.[a-z0-9]{1,12}$/i.test(name))return undefined;
+    if(!this.refinementFlags.structuredClarificationEnabled)return{type:"chat",response:"Você quer criar um arquivo ou uma pasta?"};
     const mapper=new IntentToolMapper(this.registry,this.allowedRoots,this.hybrid?.metrics);
     const make=(operation:"create_text_file"|"create_folder"):CanonicalIntent=>({
       schemaVersion:1,domain:"filesystem",intent:"create",operation,
       entities:{name:{value:name,source:"user",confidence:1},folder:{value:folder,source:"user",confidence:1}},
       referencesPreviousResult:false,ambiguities:[],missing:[],source:"deterministic",diagnostics:{rawModelConfidence:1,resolverVersion:"operation-ambiguity-v1"}
     });
-    const mappedFile=mapper.map(make("create_text_file")),mappedFolder=mapper.map(make("create_folder"));
-    if(mappedFile.type!=="tool"||mappedFolder.type!=="tool")return undefined;
-    const options:ClarificationOption[]=[
-      {id:"create-file",label:"Criar arquivo",description:"Criar um arquivo de texto no local informado",candidateId:"filesystem:create:create_text_file",action:{domain:"filesystem",operation:"create_text_file",proposedTool:"create_text_file"},route:{tool:mappedFile.tool,input:mappedFile.input,explanation:mappedFile.explanation,deferredAction:mappedFile.deferredAction,responseMode:mappedFile.responseMode,intent:mappedFile.intent}},
-      {id:"create-folder",label:"Criar pasta",description:"Criar uma pasta no local informado",candidateId:"filesystem:create:create_folder",action:{domain:"filesystem",operation:"create_folder",proposedTool:"create_folder"},route:{tool:mappedFolder.tool,input:mappedFolder.input,explanation:mappedFolder.explanation,deferredAction:mappedFolder.deferredAction,responseMode:mappedFolder.responseMode,intent:mappedFolder.intent}}
-    ];
-    return{type:"structured_clarification",clarification:createStructuredClarification({type:"OPERATION_AMBIGUITY",question:"O que você quer criar?",options,originalRequest:text})};
+    const fileSeed=mapper.decision(make("create_text_file")),folderSeed=mapper.decision(make("create_folder"));
+    if(fileSeed.type!=="decision"||folderSeed.type!=="decision")return undefined;
+    const fileDecision={...fileSeed.decision,source:"clarification" as const};
+    const folderDecision={...folderSeed.decision,source:"clarification" as const};
+    const options=clarificationOptionsFromDecisions([
+      {candidate:decisionCandidateFromSeed(fileDecision,"create_text_file",this.registry),decision:fileDecision},
+      {candidate:decisionCandidateFromSeed(folderDecision,"create_folder",this.registry),decision:folderDecision}
+    ]);
+    const clarification=createStructuredClarification({type:"OPERATION_AMBIGUITY",question:"O que você quer criar?",options,originalRequest:text});
+    return{type:"structured_clarification",clarification};
   }
 
   private nextConversationTurn(conversationId?:string){
