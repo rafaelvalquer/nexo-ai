@@ -165,19 +165,25 @@ export class CommandService {
       contextEvidence=this.accuracy.contextResolver.resolve(text,snapshot);if(trace)trace.contextUsed.push(...contextEvidence.evidence);
     }
 
-    if(this.hybrid?.routingV2Enabled?.()===false||this.refinementFlags.candidateArbiterEnabled===false){
+    if(this.hybrid?.routingV2Enabled?.()===false||this.refinementFlags.candidateArbiterEnabled===false||this.refinementFlags.canonicalActionPlannerEnabled===false){
       const legacy=this.route(text,previous),final=legacy.type==="unknown"?await this.routeHybrid(text,previous,signal):legacy;
       return finish(final,"legacy-compat");
     }
 
-    type Entry={route:Extract<CommandRoute,{type:"tool"}>;source:DecisionCandidateSource;candidate:DecisionCandidate};
-    const entries:Entry[]=[];const clarifications:CommandRoute[]=[];
-    const add=(route:CommandRoute,source:DecisionCandidateSource,confidence=.99)=>{
+    const entries:CandidateEnvelope[]=[];const clarifications:CommandRoute[]=[];
+    const addRoute=(route:CommandRoute,source:DecisionCandidateSource,confidence=.99)=>{
       if(route.type==="tool"){
         const candidate=candidateFromCommandRoute(route,source,confidence);
-        if(candidate){entries.push({route,source,candidate});trace?.intentCandidates.push(candidate);}
+        if(candidate){
+          const routeSeed=canonicalDecisionFromCandidate(candidate);
+          entries.push({candidate,routeSeed});trace?.intentCandidates.push(candidate);
+        }
       }else if(route.type==="clarification"||route.type==="chat"&&route.response)clarifications.push(route);
       else if(route.type==="macro")clarifications.push(route);
+    };
+    const addDecision=(routeSeed:CanonicalIntentDecision,proposedTool?:string)=>{
+      const candidate=decisionCandidateFromSeed(routeSeed,proposedTool,this.registry);
+      entries.push({candidate,routeSeed});trace?.intentCandidates.push(candidate);
     };
 
     const operationClarification=this.createOperationClarification(text);
@@ -190,17 +196,16 @@ export class CommandService {
       const webConflict=this.web?.enabled()?this.webGoalGuard.evaluate(text,exact):{accepted:true as const};
       const conflict=webConflict.accepted?this.conflictGuard.evaluate(text,exact):{accepted:false as const,reason:webConflict.reason??"WEB_GOAL_CONFLICT"};
       diagnostics.exactCandidate={source:"exact",route:routeLabel(exact),accepted:conflict.accepted,...(!conflict.accepted?{rejectedReason:conflict.reason}:{})};
-      if(conflict.accepted)add(exact,exact.type==="tool"&&domainFromName(exact.tool)==="filesystem"?"filesystem":"exact");
+      if(conflict.accepted)addRoute(exact,exact.type==="tool"&&domainFromName(exact.tool)==="filesystem"?"filesystem":"exact");
       else if(exact.type==="tool"){const candidate=candidateFromCommandRoute(exact,"exact");if(candidate)trace?.rejected.push({candidate,reason:conflict.reason});}
     }
 
     const deterministicWeb=this.web?.enabled()?deterministicWebIntent(text):undefined;
     if(deterministicWeb){
-      const mapped=this.web!.mapper.map(deterministicWeb,text);
-      diagnostics.webIntent={invoked:false,operation:deterministicWeb.operation,confidence:deterministicWeb.confidence,sourceName:deterministicWeb.entities.sourceName,domain:deterministicWeb.entities.domain,query:deterministicWeb.entities.query,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),finalRoute:mapped.type==="tool"?mapped.tool:undefined};
-      if(mapped.type==="tool"&&!(deterministicWeb.operation==="research"&&!this.web!.researchEnabled())){
-        add(this.fromToolStep({tool:mapped.tool,input:mapped.input,explanation:mapped.explanation}),"web",deterministicWeb.confidence);
-      }
+      const webDecision=canonicalDecisionFromWebIntent(deterministicWeb,text);
+      const proposedTool=webToolForOperation(deterministicWeb.operation);
+      diagnostics.webIntent={invoked:false,operation:deterministicWeb.operation,confidence:deterministicWeb.confidence,sourceName:deterministicWeb.entities.sourceName,domain:deterministicWeb.entities.domain,query:deterministicWeb.entities.query,candidateRoute:exact.type==="unknown"?undefined:routeLabel(exact),finalRoute:proposedTool};
+      if(!(deterministicWeb.operation==="research"&&!this.web!.researchEnabled()))addDecision(webDecision,proposedTool);
     }
 
     const exactStrong=entries.some(entry=>(entry.source==="exact"||entry.source==="filesystem")&&entry.candidate.confidence>=.98);
