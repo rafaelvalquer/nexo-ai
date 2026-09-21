@@ -73,6 +73,7 @@ export class ClarificationService {
 
   resolve(request: ClarificationResolutionRequest): ClarificationAttempt {
     const pending = this.repository.get(request.clarificationId);if (!pending || pending.status !== "pending") return { kind: "none" };
+    if(pending.expiresAt&&Date.parse(pending.expiresAt)<=Date.now()){const expired=this.repository.update({...pending,status:"expired",resolvedAt:new Date().toISOString()});this.metrics?.record("intent.clarification.expired",1,{operation:pending.operation});return{kind:"pending",pending:expired,message:"Esta seleção expirou. Faça o pedido novamente."};}
     const question = pending.questions.find((item) => item.id === request.questionId) ?? pending.questions[0];if (!question) return { kind: "none" };
     const answer = this.resolver.resolve(question, { optionId: request.optionId, optionIds: request.optionIds, customValue: request.customValue });return this.applyAnswer(pending, question.id, answer);
   }
