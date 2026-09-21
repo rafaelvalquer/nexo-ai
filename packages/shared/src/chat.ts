@@ -63,6 +63,8 @@ export type ClarificationBlock = ChatBlockBase & {
   questions: ClarificationQuestion[];
   state: "pending" | "submitted" | "cancelled" | "expired";
   values?: Record<string, unknown>;
+  selectedOptionId?: string;
+  selectedOptionLabel?: string;
 };
 export type ClarificationResolutionRequest = {
   clarificationId: string; questionId: string; optionId?: string; optionIds?: string[]; customValue?: string;
