@@ -3,6 +3,7 @@ import type { ToolResult } from "@nexo/shared";
 import type { DeferredAction } from "./intent-schema.js";
 import type { BuiltPlanStep } from "./plan-builder.js";
 import type {ClarificationOption,ClarificationType} from "../clarification/clarification-types.js";
+import {fileClarificationOptions} from "../clarification/clarification-option-builder.js";
 
 export type MaterializedAction = { step?: BuiltPlanStep; direct?: string; clarification?:{type:ClarificationType;question:string;options:ClarificationOption[]} };
 
@@ -93,7 +94,7 @@ function materializeFilesystemWrite(action:Extract<DeferredAction,{kind:"filesys
   if(matches.length>1){
     return{clarification:{
       type:"ENTITY_AMBIGUITY",question:"Qual arquivo você quer alterar?",
-      options:matches.slice(0,10).map((item:any,index:number)=>fileOption(item,index,{
+      options:fileClarificationOptions(matches.slice(0,10),(item:any)=>({
         tool:"write_text_file",input:{path:String(item.path),content:action.content},explanation:`Aguardando confirmação para alterar ${path.basename(String(item.path))}…`,
         approval:{domain:"filesystem",actionType:"update",affectedCount:1,preview:`Nome: ${path.basename(String(item.path))}\nCaminho: ${String(item.path)}\nNovo conteúdo:\n${previewText(action.content)}`,consequence:"O conteúdo atual do arquivo será substituído pelo novo conteúdo informado.",expiresInMs:5*60_000}
       }))
@@ -119,7 +120,7 @@ function materializeFilesystemOpen(action:Extract<DeferredAction,{kind:"filesyst
   if(matches.length>1){
     return{clarification:{
       type:"ENTITY_AMBIGUITY",question:"Qual arquivo você quer abrir?",
-      options:matches.slice(0,10).map((item:any,index:number)=>fileOption(item,index,{tool:"open_path",input:{path:String(item.path)},explanation:`Abrindo ${path.basename(String(item.path))}…`}))
+      options:fileClarificationOptions(matches.slice(0,10),(item:any)=>({tool:"open_path",input:{path:String(item.path)},explanation:`Abrindo ${path.basename(String(item.path))}…`}))
     }};
   }
   const target=String(matches[0].path);
@@ -162,17 +163,3 @@ function formatBytes(bytes: number) {
 }
 
 function previewText(value:string){return value.length<=1000?value:`${value.slice(0,1000)}\n… (${value.length-1000} caracteres adicionais)`;}
-
-function fileOption(item:any,index:number,route:ClarificationOption["route"]):ClarificationOption{
-  const target=String(item.path),folder=path.dirname(target);
-  return{
-    id:`file-${index+1}`,
-    label:path.basename(target),
-    description:folder,
-    candidateId:`filesystem:file:${target}`,
-    entities:{path:target},
-    action:{domain:"filesystem",operation:route?.tool??"file"},
-    route,
-    metadata:{path:target,...(typeof item.size==="number"?{size:item.size}:{}),...(typeof item.modifiedAt==="string"?{modifiedAt:item.modifiedAt}:{})}
-  };
-}
