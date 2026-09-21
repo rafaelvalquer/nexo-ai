@@ -1,6 +1,7 @@
 import type { ClarificationQuestion,ClarificationResolution } from "@nexo/shared";
 import type { AgentIntent } from "../orchestrator/intent-schema.js";
 import type {StructuredExecutableRoute} from "./clarification-types.js";
+import type {CanonicalIntentDecision} from "../action-planning/canonical-intent-decision.js";
 
 export type PendingClarification = {
   id: string;
@@ -25,7 +26,9 @@ export type ClarificationResume = {
   originalRequest: string;
   resolution: ClarificationResolution;
   selectedRoute?: StructuredExecutableRoute;
+  selectedDecision?: CanonicalIntentDecision;
   selectedOptionId?: string;
+  selectedOptionLabel?: string;
 };
 
 export type ClarificationAttempt =
