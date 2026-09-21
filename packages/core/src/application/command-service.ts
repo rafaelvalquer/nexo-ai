@@ -31,6 +31,10 @@ import {DomainEvidenceBuilder,type DomainEvidenceSnapshot} from "../intent/domai
 import {GlobalDecisionArbiter} from "../agent/decision/global-decision-arbiter.js";
 import type {DecisionCandidate} from "../agent/decision/types.js";
 import {intentFeatureFlags} from "../intent/feature-flags.js";
+import {semanticActionKey} from "../agent/decision/semantic-candidate-deduper.js";
+import {createStructuredClarification} from "../agent/clarification/structured-clarification.js";
+import type {ClarificationOption} from "../agent/clarification/clarification-types.js";
+import {CanonicalActionPlanner} from "../agent/action-planning/canonical-action-planner.js";
 
 const mutationIntents = new Set(["create", "send", "update", "delete", "move"]);
 
@@ -39,6 +43,7 @@ export type CommandRoute =
   | { type: "macro"; operation: string; input: Record<string, unknown>; explanation?: string }
   | { type: "chat"; response?: string; stream?: true }
   | { type:"clarification"; action:"open_file"|"analyze_file"; files:ActionContextFile[]; intent:AgentIntent }
+  | { type:"structured_clarification"; clarification:ReturnType<typeof createStructuredClarification> }
   | { type: "unknown" };
 
 export type HybridIntentDiagnosticsV2={
@@ -166,6 +171,9 @@ export class CommandService {
       else if(route.type==="macro")clarifications.push(route);
     };
 
+    const operationClarification=this.createOperationClarification(text);
+    if(operationClarification)return finish(operationClarification,"operation-ambiguity");
+
     const exact=this.routeExact(text,previous);
     if(exact.type==="macro")return finish(exact,"exact-macro");
     if(exact.type==="chat"&&exact.response&&/Ainda não consigo criar planilhas/i.test(exact.response))return finish(exact,"exact-capability");
@@ -227,8 +235,23 @@ export class CommandService {
       if(this.refinementFlags.candidateArbiterShadowMode){this.hybrid?.metrics?.record("intent.route.global_arbiter.shadow",1,{selected:decision.selectedCandidate?.operation??"none"});const first=entries[0];if(first)return finish(first.route,first.source);}
       if(decision.clarificationNeeded){
         const selected=decision.selectedCandidate??entries[0].candidate;
-        const second=entries.map(item=>item.candidate).find(item=>decisionKey(item)!==decisionKey(selected));
-        const response=decision.clarificationReason==="DECISION_MARGIN_BELOW_THRESHOLD"&&second?candidateChoiceQuestion(selected,second):targetedClarification(selected,decision.clarificationReason);
+        const semanticEntries=[...new Map(entries.map(entry=>[semanticActionKey(entry.candidate),entry])).values()];
+        const selectedEntry=semanticEntries.find(entry=>semanticActionKey(entry.candidate)===semanticActionKey(selected))??semanticEntries[0];
+        const secondEntry=semanticEntries.find(entry=>semanticActionKey(entry.candidate)!==semanticActionKey(selected));
+        if(this.refinementFlags.structuredClarificationEnabled&&decision.clarificationReason==="DECISION_MARGIN_BELOW_THRESHOLD"&&selectedEntry&&secondEntry){
+          const type=selectedEntry.candidate.domain!==secondEntry.candidate.domain?"DOMAIN_AMBIGUITY":"OPERATION_AMBIGUITY";
+          const options=[selectedEntry,secondEntry].map((entry,index):ClarificationOption=>({
+            id:`candidate-${index+1}`,candidateId:semanticActionKey(entry.candidate),
+            label:candidateLabel(entry.candidate),description:candidateDescription(entry.candidate),
+            action:{domain:entry.candidate.domain,operation:entry.candidate.operation,proposedTool:entry.candidate.proposedTool},
+            entities:{...entry.candidate.entities},
+            route:{tool:entry.route.tool,input:{...entry.route.input},explanation:entry.route.explanation,approval:entry.route.approval,deferredAction:entry.route.deferredAction,responseMode:entry.route.responseMode,intent:entry.route.intent}
+          }));
+          const clarification=createStructuredClarification({type,question:type==="DOMAIN_AMBIGUITY"?"O que você quer fazer?":"Qual ação você quer executar?",options,originalRequest:text});
+          if(trace)trace.clarification={reason:decision.clarificationReason??type,candidateIds:options.map(option=>option.candidateId!).filter(Boolean),options:options.map(option=>({id:option.id,candidateId:option.candidateId}))};
+          return finish({type:"structured_clarification",clarification},"global-arbiter-clarification");
+        }
+        const response=targetedClarification(selected,decision.clarificationReason);
         return finish({type:"chat",response},"global-arbiter-clarification");
       }
       if(decision.selectedCandidate){
@@ -239,6 +262,27 @@ export class CommandService {
 
     const clarification=clarifications[0];if(clarification)return finish(clarification,"targeted-clarification");
     const chat=this.conversationFallback(text);this.hybrid?.metrics?.record("intent.route.chat_fallback",1);return finish(chat,"chat-or-planner");
+  }
+
+  private createOperationClarification(text:string):CommandRoute|undefined{
+    if(!this.refinementFlags.structuredClarificationEnabled)return undefined;
+    const match=text.match(/^\s*(?:crie|criar|cria|faça|fazer|faz|monte)\s+(?!(?:(?:um|uma|o|a)\s+)?(?:arquivo|pasta|pastinha|diret[oó]rio)\b)(.+?)\s+(?:em|no|na|nos|nas|para|dentro\s+(?:de|do|da|dos|das))\s+(.+?)\s*[.!?]*$/iu);
+    if(!match)return undefined;
+    const name=match[1]?.trim(),folder=match[2]?.trim();
+    if(!name||!folder||/\.[a-z0-9]{1,12}$/i.test(name))return undefined;
+    const mapper=new IntentToolMapper(this.registry,this.allowedRoots,this.hybrid?.metrics);
+    const make=(operation:"create_text_file"|"create_folder"):CanonicalIntent=>({
+      schemaVersion:1,domain:"filesystem",intent:"create",operation,
+      entities:{name:{value:name,source:"user",confidence:1},folder:{value:folder,source:"user",confidence:1}},
+      referencesPreviousResult:false,ambiguities:[],missing:[],source:"deterministic",diagnostics:{rawModelConfidence:1,resolverVersion:"operation-ambiguity-v1"}
+    });
+    const mappedFile=mapper.map(make("create_text_file")),mappedFolder=mapper.map(make("create_folder"));
+    if(mappedFile.type!=="tool"||mappedFolder.type!=="tool")return undefined;
+    const options:ClarificationOption[]=[
+      {id:"create-file",label:"Criar arquivo",description:"Criar um arquivo de texto no local informado",candidateId:"filesystem:create:create_text_file",action:{domain:"filesystem",operation:"create_text_file",proposedTool:"create_text_file"},route:{tool:mappedFile.tool,input:mappedFile.input,explanation:mappedFile.explanation,deferredAction:mappedFile.deferredAction,responseMode:mappedFile.responseMode,intent:mappedFile.intent}},
+      {id:"create-folder",label:"Criar pasta",description:"Criar uma pasta no local informado",candidateId:"filesystem:create:create_folder",action:{domain:"filesystem",operation:"create_folder",proposedTool:"create_folder"},route:{tool:mappedFolder.tool,input:mappedFolder.input,explanation:mappedFolder.explanation,deferredAction:mappedFolder.deferredAction,responseMode:mappedFolder.responseMode,intent:mappedFolder.intent}}
+    ];
+    return{type:"structured_clarification",clarification:createStructuredClarification({type:"OPERATION_AMBIGUITY",question:"O que você quer criar?",options,originalRequest:text})};
   }
 
   private nextConversationTurn(conversationId?:string){
@@ -253,10 +297,19 @@ export class CommandService {
 
   /** Compatibility route retained for rollback/tests during the RC. */
   route(text: string, previous?: ConversationActionContextState): CommandRoute {
+    const namedOpen=namedFileOpenRequest(text);
+    if(namedOpen){
+      const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"open_file",entities:{file:namedOpen},decisionSource:"filesystem"});
+      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation,deferredAction:plan.deferredAction});
+    }
     const unsupportedSpreadsheet = this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if (unsupportedSpreadsheet) return { type: "chat", response: unsupportedSpreadsheet };
     const indexedFile=previousFileAtRequestedPosition(text,previous?.files??[]);
-    if(indexedFile)return this.fromToolStep({tool:"file_info",input:{path:indexedFile.path},explanation:`Consultando ${indexedFile.name} da lista anterior…`});
+    if(indexedFile){
+      if(/\b(?:abra|abrir|abre|open)\b/i.test(text))return this.fromToolStep({tool:"open_path",input:{path:indexedFile.path},explanation:`Abrindo ${indexedFile.name} da lista anterior…`});
+      if(/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text))return this.fromToolStep({tool:"document_summarize",input:{path:indexedFile.path,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},explanation:`Analisando ${indexedFile.name} da lista anterior…`});
+      return this.fromToolStep({tool:"file_info",input:{path:indexedFile.path},explanation:`Consultando ${indexedFile.name} da lista anterior…`});
+    }
     const fileAction=previousFileAction(text);
     if(fileAction&&previous?.files&&previous.files.length>1){
       const intent:AgentIntent={schemaVersion:1,status:"needs_clarification",domain:"filesystem",intent:fileAction==="analyze_file"?"summarize":"read",operation:fileAction,entities:{files:previous.files},referencesPreviousResult:true,requiresDataLookup:false,requiresConfirmation:false,confidence:1,missing:["fileMatch"],question:`Encontrei ${previous.files.length} arquivos. Qual deles você quer ${fileAction==="analyze_file"?"analisar":"abrir"}?`};
@@ -362,10 +415,19 @@ export class CommandService {
   }
 
   private routeExact(text:string,previous?:ConversationActionContextState):CommandRoute{
+    const namedOpen=namedFileOpenRequest(text);
+    if(namedOpen){
+      const plan=new CanonicalActionPlanner(this.registry).plan({domain:"filesystem",operation:"open_file",entities:{file:namedOpen},decisionSource:"filesystem"});
+      const step=plan?.steps[0];if(plan&&step)return this.fromToolStep({tool:step.tool,input:step.input,explanation:step.explanation,deferredAction:plan.deferredAction});
+    }
     const unsupportedSpreadsheet=this.filesystemResolver.unsupportedSpreadsheetCreation(text);
     if(unsupportedSpreadsheet)return{type:"chat",response:unsupportedSpreadsheet};
     const indexedFile=previousFileAtRequestedPosition(text,previous?.files??[]);
-    if(indexedFile)return this.fromToolStep({tool:"file_info",input:{path:indexedFile.path},explanation:`Consultando ${indexedFile.name} da lista anterior…`});
+    if(indexedFile){
+      if(/\b(?:abra|abrir|abre|open)\b/i.test(text))return this.fromToolStep({tool:"open_path",input:{path:indexedFile.path},explanation:`Abrindo ${indexedFile.name} da lista anterior…`});
+      if(/\b(?:analise|analisar|resuma|resumir|leia|ler|explique)\b/i.test(text))return this.fromToolStep({tool:"document_summarize",input:{path:indexedFile.path,instruction:"Resuma e analise o arquivo, destacando seus principais pontos."},explanation:`Analisando ${indexedFile.name} da lista anterior…`});
+      return this.fromToolStep({tool:"file_info",input:{path:indexedFile.path},explanation:`Consultando ${indexedFile.name} da lista anterior…`});
+    }
     const fileAction=previousFileAction(text);
     if(fileAction&&previous?.files&&previous.files.length>1){
       const intent:AgentIntent={schemaVersion:1,status:"needs_clarification",domain:"filesystem",intent:fileAction==="analyze_file"?"summarize":"read",operation:fileAction,entities:{files:previous.files},referencesPreviousResult:true,requiresDataLookup:false,requiresConfirmation:false,confidence:1,missing:["fileMatch"],question:`Encontrei ${previous.files.length} arquivos. Qual deles você quer ${fileAction==="analyze_file"?"analisar":"abrir"}?`};
@@ -528,6 +590,24 @@ function domainEvidenceConfidenceForCandidate(evidence:DomainEvidenceSnapshot,ca
 function decisionKey(candidate:DecisionCandidate){return`${candidate.source}:${candidate.proposedTool??candidate.operation}`;}
 function sameDecision(left:DecisionCandidate,right:DecisionCandidate){
   return left.source===right.source&&(left.proposedTool??left.operation)===(right.proposedTool??right.operation)&&left.operation===right.operation&&JSON.stringify(left.entities)===JSON.stringify(right.entities);
+}
+function namedFileOpenRequest(text:string){
+  const match=text.match(/^\s*(?:abra|abrir|abre|open)\s+(?:(?:esse|este|o|um)\s+)?(?:arquivo\s+)?["“']?([^"”'\s]+\.[a-z0-9]{1,12})["”']?(?:\s+(?:em|no|na|nos|nas|dentro\s+(?:de|do|da|dos|das))\s+.+)?\s*[.!?]*$/iu);
+  return match?.[1]?.trim();
+}
+function candidateLabel(candidate:DecisionCandidate){
+  if(candidate.proposedTool==="find_file")return"Procurar arquivo no computador";
+  if(candidate.proposedTool==="web_search"||candidate.proposedTool==="web_research")return"Pesquisar na internet";
+  if(candidate.proposedTool==="browser_agent_run")return"Interagir no navegador";
+  if(candidate.proposedTool==="create_text_file")return"Criar arquivo";
+  if(candidate.proposedTool==="create_folder")return"Criar pasta";
+  return humanOperation(candidate);
+}
+function candidateDescription(candidate:DecisionCandidate){
+  if(candidate.domain==="filesystem")return"Usar as pastas autorizadas deste computador";
+  if(candidate.domain==="web")return"Buscar informações em fontes públicas online";
+  if(candidate.domain==="browser")return"Executar a interação no navegador";
+  return undefined;
 }
 function candidateChoiceQuestion(first:DecisionCandidate,second:DecisionCandidate){
   const a=humanOperation(first.operation),b=humanOperation(second.operation);
