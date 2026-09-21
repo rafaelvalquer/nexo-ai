@@ -5,9 +5,10 @@ import { StructuredOutputError } from "../llm/structured-response-parser.js";
 import { stripCodeFence } from "../security/prompt.js";
 import { normalizeIntentInput } from "./input-normalizer.js";
 import type { IntentParserFailureKind, IntentParserResult } from "./parser-result.js";
-import { modelIntentJsonSchema, parseModelIntent, toCanonicalIntent } from "./schema.js";
+import { modelIntentJsonSchemaFor, parseModelIntent, toCanonicalIntent } from "./schema.js";
 import { HYBRID_INTENT_SYSTEM_PROMPT } from "./prompts/system.js";
-import { filesystemIntentPrompt } from "./prompts/filesystem.js";
+import { unifiedIntentPrompt } from "./prompts/unified.js";
+import {parseOperationEntities} from "./entities/operation-parser.js";
 import type { CanonicalIntent, IntentEntitySource, IntentResolutionInput, NormalizedIntentInput } from "./types.js";
 
 export interface IntentParser {
@@ -27,14 +28,15 @@ export class LLMIntentParser implements IntentParser{
     try{
       const messages=[
         {role:"system" as const,content:HYBRID_INTENT_SYSTEM_PROMPT},
-        {role:"user" as const,content:filesystemIntentPrompt(normalized,input.availableOperations)}
+        {role:"user" as const,content:unifiedIntentPrompt(normalized,input.availableOperations,input.allowedDomains)}
       ];
       let intent:CanonicalIntent;
       if(this.llm.planStructured){
         const parsed=await this.llm.planStructured({
           messages,
-          schema:modelIntentJsonSchema,
-          schemaName:"NexoHybridIntentV1",
+          schema:modelIntentJsonSchemaFor(input.availableOperations,input.allowedDomains),
+          schemaName:"NexoStructuredIntentV2",
+          maxAttempts:1,
           parse:value=>parseModelIntent(value)
         },signal);
         intent=toCanonicalIntent(parsed);
@@ -45,7 +47,7 @@ export class LLMIntentParser implements IntentParser{
         catch(error){return failure("INVALID_JSON",started,model,error);}
         intent=toCanonicalIntent(parseModelIntent(value));
       }
-      const normalizedIntent=applyLiteralEntities(applyEntityProvenance(intent,normalized.routingText),normalized);
+      const normalizedIntent=applyOperationEntities(applyLiteralEntities(applyEntityProvenance(intent,normalized.routingText),normalized),normalized.original);
       return{status:"success",intent:normalizedIntent,latencyMs:Date.now()-started,model};
     }catch(error){
       return failure(classifyFailure(error,input.signal),started,model,error);
@@ -138,4 +140,15 @@ function applyLiteralEntities(intent:CanonicalIntent,input:NormalizedIntentInput
   const literal=input.literalSegments.find(segment=>segment.type==="content");
   if(!literal)return intent;
   return{...intent,entities:{...intent.entities,content:{value:literal.value,source:"user",confidence:1}}};
+}
+
+function applyOperationEntities(intent:CanonicalIntent,text:string):CanonicalIntent{
+  const parsed=parseOperationEntities(intent.operation,text).entities;
+  if(!Object.keys(parsed).length)return intent;
+  const entities={...intent.entities};
+  for(const [key,value] of Object.entries(parsed)){
+    const source:IntentEntitySource=key==="folder"&&typeof value==="string"&&!containsLiteral(fold(text),value)&&locationAliasMentioned(text,value)?"semantic_alias":"user";
+    entities[key]={value:value as any,source,confidence:1};
+  }
+  return{...intent,entities};
 }

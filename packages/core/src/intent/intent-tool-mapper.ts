@@ -22,6 +22,11 @@ export class IntentToolMapper{
   map(intent:CanonicalIntent):MappedHybridIntent{
     const agentIntent=toAgentIntent(intent);
     if(!this.registry.get(intent.operation))return{type:"unknown",reason:`TOOL_NOT_AVAILABLE:${intent.operation}`};
+    if(intent.domain!=="filesystem"){
+      const input=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
+      const mode:intentResponseMode=intent.intent==="find"||intent.intent==="list"||intent.intent==="read"?"synthesize":"deterministic";
+      return this.tool(intent.operation,input,`Preparando ${intent.operation}…`,mode,agentIntent);
+    }
     switch(intent.operation){
       case"create_folder":{
         const scope=this.resolveScope(intent);const name=entity(intent,"name");
@@ -131,15 +136,17 @@ function joinPortable(base:string,relative:string){const segments=relative.split
 function isAbsolutePortable(value:string){return path.isAbsolute(value)||path.win32.isAbsolute(value);}
 function toAgentIntent(intent:CanonicalIntent):AgentIntent{
   const mutation=new Set(["create","update","delete"]);
-  const mappedIntent:intentName= intent.intent==="find"?"search":intent.intent==="open"?"read":intent.intent==="execute"?"read":intent.intent==="unknown"?"read":intent.intent;
+  const mappedIntent:intentName=intent.intent==="find"?"search":intent.intent==="open"?"read":intent.intent==="execute"?"read":intent.intent==="unknown"?"read":intent.intent;
   const entities=Object.fromEntries(Object.entries(intent.entities).map(([key,entry])=>[key,entry.value]));
+  const domain:AgentIntent["domain"]=intent.domain==="documents"?"document":intent.domain==="unknown"||intent.domain==="chat"||intent.domain==="conversation"||intent.domain==="web"||intent.domain==="macro"?"general":intent.domain;
   return{
-    schemaVersion:1,status:"ready",domain:"filesystem",intent:mappedIntent,operation:intent.operation,entities,
+    schemaVersion:1,status:"ready",domain,intent:mappedIntent,operation:intent.operation,entities,
     referencesPreviousResult:intent.referencesPreviousResult,requiresDataLookup:["find","list","read","update","delete"].includes(intent.intent),
     requiresConfirmation:mutation.has(intent.intent),confidence:intent.diagnostics?.rawModelConfidence??.9
   };
 }
 type intentName=AgentIntent["intent"];
+type intentResponseMode="deterministic"|"presentation"|"synthesize";
 
 function isAllowedPath(candidate:string,roots:string[]){
   return roots.some(root=>{

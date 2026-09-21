@@ -7818,5 +7818,1213 @@
     "expectedOperation": "find_file",
     "category": "negative-command",
     "pairGroup": 7
+  },
+  {
+    "id": "v2-1041",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1042",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1043",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1044",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1045",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1046",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1047",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1048",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1049",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1050",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1051",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1052",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1053",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1054",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1055",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1056",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1057",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1058",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1059",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1060",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1061",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1062",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1063",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1064",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1065",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1066",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1067",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1068",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1069",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1070",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1071",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1072",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1073",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1074",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1075",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1076",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1077",
+    "prompt": "abra https://github.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1078",
+    "prompt": "acesse https://www.infomoney.com.br e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1079",
+    "prompt": "abra https://www.google.com",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_open",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1080",
+    "prompt": "acesse https://www.youtube.com e clique no menu principal",
+    "expectedDomain": "browser",
+    "expectedOperation": "browser_agent_run",
+    "category": "browser"
+  },
+  {
+    "id": "v2-1081",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1082",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1083",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1084",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1085",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1086",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1087",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1088",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1089",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1090",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1091",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1092",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1093",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1094",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1095",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1096",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1097",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1098",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1099",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1100",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1101",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1102",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1103",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1104",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1105",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1106",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1107",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1108",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1109",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1110",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1111",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1112",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1113",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1114",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1115",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1116",
+    "prompt": "procure relatorio.txt nos downloads e não na internet",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "find_file",
+    "category": "cross-domain",
+    "mustNotDomain": "web"
+  },
+  {
+    "id": "v2-1117",
+    "prompt": "pesquise na web notícias sobre arquivos PDF",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1118",
+    "prompt": "envie por e-mail o resumo, não altere nenhum arquivo",
+    "expectedDomain": "email",
+    "expectedOperation": "email_send",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1119",
+    "prompt": "agende uma reunião sobre o relatório teste.txt",
+    "expectedDomain": "calendar",
+    "expectedOperation": "calendar_create",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1120",
+    "prompt": "resuma o documento contrato.pdf, não apenas liste o arquivo",
+    "expectedDomain": "documents",
+    "expectedOperation": "document_summarize",
+    "category": "cross-domain"
+  },
+  {
+    "id": "v2-1121",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1122",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1123",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1124",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1125",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1126",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1127",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1128",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1129",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1130",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1131",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1132",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1133",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1134",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1135",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1136",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1137",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1138",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1139",
+    "prompt": "nesse arquivo anterior, troque o conteúdo para aprovado",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "write_text_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1140",
+    "prompt": "abra o segundo arquivo da lista anterior",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "read_file",
+    "category": "multi-turn",
+    "requiresContext": true
+  },
+  {
+    "id": "v2-1141",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1142",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1143",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1144",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1145",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1146",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1147",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1148",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1149",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1150",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1151",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1152",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1153",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1154",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1155",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1156",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1157",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1158",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1159",
+    "prompt": "pesquise notícias sobre IA, resuma e salve em resumo.txt nos downloads",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_research_summarize_save",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1160",
+    "prompt": "procure relatorio.txt, leia e depois resuma",
+    "expectedDomain": "filesystem",
+    "expectedOperation": "multi_step_find_read_summarize",
+    "category": "multi-step",
+    "multiStep": true
+  },
+  {
+    "id": "v2-1161",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1162",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1163",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1164",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1165",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1166",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1167",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1168",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1169",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1170",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1171",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1172",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1173",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1174",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1175",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1176",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1177",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1178",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1179",
+    "prompt": "não era para abrir o site; eu queria pesquisar as notícias",
+    "expectedDomain": "web",
+    "expectedOperation": "web_research",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1180",
+    "prompt": "não era o arquivo anterior; use o segundo da lista",
+    "expectedDomain": "web",
+    "expectedOperation": "correction_reference",
+    "category": "correction",
+    "isCorrection": true
+  },
+  {
+    "id": "v2-1181",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1182",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1183",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1184",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1185",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1186",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1187",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1188",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1189",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1190",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1191",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1192",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1193",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1194",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1195",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1196",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1197",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1198",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1199",
+    "prompt": "crie teste nos downloads",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
+  },
+  {
+    "id": "v2-1200",
+    "prompt": "use aquele arquivo para isso",
+    "expectedDomain": "unknown",
+    "expectedOperation": "needs_clarification",
+    "category": "ambiguity",
+    "expectedClarification": true
   }
 ]

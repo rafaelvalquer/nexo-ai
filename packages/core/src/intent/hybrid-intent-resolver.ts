@@ -44,7 +44,8 @@ export class HybridIntentResolver{
 
   async resolve(input:IntentResolutionInput):Promise<IntentResolutionResult>{
     const started=Date.now();
-    this.metrics?.record("intent.resolve.total",1,{domain:"filesystem"});
+    const metricDomain=input.allowedDomains?.length===1?input.allowedDomains[0]:"mixed";
+    this.metrics?.record("intent.resolve.total",1,{domain:metricDomain});
     if(Date.now()<this.circuitOpenUntil)return this.finish(input,"unknown",started,{status:"unknown",reason:"HYBRID_INTENT_CIRCUIT_OPEN"},{parserMs:0,validationMs:0});
 
     const parserStarted=Date.now();
@@ -53,7 +54,7 @@ export class HybridIntentResolver{
     const parserMs=parsed.latencyMs;
     if(parsed.status==="failure"){
       if(parsed.kind!=="ABORTED")this.registerFailure();
-      this.metrics?.record(parserMetric(parsed.kind),1,{domain:"filesystem"});
+      this.metrics?.record(parserMetric(parsed.kind),1,{domain:metricDomain});
       return this.finish(
         input,
         "unknown",
@@ -63,7 +64,7 @@ export class HybridIntentResolver{
       );
     }
 
-    this.metrics?.record("intent.parser.success",1,{domain:"filesystem"});
+    this.metrics?.record("intent.parser.success",1,{domain:metricDomain});
     const intent=parsed.intent;
     const validationStarted=Date.now();
     const preliminary=validateIntentSemantics(intent,input.text);
@@ -75,7 +76,7 @@ export class HybridIntentResolver{
       );
     }
 
-    const structural=validateCanonicalIntent(intent,input.availableOperations);
+    const structural=validateCanonicalIntent(intent,input.availableOperations,input.allowedDomains);
     if(!structural.valid){
       this.registerFailure();
       this.metrics?.record("intent.validation.schema_invalid",1,{code:structural.code});

@@ -113,7 +113,8 @@ export class AgentEngine{
     // Command routing has a single production entry point. Safety, exact
     // deterministic routes, Hybrid interpretation and legacy compatibility are
     // internal CommandService concerns; AgentEngine only consumes CommandRoute.
-    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal,{conversationId}).catch(()=>({type:"unknown"} as CommandRoute));
+    const recentMessages=context.filter(message=>message.role==="user"||message.role==="assistant").slice(-12).map(message=>({role:message.role as "user"|"assistant",text:message.content}));
+    const commandRoute=await this.commandService.resolve(resolvedUserText,previous,hooks.signal,{conversationId,recentMessages}).catch(()=>({type:"unknown"} as CommandRoute));
     this.recordCommandRoute(commandRoute);
     const commandReply=await this.handleCommandRoute(resolvedUserText,commandRoute,hooks,context,conversationId);
     if(commandReply)return commandReply;
