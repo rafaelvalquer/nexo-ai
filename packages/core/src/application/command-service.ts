@@ -219,7 +219,7 @@ export class CommandService {
       if(!(deterministicWeb.operation==="research"&&!this.web!.researchEnabled()))addDecision(webDecision,proposedTool);
     }
 
-    const exactStrong=entries.some(entry=>(entry.source==="exact"||entry.source==="filesystem")&&entry.candidate.confidence>=.98);
+    const exactStrong=entries.some(entry=>(entry.candidate.source==="exact"||entry.candidate.source==="filesystem")&&entry.candidate.confidence>=.98);
     const hasRoutingCorrections="routingCorrections" in normalized&&Array.isArray((normalized as {routingCorrections?:unknown[]}).routingCorrections)&&(normalized as {routingCorrections:unknown[]}).routingCorrections.length>0;
     const needsStructured=!exactStrong||hasRoutingCorrections||entries.length===0;
 
